@@ -794,3 +794,74 @@ Added an explicit adapter from causal forward horizon labels to B3
 availability and source lineage; actual-manual linkage is never inferred.
 Label and feedback tests pass. M2 economic validation and live-source gates
 remain open.
+
+
+## 2026-09-14 — M2-04/M2-05 laboratory loop
+
+Repaired portfolio measurement so percentage drawdown is calculated from an
+ordered atomic equity curve rather than summed episode returns. Walk-forward
+evaluation now exposes an execution replay boundary and reports missing replay
+when a caller only relabels episodes. Added same-path quote stress scenarios
+for delay, fee and slippage, preserving missing, unsupported and failed fills.
+
+Added the reproducible baseline laboratory for idle, confirmation, fixed
+horizon, verified-flow and prior-information-only tracked-wallet policies. It
+uses the same ordered cases and execution outcomes, records decisions and
+compounded hypothetical equity, hashes dataset/config/code inputs, and leaves
+baseline selection null. M2-04/M2-05 remain IN_PROGRESS because observed
+execution coverage, real windows and economic acceptance are not established.
+
+
+## 2026-09-14 — M3-01/M3-02 shadow-state loop
+
+Bound the shadow store to persistent run identity and made observation,
+decision and checkpoint publication atomic. Duplicate observation identity now
+wins over changed prediction payloads, while changed content under the same
+identity or a changed restart binding fails closed. The prospective runner can
+independently requote fixed-ticket entries and reconciled token exits in
+read-only modeled mode, persisting exact fill status, amounts, assets and quote
+references; missing state never opens inventory and all execution remains
+`not_submitted`. M3 timed prospective-window acceptance remains open.
+
+
+## 2026-09-14 — M4-01/M4-02 connectome loop
+
+Made declared graph orientation affect reservoir dynamics and rejected
+non-finite or zero edge weights at graph construction. MaleCNS provenance,
+license, artifact hashes, schema, positive-sign assumption and bounded-subset
+scope remain explicit. The local experiment continues to use a fixed directed
+graph with matched shuffled-wiring, random-weight, no-state and ordinary
+controls under the same partitions. Direction, stability, provenance and
+checkpoint fixtures pass; whole-release training, five-seed chronological
+holdout evidence and any biological/financial advantage remain open.
+
+
+## 2026-09-14 — M4-03/M4-04 optional-source and LLM loop
+
+Kept LP Agent, RH Trenches and Mezzanine explicitly unavailable until their
+official production read access, terms and authentication are verified. Added
+persistent per-run LLM request/token accounting with retry and cache-hit
+separation, plus a bounded deadline wrapper whose timeout falls back without
+holding the numeric decision path. Strict source-span claim validation and
+cutoff contamination checks remain in force. Fixture checks pass; optional
+source access and historical text availability remain open.
+
+
+## 2026-09-14 — M5-01 LP mechanics loop
+
+Added exact integer Q96 amount calculations from supplied sqrt prices and
+uint256 modular fee-growth deltas. LP lifecycle replay now checks active
+position and optional owner identity, ignores duplicate action delivery as an
+economic replay, keeps fee totals per token, and refuses orphan collect/remove
+credits. The legacy linearized tick helper remains clearly counterfactual.
+LP stays disabled pending a verified pool family, hook behavior, observed
+position checkpoints and complete receipt/gas evidence.
+
+
+## 2026-09-14 — M4-05 hybrid attribution loop
+
+Added dataset/config identity and evidence references to factorial cells, plus a
+complete-grid review that refuses attribution when cells are missing,
+unavailable, mismatched or undocumented. Hybrid metrics remain dependent on
+the shared replay/prospective evaluator; no optional source or text feature is
+treated as a free or historically available contribution.

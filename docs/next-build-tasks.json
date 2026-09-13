@@ -460,7 +460,7 @@
       "id": "M3-01",
       "phase": "M3",
       "title": "Bind shadow state to a frozen run",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-05"
@@ -477,13 +477,19 @@
       "work": "Hash source/model/feature/policy identities and enforce one config per persistent run. Store observations, scheduled ticks, proposals, modeled fills, inventory and checkpoints atomically; serialize writers and define crash recovery.",
       "acceptance": "Restart cannot change capital/model silently, duplicate or reordered delivery cannot create a second action, and exits never reclaim principal without modeled proceeds.",
       "verification": "Transaction-boundary crash tests, config mutation, changed predictions on duplicate observations, multiple writers and DB reconciliation checks.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m3-shadow-loop.md",
+        "src/willfly/shadow/config.py",
+        "src/willfly/shadow/runner.py",
+        "configs/shadow/config.json",
+        "tests/test_shadow.py"
+      ]
     },
     {
       "id": "M3-02",
       "phase": "M3",
       "title": "Connect the prospective hypothetical runner",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M3-01"
@@ -500,7 +506,13 @@
       "work": "Wire live recorder observations to scheduled ticks, fixed model inference and hypothetical execution. Provide stop/resume, source health, missed decisions and explicit unknown execution handling. Keep decision timing independent of forged event timestamps.",
       "acceptance": "One end-to-end spot-only run consumes newly persisted observations and records hypothetical outcomes; healthy versus missing intervals are measured, and no funded transaction path exists.",
       "verification": "Controlled-source integration with stale/contradictory data, delayed ticks, restart and timeout; inspect operator status and ledger.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m3-shadow-loop.md",
+        "src/willfly/shadow/runner.py",
+        "src/willfly/replay/execution.py",
+        "tests/test_shadow.py",
+        "tests/test_api.py"
+      ]
     },
     {
       "id": "M3-03",
@@ -529,7 +541,7 @@
       "id": "M4-01",
       "phase": "M4",
       "title": "Validate connectome provenance and dynamics",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-05"
@@ -547,13 +559,21 @@
       "work": "Pin the actual release/license/hash and preprocessing; verify edge direction, sign/magnitude, graph filtering and numerical stability. Choose a compact subnetwork only with documented rationale.",
       "acceptance": "Orientation changes actual edges/dynamics; nonfinite/ambiguous weights are rejected; graph statistics and provenance reproduce. No biological-memory or financial-skill claim follows from loading a graph.",
       "verification": "Small hand-worked directed graph oracle, reversed orientation, filtered IDs, saturation tests and release/license evidence.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m4-connectome.md",
+        "configs/connectome/male-cns-v1.0.json",
+        "src/willfly/models/connectome/ingest.py",
+        "src/willfly/models/connectome/graph.py",
+        "src/willfly/models/reservoir.py",
+        "tests/test_neural.py",
+        "tests/test_laboratory.py"
+      ]
     },
     {
       "id": "M4-02",
       "phase": "M4",
       "title": "Run fair neural and ordinary comparisons",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M4-01"
@@ -572,13 +592,20 @@
       "work": "Use numerically validated readout training and a sufficiently capable ordinary recurrent baseline. Match inputs, tuning budgets and at least five unique seeds per family; implement raw-feature, random, shuffled and no-state controls.",
       "acceptance": "Run evidence includes four chronological windows, at least three with positive excess return if claiming advancement, paired 95% intervals against both practical and matched controls, and drawdown limits. Otherwise remain inconclusive/revise.",
       "verification": "Solver comparison to an independent implementation, conditioning tests, actual ablation runs, per-model seed completeness and holdout audit.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m4-connectome.md",
+        "src/willfly/models/laboratory.py",
+        "src/willfly/models/conventional.py",
+        "src/willfly/evaluation/neural.py",
+        "tests/test_neural.py",
+        "tests/test_laboratory.py"
+      ]
     },
     {
       "id": "M4-03",
       "phase": "M4",
       "title": "Implement only supported optional source adapters",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-07"
@@ -595,13 +622,19 @@
       "work": "Verify official API/export support, terms and authentication per endpoint before bounded ingestion; version capabilities, raw payloads, cohort scope, source as-of time, arrival time, latency and costs.",
       "acceptance": "Each source has tested behavior or an explicit unavailable assessment; unavailable adapters cannot be called operational. Staleness, duplicates and no-source fallback are exercised.",
       "verification": "Redacted bounded access report, conformance fixtures and native-only operation. Do not bypass access restrictions or silently use undocumented streams.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m4-optional-sources-and-llm.md",
+        "src/willfly/adapters/lpagent.py",
+        "src/willfly/adapters/rhtrenches.py",
+        "src/willfly/adapters/mezzanine.py",
+        "tests/test_hybrid.py"
+      ]
     },
     {
       "id": "M4-04",
       "phase": "M4",
       "title": "Enforce real LLM budgets and provenance",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-05"
@@ -619,13 +652,19 @@
       "work": "Use a transport with enforceable deadline/cancellation, persistent per-run request/token budgets based on provider usage, strict claims schema and archived source spans. Record retries and cache hits separately; keep present-day model knowledge out of retrospective features.",
       "acceptance": "No callback can hang the decision loop; input/output/retry usage is charged, hostile fields cannot change policy, cache provenance is reproducible and unsupported historical text remains unavailable.",
       "verification": "Timeout/cancellation, huge compact output, cumulative budget exhaustion, retry accounting, injected fields, stale cache and identity-contamination tests.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m4-optional-sources-and-llm.md",
+        "src/willfly/features/llm.py",
+        "src/willfly/features/text_schema.py",
+        "src/willfly/evaluation/contamination.py",
+        "tests/test_hybrid.py"
+      ]
     },
     {
       "id": "M4-05",
       "phase": "M4",
       "title": "Attribute each hybrid contribution",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M4-02",
@@ -644,13 +683,18 @@
       "work": "Run distinct trader, contract-risk, social, LP-data and text ablations across ordinary and fly-derived architectures with data costs and latency charged. Use prospective evaluation where historical availability cannot be proven.",
       "acceptance": "Every claimed contribution has actual comparable outcomes; optional unavailable experiments are recorded separately, not manufactured. Explanations cite recorded inputs and constraints without invented neural motives.",
       "verification": "Versioned factorial cells, same-data comparison, no-scanner/no-LLM baselines and reproducible evidence inspection.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m4-hybrid-attribution.md",
+        "src/willfly/evaluation/factorial.py",
+        "src/willfly/ui/decisions/",
+        "tests/test_hybrid.py"
+      ]
     },
     {
       "id": "M5-01",
       "phase": "M5",
       "title": "Replace LP toy mechanics and ledger",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-04"
@@ -668,13 +712,19 @@
       "work": "Pin one supported family; implement exact sqrt-price/range and modular inside-fee accounting, owned position state, per-token cash flow and gas in its asset. Reject remove/collect without a position and duplicate lifecycle actions.",
       "acceptance": "Observed checkpoints reconcile acquired inventory through final liquidation; distinct asset amounts are never summed as money; leaving range does not discard previously accrued fees. Keep LP disabled until evidence passes.",
       "verification": "On-chain position examples, full-range boundary cases, uint256 fee wrap, exit out of range, unfunded removal, resize, duplicate collect and residual-asset ledger tests.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m5-lp-mechanics.md",
+        "src/willfly/replay/lp_positions.py",
+        "src/willfly/replay/lp_execution.py",
+        "configs/lp/scope.json",
+        "tests/test_lp.py"
+      ]
     },
     {
       "id": "M5-02",
       "phase": "M5",
       "title": "Evaluate selective LP under shared capital",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M5-01",
@@ -695,7 +745,14 @@
       "work": "Compare spot, idle and restricted LP ranges under the same numeraire, execution times and starting funds. Stress fee demand, inventory loss, gas and exit depth without double-counting IL or LVR.",
       "acceptance": "Actual supported mechanics drive comparisons; no simultaneous spot/LP over-allocation; LP stays disabled if its marginal benefit or execution evidence is missing.",
       "verification": "Complete paired ledgers, capital conservation, observed fee checkpoint audit and stress report with all exclusions.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m5-lp-mechanics.md",
+        "docs/lp-scope.md",
+        "src/willfly/policies/lp_baselines.py",
+        "src/willfly/policies/mode_selection.py",
+        "src/willfly/evaluation/lp_stress.py",
+        "tests/test_lp.py"
+      ]
     },
     {
       "id": "M5-03",

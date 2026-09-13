@@ -2,6 +2,7 @@ import json
 
 from willfly.evaluation.shadow import audit_shadow_window, reconcile_shadow
 from willfly.policies.prediction import Prediction
+from willfly.replay.execution import PoolQuote
 from willfly.shadow.config import freeze_shadow_config
 from willfly.shadow.health import assess_shadow_health
 from willfly.shadow.runner import ShadowCheckpointStore, ShadowObservation, ShadowRunner
@@ -105,3 +106,145 @@ def test_shadow_health_and_window_gates_remain_explicit():
     reconciliation = reconcile_shadow([10, -5], missed_opportunities=1, data_revisions=1, stress_net_return_bps=[-20])
     assert reconciliation.prospective_only is True
     assert reconciliation.state == "inconclusive"
+
+
+def test_shadow_duplicate_observation_does_not_create_action_for_changed_prediction(tmp_path):
+    path = str(tmp_path / "identity.sqlite")
+    identity = {
+        "config_hash": "c" * 64,
+        "source_config_hash": "s" * 64,
+        "feature_version": "observatory.features.v0.1",
+        "policy_version": "ordinary-baseline-v0.1",
+    }
+    store = ShadowCheckpointStore(path, run_identity=identity)
+    runner = ShadowRunner(store, fixed_entry_atomic=50, max_positions=1, initial_cash_atomic=100, run_identity=identity)
+    observation = ShadowObservation("stable", "TOKEN", "2026-01-01T00:00:00Z", "healthy")
+    first = runner.step(observation, Prediction("ordinary-v1", 200, 10, observation.received_at), decision_time="2026-01-01T00:00:01Z")
+    changed = runner.step(observation, Prediction("ordinary-v2", -200, 10, observation.received_at), decision_time="2026-01-01T00:00:01Z")
+    assert first.decision.action == "enter"
+    assert changed.duplicate is True
+    assert changed.decision.decision_id == first.decision.decision_id
+    assert len(store.decisions()) == 1
+    store.close()
+    mismatched = ShadowCheckpointStore(path)
+    try:
+        ShadowRunner(
+            mismatched,
+            fixed_entry_atomic=50,
+            max_positions=1,
+            initial_cash_atomic=100,
+            run_identity={**identity, "config_hash": "d" * 64},
+        )
+    except ValueError as error:
+        assert "identity mismatch" in str(error)
+    else:
+        raise AssertionError("changed run identity was accepted")
+    mismatched.close()
+
+
+def test_shadow_can_record_requoted_modeled_entry_and_exit_without_submission(tmp_path):
+    store = ShadowCheckpointStore(str(tmp_path / "modeled.sqlite"))
+    runner = ShadowRunner(store, fixed_entry_atomic=100, max_positions=1, initial_cash_atomic=1_000)
+    entry_quote = PoolQuote("pool", "ETH", "TOKEN", 100_000, 200_000, 30, "2026-01-01T00:00:00Z")
+    exit_quote = PoolQuote("pool", "TOKEN", "ETH", 200_000, 100_000, 30, "2026-01-01T00:00:10Z")
+    entry = runner.step(
+        ShadowObservation("entry", "TOKEN", "2026-01-01T00:00:01Z", "healthy"),
+        Prediction("ordinary-v1", 200, 10, "2026-01-01T00:00:01Z"),
+        decision_time="2026-01-01T00:00:02Z",
+        entry_quote=entry_quote,
+        model_execution=True,
+    )
+    assert entry.decision.action == "enter"
+    assert entry.decision.modeled_fill_status == "filled"
+    assert entry.decision.modeled_output_atomic > 0
+    assert entry.decision.execution_state == "not_submitted"
+    exit_result = runner.step(
+        ShadowObservation("exit", "TOKEN", "2026-01-01T00:00:11Z", "healthy"),
+        Prediction("ordinary-v1", -200, 10, "2026-01-01T00:00:11Z"),
+        decision_time="2026-01-01T00:00:12Z",
+        exit_quote=exit_quote,
+        model_execution=True,
+    )
+    assert exit_result.decision.action == "exit"
+    assert exit_result.decision.modeled_fill_status == "filled"
+    assert exit_result.decision.modeled_input_atomic == entry.decision.modeled_output_atomic
+    assert exit_result.decision.execution_state == "not_submitted"
+    assert store.modeled_positions() == {}
+    assert len(store.observations()) == 2
+    store.close()
+
+
+def test_shadow_modeled_missing_entry_does_not_open_inventory(tmp_path):
+    store = ShadowCheckpointStore(str(tmp_path / "missing-entry.sqlite"))
+    runner = ShadowRunner(store, fixed_entry_atomic=100, max_positions=1, initial_cash_atomic=1_000)
+    missing = runner.step(
+        ShadowObservation("missing", "TOKEN", "2026-01-01T00:00:01Z", "healthy"),
+        Prediction("ordinary-v1", 200, 10, "2026-01-01T00:00:01Z"),
+        decision_time="2026-01-01T00:00:02Z",
+        model_execution=True,
+    )
+    assert missing.decision.action == "enter"
+    assert missing.decision.modeled_fill_status == "missing_state"
+    assert store.modeled_positions() == {}
+    next_entry = runner.step(
+        ShadowObservation("next", "OTHER", "2026-01-01T00:00:03Z", "healthy"),
+        Prediction("ordinary-v1", 200, 10, "2026-01-01T00:00:03Z"),
+        decision_time="2026-01-01T00:00:04Z",
+        model_execution=True,
+    )
+    assert next_entry.decision.action == "enter"
+    assert "max_concurrent_positions" not in next_entry.decision.reason
+    store.close()
+
+
+def test_shadow_can_record_requoted_modeled_entry_and_exit_without_submission(tmp_path):
+    store = ShadowCheckpointStore(str(tmp_path / "modeled.sqlite"))
+    runner = ShadowRunner(store, fixed_entry_atomic=100, max_positions=1, initial_cash_atomic=1_000)
+    entry_quote = PoolQuote("pool", "ETH", "TOKEN", 100_000, 200_000, 30, "2026-01-01T00:00:00Z")
+    exit_quote = PoolQuote("pool", "TOKEN", "ETH", 200_000, 100_000, 30, "2026-01-01T00:00:10Z")
+    entry = runner.step(
+        ShadowObservation("entry", "TOKEN", "2026-01-01T00:00:01Z", "healthy"),
+        Prediction("ordinary-v1", 200, 10, "2026-01-01T00:00:01Z"),
+        decision_time="2026-01-01T00:00:02Z",
+        entry_quote=entry_quote,
+        model_execution=True,
+    )
+    assert entry.decision.action == "enter"
+    assert entry.decision.modeled_fill_status == "filled"
+    assert entry.decision.modeled_output_atomic > 0
+    assert entry.decision.execution_state == "not_submitted"
+    exit_result = runner.step(
+        ShadowObservation("exit", "TOKEN", "2026-01-01T00:00:11Z", "healthy"),
+        Prediction("ordinary-v1", -200, 10, "2026-01-01T00:00:11Z"),
+        decision_time="2026-01-01T00:00:12Z",
+        exit_quote=exit_quote,
+        model_execution=True,
+    )
+    assert exit_result.decision.action == "exit"
+    assert exit_result.decision.modeled_fill_status == "filled"
+    assert exit_result.decision.modeled_input_atomic == entry.decision.modeled_output_atomic
+    assert exit_result.decision.execution_state == "not_submitted"
+    assert len(store.decisions()) == 2
+    store.close()
+
+
+def test_shadow_modeled_missing_entry_does_not_open_inventory(tmp_path):
+    store = ShadowCheckpointStore(str(tmp_path / "missing-entry.sqlite"))
+    runner = ShadowRunner(store, fixed_entry_atomic=100, max_positions=1, initial_cash_atomic=1_000)
+    missing = runner.step(
+        ShadowObservation("missing", "TOKEN", "2026-01-01T00:00:01Z", "healthy"),
+        Prediction("ordinary-v1", 200, 10, "2026-01-01T00:00:01Z"),
+        decision_time="2026-01-01T00:00:02Z",
+        model_execution=True,
+    )
+    assert missing.decision.action == "enter"
+    assert missing.decision.modeled_fill_status == "missing_state"
+    next_entry = runner.step(
+        ShadowObservation("next", "OTHER", "2026-01-01T00:00:03Z", "healthy"),
+        Prediction("ordinary-v1", 200, 10, "2026-01-01T00:00:03Z"),
+        decision_time="2026-01-01T00:00:04Z",
+        model_execution=True,
+    )
+    assert next_entry.decision.action == "enter"
+    assert "max_concurrent_positions" not in next_entry.decision.reason
+    store.close()

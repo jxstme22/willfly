@@ -224,7 +224,7 @@ Compare idle, confirmation, verified flow and causal follower rules under one le
 
 ### M3-01 - Bind shadow state to a frozen run
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-05
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-05
 
 **Target paths:** `src/willfly/shadow/config.py`, `src/willfly/shadow/runner.py`, `configs/shadow/`
 
@@ -232,17 +232,21 @@ Hash source/model/feature/policy identities and enforce one config per persisten
 
 **Done when:** Restart cannot change capital/model silently, duplicate or reordered delivery cannot create a second action, and exits never reclaim principal without modeled proceeds.
 
+**Evidence:** docs/m3-shadow-loop.md; src/willfly/shadow/config.py; src/willfly/shadow/runner.py; configs/shadow/config.json; tests/test_shadow.py
+
 **Verification:** Transaction-boundary crash tests, config mutation, changed predictions on duplicate observations, multiple writers and DB reconciliation checks.
 
 ### M3-02 - Connect the prospective hypothetical runner
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M3-01
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M3-01
 
 **Target paths:** `src/willfly/cli.py`, `src/willfly/shadow/`, `src/willfly/api/`
 
 Wire live recorder observations to scheduled ticks, fixed model inference and hypothetical execution. Provide stop/resume, source health, missed decisions and explicit unknown execution handling. Keep decision timing independent of forged event timestamps.
 
 **Done when:** One end-to-end spot-only run consumes newly persisted observations and records hypothetical outcomes; healthy versus missing intervals are measured, and no funded transaction path exists.
+
+**Evidence:** docs/m3-shadow-loop.md; src/willfly/shadow/runner.py; src/willfly/replay/execution.py; tests/test_shadow.py; tests/test_api.py
 
 **Verification:** Controlled-source integration with stale/contradictory data, delayed ticks, restart and timeout; inspect operator status and ledger.
 
@@ -262,7 +266,7 @@ Collect at least 14 real days and 200 eligible prospective launches with the fro
 
 ### M4-01 - Validate connectome provenance and dynamics
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-05
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-05
 
 **Target paths:** `configs/connectome/`, `src/willfly/models/connectome/`, `src/willfly/models/reservoir.py`
 
@@ -270,11 +274,13 @@ Pin the actual release/license/hash and preprocessing; verify edge direction, si
 
 **Done when:** Orientation changes actual edges/dynamics; nonfinite/ambiguous weights are rejected; graph statistics and provenance reproduce. No biological-memory or financial-skill claim follows from loading a graph.
 
+**Evidence:** docs/m4-connectome.md; configs/connectome/male-cns-v1.0.json; src/willfly/models/connectome/ingest.py; src/willfly/models/connectome/graph.py; src/willfly/models/reservoir.py; tests/test_neural.py; tests/test_laboratory.py
+
 **Verification:** Small hand-worked directed graph oracle, reversed orientation, filtered IDs, saturation tests and release/license evidence.
 
 ### M4-02 - Run fair neural and ordinary comparisons
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M4-01
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M4-01
 
 **Target paths:** `src/willfly/models/`, `src/willfly/evaluation/neural.py`
 
@@ -282,11 +288,13 @@ Use numerically validated readout training and a sufficiently capable ordinary r
 
 **Done when:** Run evidence includes four chronological windows, at least three with positive excess return if claiming advancement, paired 95% intervals against both practical and matched controls, and drawdown limits. Otherwise remain inconclusive/revise.
 
+**Evidence:** docs/m4-connectome.md; src/willfly/models/laboratory.py; src/willfly/models/conventional.py; src/willfly/evaluation/neural.py; tests/test_neural.py; tests/test_laboratory.py
+
 **Verification:** Solver comparison to an independent implementation, conditioning tests, actual ablation runs, per-model seed completeness and holdout audit.
 
 ### M4-03 - Implement only supported optional source adapters
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M1-07
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M1-07
 
 **Target paths:** `src/willfly/adapters/lpagent.py`, `src/willfly/adapters/rhtrenches.py`, `src/willfly/adapters/mezzanine.py`
 
@@ -294,11 +302,13 @@ Verify official API/export support, terms and authentication per endpoint before
 
 **Done when:** Each source has tested behavior or an explicit unavailable assessment; unavailable adapters cannot be called operational. Staleness, duplicates and no-source fallback are exercised.
 
+**Evidence:** docs/m4-optional-sources-and-llm.md; src/willfly/adapters/lpagent.py; src/willfly/adapters/rhtrenches.py; src/willfly/adapters/mezzanine.py; tests/test_hybrid.py
+
 **Verification:** Redacted bounded access report, conformance fixtures and native-only operation. Do not bypass access restrictions or silently use undocumented streams.
 
 ### M4-04 - Enforce real LLM budgets and provenance
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-05
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-05
 
 **Target paths:** `src/willfly/features/llm.py`, `src/willfly/features/text_schema.py`, `src/willfly/evaluation/contamination.py`
 
@@ -306,11 +316,13 @@ Use a transport with enforceable deadline/cancellation, persistent per-run reque
 
 **Done when:** No callback can hang the decision loop; input/output/retry usage is charged, hostile fields cannot change policy, cache provenance is reproducible and unsupported historical text remains unavailable.
 
+**Evidence:** docs/m4-optional-sources-and-llm.md; src/willfly/features/llm.py; src/willfly/features/text_schema.py; src/willfly/evaluation/contamination.py; tests/test_hybrid.py
+
 **Verification:** Timeout/cancellation, huge compact output, cumulative budget exhaustion, retry accounting, injected fields, stale cache and identity-contamination tests.
 
 ### M4-05 - Attribute each hybrid contribution
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M4-02, M4-03, M4-04
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M4-02, M4-03, M4-04
 
 **Target paths:** `src/willfly/evaluation/factorial.py`, `src/willfly/ui/decisions/`, `docs/results/hybrid-review.md`
 
@@ -318,13 +330,15 @@ Run distinct trader, contract-risk, social, LP-data and text ablations across or
 
 **Done when:** Every claimed contribution has actual comparable outcomes; optional unavailable experiments are recorded separately, not manufactured. Explanations cite recorded inputs and constraints without invented neural motives.
 
+**Evidence:** docs/m4-hybrid-attribution.md; src/willfly/evaluation/factorial.py; src/willfly/ui/decisions/; tests/test_hybrid.py
+
 **Verification:** Versioned factorial cells, same-data comparison, no-scanner/no-LLM baselines and reproducible evidence inspection.
 
 ## M5 - Optional LP and research decision
 
 ### M5-01 - Replace LP toy mechanics and ledger
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-04
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-04
 
 **Target paths:** `src/willfly/replay/lp_positions.py`, `src/willfly/replay/lp_execution.py`, `configs/lp/`
 
@@ -332,17 +346,21 @@ Pin one supported family; implement exact sqrt-price/range and modular inside-fe
 
 **Done when:** Observed checkpoints reconcile acquired inventory through final liquidation; distinct asset amounts are never summed as money; leaving range does not discard previously accrued fees. Keep LP disabled until evidence passes.
 
+**Evidence:** docs/m5-lp-mechanics.md; src/willfly/replay/lp_positions.py; src/willfly/replay/lp_execution.py; configs/lp/scope.json; tests/test_lp.py
+
 **Verification:** On-chain position examples, full-range boundary cases, uint256 fee wrap, exit out of range, unfunded removal, resize, duplicate collect and residual-asset ledger tests.
 
 ### M5-02 - Evaluate selective LP under shared capital
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M5-01, M2-05
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M5-01, M2-05
 
 **Target paths:** `src/willfly/policies/lp_baselines.py`, `src/willfly/policies/mode_selection.py`, `src/willfly/evaluation/lp_stress.py`
 
 Compare spot, idle and restricted LP ranges under the same numeraire, execution times and starting funds. Stress fee demand, inventory loss, gas and exit depth without double-counting IL or LVR.
 
 **Done when:** Actual supported mechanics drive comparisons; no simultaneous spot/LP over-allocation; LP stays disabled if its marginal benefit or execution evidence is missing.
+
+**Evidence:** docs/m5-lp-mechanics.md; docs/lp-scope.md; src/willfly/policies/lp_baselines.py; src/willfly/policies/mode_selection.py; src/willfly/evaluation/lp_stress.py; tests/test_lp.py
 
 **Verification:** Complete paired ledgers, capital conservation, observed fee checkpoint audit and stress report with all exclusions.
 

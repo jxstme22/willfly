@@ -24,6 +24,16 @@ def test_sparse_graph_reservoir_is_stable_and_resets_per_episode():
     assert graph.shuffled_control(7).statistics == graph.statistics
 
 
+def test_graph_orientation_changes_reservoir_dynamics_and_nonfinite_weights_are_rejected():
+    forward = build_graph([Edge("a", "b", 1.0), Edge("b", "c", 1.0)], orientation="source_to_target")
+    reverse = build_graph([Edge("a", "b", 1.0), Edge("b", "c", 1.0)], orientation="target_to_source")
+    forward_state = SparseReservoir(forward, decay=0.0).run_episode("episode", [{"a": 1.0}, {}, {}])
+    reverse_state = SparseReservoir(reverse, decay=0.0).run_episode("episode", [{"a": 1.0}, {}, {}])
+    assert forward_state != reverse_state
+    with pytest.raises(ValueError, match="invalid"):
+        Edge("a", "b", float("nan"))
+
+
 def test_connectome_ids_remain_text_and_unverified_manifest_blocks_ingest():
     pending = ConnectomeManifest(None, None, None, None, "none", "pending_verification")
     with pytest.raises(ValueError, match="verified"):

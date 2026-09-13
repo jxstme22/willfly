@@ -16,6 +16,8 @@ class LPEvent:
     token1_atomic: int
     gas_atomic: int = 0
     source_ref: str = ""
+    position_id: str | None = None
+    owner: str | None = None
 
     def __post_init__(self) -> None:
         if self.action not in {"acquire", "open", "collect", "resize", "remove", "convert", "failed", "unsupported"}:
@@ -27,7 +29,7 @@ class LPEvent:
 @dataclass(frozen=True)
 class LPLifecycleResult:
     balances: Mapping[str, int]
-    fees_paid_atomic: int
+    fees_paid_atomic: Mapping[str, int]
     gas_paid_atomic: int
     residual_token0_atomic: int
     residual_token1_atomic: int
@@ -51,9 +53,16 @@ def replay_lp_lifecycle(
     failed: list[str] = []
     unsupported: list[str] = []
     refs: list[str] = []
-    fees = gas = 0
+    fees: dict[str, int] = {token0: 0, token1: 0}
+    gas = 0
     residual0 = residual1 = 0
+    active_position = position
+    seen_action_ids: set[str] = set()
     for event in events:
+        if event.action_id in seen_action_ids:
+            failed.append(event.action_id)
+            continue
+        seen_action_ids.add(event.action_id)
         refs.append(event.source_ref)
         gas += event.gas_atomic
         if event.action == "unsupported":
@@ -62,16 +71,57 @@ def replay_lp_lifecycle(
         if event.action == "failed":
             failed.append(event.action_id)
             continue
-        if event.action in {"acquire", "open", "resize"}:
+        if event.action in {"acquire", "open"}:
+            if active_position is not None:
+                failed.append(event.action_id)
+                continue
+            if balances.get(token0, 0) < event.token0_atomic or balances.get(token1, 0) < event.token1_atomic:
+                failed.append(event.action_id)
+                continue
+            balances[token0] = balances.get(token0, 0) - event.token0_atomic
+            balances[token1] = balances.get(token1, 0) - event.token1_atomic
+            active_position = PositionState(
+                event.position_id or event.action_id,
+                "observed-pool",
+                token0,
+                token1,
+                1,
+                -1,
+                1,
+                owner=event.owner,
+            )
+        elif event.action == "resize":
+            if active_position is None:
+                failed.append(event.action_id)
+                continue
+            if event.position_id is not None and event.position_id != active_position.position_id:
+                failed.append(event.action_id)
+                continue
+            if active_position.owner is not None and event.owner != active_position.owner:
+                failed.append(event.action_id)
+                continue
             if balances.get(token0, 0) < event.token0_atomic or balances.get(token1, 0) < event.token1_atomic:
                 failed.append(event.action_id)
                 continue
             balances[token0] = balances.get(token0, 0) - event.token0_atomic
             balances[token1] = balances.get(token1, 0) - event.token1_atomic
         elif event.action in {"collect", "remove", "convert"}:
+            if active_position is None:
+                failed.append(event.action_id)
+                continue
+            if event.position_id is not None and event.position_id != active_position.position_id:
+                failed.append(event.action_id)
+                continue
+            if active_position.owner is not None and event.owner != active_position.owner:
+                failed.append(event.action_id)
+                continue
             balances[token0] = balances.get(token0, 0) + event.token0_atomic
             balances[token1] = balances.get(token1, 0) + event.token1_atomic
-            residual0 += event.token0_atomic
-            residual1 += event.token1_atomic
-        fees += event.token0_atomic + event.token1_atomic if event.action == "collect" else 0
+            if event.action in {"remove", "convert"}:
+                residual0 += event.token0_atomic
+                residual1 += event.token1_atomic
+                active_position = None
+        if event.action == "collect":
+            fees[token0] += event.token0_atomic
+            fees[token1] += event.token1_atomic
     return LPLifecycleResult(balances, fees, gas, residual0, residual1, tuple(failed), tuple(unsupported), tuple(refs))

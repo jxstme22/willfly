@@ -37,7 +37,10 @@ class SparseReservoir:
         values = list(state.values)
         incoming = [0.0] * len(values)
         for edge in self.graph.edges:
-            incoming[self._index[edge.target]] += values[self._index[edge.source]] * edge.weight * edge.sign
+            source, target = edge.source, edge.target
+            if self.graph.orientation == "target_to_source":
+                source, target = target, source
+            incoming[self._index[target]] += values[self._index[source]] * edge.weight * edge.sign
         for node, value in inputs.items():
             if node in self._index:
                 incoming[self._index[node]] += self.input_scale * value

@@ -2,7 +2,7 @@ from willfly.evaluation.lp_stress import LPStressScenario, stress_lp_scenarios
 from willfly.policies.lp_baselines import fixed_wide_range, idle_lp, volatility_range
 from willfly.policies.mode_selection import ModeCandidate, select_mode
 from willfly.replay.lp_execution import LPEvent, replay_lp_lifecycle
-from willfly.replay.lp_positions import Q128, PositionState, accrue_fee_growth, amounts_for_liquidity, round_tick
+from willfly.replay.lp_positions import Q96, Q128, UINT256_MODULUS, PositionState, accrue_fee_growth, amounts_for_liquidity, amounts_for_sqrt_price, round_tick
 
 
 def test_lp_positions_round_ticks_accrue_only_when_in_range_and_preserve_residuals():
@@ -18,7 +18,48 @@ def test_lp_positions_round_ticks_accrue_only_when_in_range_and_preserve_residua
         token0="TOKEN0", token1="TOKEN1", initial_balances={"TOKEN0": 100, "TOKEN1": 100},
     )
     assert result.balances == {"TOKEN0": 90, "TOKEN1": 120}
+    assert result.fees_paid_atomic == {"TOKEN0": 0, "TOKEN1": 0}
     assert result.gas_paid_atomic == 3
+
+
+def test_lp_exact_sqrt_price_amounts_and_modular_fee_growth_are_supported():
+    position = PositionState("position", "pool", "TOKEN0", "TOKEN1", 10, -60, 60)
+    assert amounts_for_sqrt_price(
+        position,
+        current_sqrt_price_x96=Q96,
+        lower_sqrt_price_x96=Q96 // 2,
+        upper_sqrt_price_x96=2 * Q96,
+    ) == (5, 5)
+    previous = PositionState("position", "pool", "TOKEN0", "TOKEN1", 10, -60, 60, UINT256_MODULUS - 2, UINT256_MODULUS - 3)
+    wrapped = accrue_fee_growth(previous, current_tick=0, fee_growth_inside0=1, fee_growth_inside1=2)
+    assert wrapped.tokens_owed0 == 0 and wrapped.tokens_owed1 == 0
+
+
+def test_lp_remove_collect_without_position_and_duplicate_delivery_do_not_credit_twice():
+    events = [
+        LPEvent("orphan", "remove", 90, 120, source_ref="lp:orphan"),
+        LPEvent("open", "open", 100, 100, source_ref="lp:open"),
+        LPEvent("remove", "remove", 90, 120, source_ref="lp:remove"),
+        LPEvent("remove", "remove", 90, 120, source_ref="lp:remove-duplicate"),
+    ]
+    result = replay_lp_lifecycle(events, token0="TOKEN0", token1="TOKEN1", initial_balances={"TOKEN0": 100, "TOKEN1": 100})
+    assert result.balances == {"TOKEN0": 90, "TOKEN1": 120}
+    assert result.failed_actions == ("orphan", "remove")
+
+
+def test_lp_owner_and_position_identity_are_checked():
+    result = replay_lp_lifecycle(
+        [
+            LPEvent("open", "open", 10, 10, source_ref="lp:open", position_id="p1", owner="alice"),
+            LPEvent("bad-owner", "collect", 2, 3, source_ref="lp:bad-owner", position_id="p1", owner="bob"),
+            LPEvent("good-collect", "collect", 2, 3, source_ref="lp:good-collect", position_id="p1", owner="alice"),
+        ],
+        token0="TOKEN0",
+        token1="TOKEN1",
+        initial_balances={"TOKEN0": 10, "TOKEN1": 10},
+    )
+    assert result.failed_actions == ("bad-owner",)
+    assert result.fees_paid_atomic == {"TOKEN0": 2, "TOKEN1": 3}
 
 
 def test_lp_policies_and_mode_selection_never_double_allocate():

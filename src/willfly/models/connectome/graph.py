@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import random
 from typing import Iterable
 
@@ -17,7 +18,7 @@ class Edge:
     sign: int = 1
 
     def __post_init__(self) -> None:
-        if not self.source or not self.target or not self.weight or self.sign not in {-1, 1}:
+        if not self.source or not self.target or not math.isfinite(self.weight) or self.weight == 0 or self.sign not in {-1, 1}:
             raise ValueError("graph edge is invalid")
 
 
