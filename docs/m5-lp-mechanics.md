@@ -10,7 +10,8 @@ counter wrap does not erase accrued fees. Position identity and optional owner
 identity are carried through lifecycle events; resize, collect, remove and
 convert require an active matching position. Replayed action IDs are
 idempotent and do not credit balances twice. Fee totals remain per token rather
-than summing unlike assets as money.
+than summing unlike assets as money, and gas is retained in an explicit
+per-asset map (or `unknown:gas` when a fixture does not provide a denomination).
 
 The older `amounts_for_liquidity` linearized tick helper remains available as a
 named counterfactual diagnostic for compatibility. It is not used as proof of
@@ -28,4 +29,3 @@ Reproduction:
 ```text
 .venv/bin/python -m pytest -q tests/test_lp.py
 ```
-

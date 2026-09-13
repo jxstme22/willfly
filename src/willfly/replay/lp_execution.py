@@ -18,12 +18,15 @@ class LPEvent:
     source_ref: str = ""
     position_id: str | None = None
     owner: str | None = None
+    gas_asset: str | None = None
 
     def __post_init__(self) -> None:
         if self.action not in {"acquire", "open", "collect", "resize", "remove", "convert", "failed", "unsupported"}:
             raise ValueError("unsupported LP lifecycle action")
         if min(self.token0_atomic, self.token1_atomic, self.gas_atomic) < 0 or not self.action_id or not self.source_ref:
             raise ValueError("LP event is invalid")
+        if self.gas_asset is not None and not self.gas_asset:
+            raise ValueError("gas_asset cannot be empty")
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,7 @@ class LPLifecycleResult:
     balances: Mapping[str, int]
     fees_paid_atomic: Mapping[str, int]
     gas_paid_atomic: int
+    gas_paid_by_asset: Mapping[str, int]
     residual_token0_atomic: int
     residual_token1_atomic: int
     failed_actions: tuple[str, ...]
@@ -55,6 +59,7 @@ def replay_lp_lifecycle(
     refs: list[str] = []
     fees: dict[str, int] = {token0: 0, token1: 0}
     gas = 0
+    gas_by_asset: dict[str, int] = {}
     residual0 = residual1 = 0
     active_position = position
     seen_action_ids: set[str] = set()
@@ -65,6 +70,9 @@ def replay_lp_lifecycle(
         seen_action_ids.add(event.action_id)
         refs.append(event.source_ref)
         gas += event.gas_atomic
+        if event.gas_atomic:
+            gas_asset = event.gas_asset or "unknown:gas"
+            gas_by_asset[gas_asset] = gas_by_asset.get(gas_asset, 0) + event.gas_atomic
         if event.action == "unsupported":
             unsupported.append(event.action_id)
             continue
@@ -124,4 +132,4 @@ def replay_lp_lifecycle(
         if event.action == "collect":
             fees[token0] += event.token0_atomic
             fees[token1] += event.token1_atomic
-    return LPLifecycleResult(balances, fees, gas, residual0, residual1, tuple(failed), tuple(unsupported), tuple(refs))
+    return LPLifecycleResult(balances, fees, gas, gas_by_asset, residual0, residual1, tuple(failed), tuple(unsupported), tuple(refs))

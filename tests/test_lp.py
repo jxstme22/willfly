@@ -20,6 +20,7 @@ def test_lp_positions_round_ticks_accrue_only_when_in_range_and_preserve_residua
     assert result.balances == {"TOKEN0": 90, "TOKEN1": 120}
     assert result.fees_paid_atomic == {"TOKEN0": 0, "TOKEN1": 0}
     assert result.gas_paid_atomic == 3
+    assert result.gas_paid_by_asset == {"unknown:gas": 3}
 
 
 def test_lp_exact_sqrt_price_amounts_and_modular_fee_growth_are_supported():
