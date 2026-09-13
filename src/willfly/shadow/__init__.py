@@ -5,8 +5,10 @@ from willfly.shadow.health import ShadowHealth, assess_shadow_health, prescribed
 from willfly.shadow.runner import (
     ShadowCheckpointStore,
     ShadowDecision,
+    ShadowInput,
     ShadowObservation,
     ShadowRunner,
+    ShadowRunSummary,
     ShadowStepResult,
 )
 
@@ -14,9 +16,11 @@ __all__ = [
     "FrozenShadowConfig",
     "ShadowCheckpointStore",
     "ShadowDecision",
+    "ShadowInput",
     "ShadowHealth",
     "ShadowObservation",
     "ShadowRunner",
+    "ShadowRunSummary",
     "ShadowStepResult",
     "assess_shadow_health",
     "freeze_shadow_config",

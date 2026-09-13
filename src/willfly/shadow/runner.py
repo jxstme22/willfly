@@ -8,7 +8,7 @@ import hashlib
 import json
 import sqlite3
 import threading
-from typing import Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from willfly.policies.constraints import Candidate, allocate_candidates
 from willfly.policies.prediction import ActionMappingConfig, MappedAction, Prediction, map_prediction
@@ -89,6 +89,93 @@ class ShadowStepResult:
     duplicate: bool
     health: ShadowHealth
     mapped_action: MappedAction
+
+
+@dataclass(frozen=True)
+class ShadowInput:
+    """One controlled-source observation and the prediction made at its arrival."""
+
+    observation: ShadowObservation
+    prediction: Prediction
+    decision_time: str | None = None
+    entry_quote: PoolQuote | None = None
+    exit_quote: PoolQuote | None = None
+    model_execution: bool = False
+    execution_delay_seconds: int = 0
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "ShadowInput":
+        if not isinstance(payload, Mapping):
+            raise ValueError("shadow input must be an object")
+        observation_payload = payload.get("observation", payload)
+        prediction_payload = payload.get("prediction")
+        if not isinstance(observation_payload, Mapping) or not isinstance(prediction_payload, Mapping):
+            raise ValueError("shadow input requires observation and prediction objects")
+        observation = ShadowObservation(
+            str(observation_payload["observation_id"]),
+            str(observation_payload["asset"]),
+            str(observation_payload["received_at"]),
+            str(observation_payload["quality_state"]),
+            bool(observation_payload.get("contradictory", False)),
+            tuple(str(item) for item in observation_payload.get("source_refs", ())),
+        )
+        prediction = Prediction(
+            str(prediction_payload["model_id"]),
+            int(prediction_payload["expected_return_bps"]),
+            int(prediction_payload["uncertainty_bps"]),
+            str(prediction_payload["as_of_time"]),
+        )
+        return cls(
+            observation=observation,
+            prediction=prediction,
+            decision_time=None if payload.get("decision_time") is None else str(payload["decision_time"]),
+            entry_quote=_quote_from_dict(payload.get("entry_quote")),
+            exit_quote=_quote_from_dict(payload.get("exit_quote")),
+            model_execution=bool(payload.get("model_execution", False)),
+            execution_delay_seconds=int(payload.get("execution_delay_seconds", 0)),
+        )
+
+
+@dataclass(frozen=True)
+class ShadowRunSummary:
+    """Auditable result for one controlled-source shadow replay/resume pass."""
+
+    input_count: int
+    processed_count: int
+    duplicate_count: int
+    health_counts: Mapping[str, int]
+    missed_decision_count: int
+    action_counts: Mapping[str, int]
+    modeled_fill_counts: Mapping[str, int]
+    run_identity: Mapping[str, str]
+    last_received_at: str | None
+    last_decision_id: str | None
+    modeled_positions: Mapping[str, int]
+    status: str = "completed"
+    operating_mode: str = "read_only"
+    hypothetical_only: bool = True
+    signing: bool = False
+    broadcast: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "input_count": self.input_count,
+            "processed_count": self.processed_count,
+            "duplicate_count": self.duplicate_count,
+            "health_counts": dict(self.health_counts),
+            "missed_decision_count": self.missed_decision_count,
+            "action_counts": dict(self.action_counts),
+            "modeled_fill_counts": dict(self.modeled_fill_counts),
+            "run_identity": dict(self.run_identity),
+            "last_received_at": self.last_received_at,
+            "last_decision_id": self.last_decision_id,
+            "modeled_positions": dict(self.modeled_positions),
+            "status": self.status,
+            "operating_mode": self.operating_mode,
+            "hypothetical_only": self.hypothetical_only,
+            "signing": self.signing,
+            "broadcast": self.broadcast,
+        }
 
 
 class ShadowCheckpointStore:
@@ -395,6 +482,55 @@ class ShadowRunner:
         inserted, record = self.store.append_step(observation, record)
         return ShadowStepResult(record, not inserted, health, mapped)
 
+    def run_sequence(self, inputs: Sequence[ShadowInput] | Iterable[ShadowInput]) -> ShadowRunSummary:
+        """Consume a controlled source through ``step`` with restart-safe writes.
+
+        The sequence is intentionally ordered by the source's arrival time. A
+        resumed run can include the same prefix again: duplicate observations
+        are returned from the durable ledger and do not create new actions.
+        A newly delivered observation that moves backwards in time fails closed
+        and must be handled as a separately identified replay.
+        """
+
+        entries = tuple(inputs)
+        health_counts: dict[str, int] = {}
+        action_counts: dict[str, int] = {}
+        modeled_fill_counts: dict[str, int] = {}
+        duplicate_count = 0
+        missed_decision_count = 0
+        for entry in entries:
+            if not isinstance(entry, ShadowInput):
+                raise ValueError("shadow sequence contains an unsupported input")
+            result = self.step(
+                entry.observation,
+                entry.prediction,
+                decision_time=entry.decision_time,
+                entry_quote=entry.entry_quote,
+                exit_quote=entry.exit_quote,
+                model_execution=entry.model_execution,
+                execution_delay_seconds=entry.execution_delay_seconds,
+            )
+            health_counts[result.health.state] = health_counts.get(result.health.state, 0) + 1
+            action_counts[result.decision.action] = action_counts.get(result.decision.action, 0) + 1
+            modeled_fill_counts[result.decision.modeled_fill_status] = modeled_fill_counts.get(
+                result.decision.modeled_fill_status, 0
+            ) + 1
+            duplicate_count += int(result.duplicate)
+            missed_decision_count += int(result.health.missed_deadline)
+        return ShadowRunSummary(
+            input_count=len(entries),
+            processed_count=len(entries) - duplicate_count,
+            duplicate_count=duplicate_count,
+            health_counts=health_counts,
+            missed_decision_count=missed_decision_count,
+            action_counts=action_counts,
+            modeled_fill_counts=modeled_fill_counts,
+            run_identity=self.store.run_identity,
+            last_received_at=self.store.checkpoint_value("last_received_at"),
+            last_decision_id=self.store.checkpoint_value("last_decision_id"),
+            modeled_positions=self.store.modeled_positions(),
+        )
+
     def _open_assets(self) -> tuple[str, ...]:
         positions: set[str] = set()
         for decision in self.store.decisions():
@@ -471,6 +607,23 @@ def _observation_from_dict(payload: dict[str, object]) -> ShadowObservation:
         str(payload["quality_state"]),
         bool(payload.get("contradictory", False)),
         tuple(str(item) for item in payload.get("source_refs", ())),
+    )
+
+
+def _quote_from_dict(payload: object) -> PoolQuote | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, Mapping):
+        raise ValueError("shadow quote must be an object")
+    return PoolQuote(
+        str(payload["pool_id"]),
+        str(payload["input_asset"]),
+        str(payload["output_asset"]),
+        int(payload["reserve_input_atomic"]),
+        int(payload["reserve_output_atomic"]),
+        int(payload["fee_bps"]),
+        str(payload["observed_at"]),
+        bool(payload.get("hook_supported", True)),
     )
 
 

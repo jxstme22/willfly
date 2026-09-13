@@ -37,6 +37,8 @@ from willfly.ingest.runner import (
 )
 from willfly.features.discovery import PoolProjection
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
+from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
+from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowRunner
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -522,7 +524,6 @@ def _shadow_plan(config_path: Path, state_db: Path) -> dict[str, Any]:
             }
         )
     else:
-        from willfly.shadow.config import validate_frozen_shadow_config
         validate_frozen_shadow_config(config)
         result.update(
             {
@@ -532,6 +533,139 @@ def _shadow_plan(config_path: Path, state_db: Path) -> dict[str, Any]:
             }
         )
     return result
+
+
+def _shadow_source_config_hash(config_path: Path, config: dict[str, Any]) -> str:
+    source_config = config.get("source_config")
+    if not isinstance(source_config, str) or not source_config:
+        raise ValueError("shadow source_config is required for a bound run")
+    source_path = Path(source_config)
+    if not source_path.is_absolute():
+        source_path = ROOT / source_path
+    if not source_path.is_file():
+        raise ValueError(f"shadow source config is missing: {source_path}")
+    return _config_hash(source_path)
+
+
+def _execute_shadow_run(
+    *,
+    config_path: Path,
+    state_db: Path,
+    input_path: Path,
+    fixed_entry_atomic: int,
+    initial_cash_atomic: int,
+    max_positions: int | None,
+) -> dict[str, Any]:
+    config = _load_json(config_path)
+    if not isinstance(config, dict):
+        raise ValueError("shadow config must be an object")
+    validate_frozen_shadow_config(config)
+    if bool(config.get("lp_enabled")):
+        raise ValueError("spot-only shadow run refuses an LP-enabled configuration")
+    if fixed_entry_atomic <= 0 or initial_cash_atomic < 0:
+        raise ValueError("shadow atomic allocation values are invalid")
+    resolved_max_positions = config.get("max_simultaneous_positions") if max_positions is None else max_positions
+    if not isinstance(resolved_max_positions, int) or isinstance(resolved_max_positions, bool) or resolved_max_positions < 0:
+        raise ValueError("max_positions must be a non-negative integer")
+    decision_deadline_seconds = config.get("decision_interval_seconds", 15)
+    if not isinstance(decision_deadline_seconds, int) or isinstance(decision_deadline_seconds, bool) or decision_deadline_seconds <= 0:
+        raise ValueError("decision_interval_seconds must be a positive integer")
+    payload = _load_json(input_path)
+    if not isinstance(payload, dict) or not isinstance(payload.get("observations"), list):
+        raise ValueError("shadow input must contain an observations array")
+    if not payload["observations"]:
+        raise ValueError("shadow input observations cannot be empty")
+    inputs = tuple(ShadowInput.from_dict(item) for item in payload["observations"])
+    source_hash = _shadow_source_config_hash(config_path, config)
+    identity = {
+        "config_hash": str(config["config_hash"]),
+        "source_config_hash": source_hash,
+        "feature_version": str(config.get("feature_version", "unknown")),
+        "policy_version": str(config.get("model_id", "unknown")),
+        "fixed_entry_atomic": str(fixed_entry_atomic),
+        "initial_cash_atomic": str(initial_cash_atomic),
+        "max_positions": str(resolved_max_positions),
+        "decision_deadline_seconds": str(decision_deadline_seconds),
+    }
+    run_id = _run_id(
+        "shadow-run",
+        {
+            "config_hash": identity["config_hash"],
+            "input_hash": hashlib.sha256(input_path.read_bytes()).hexdigest(),
+        },
+    )
+    store = ShadowCheckpointStore(str(state_db), run_identity=identity)
+    try:
+        runner = ShadowRunner(
+            store,
+            fixed_entry_atomic=fixed_entry_atomic,
+            max_positions=resolved_max_positions,
+            initial_cash_atomic=initial_cash_atomic,
+            decision_deadline_seconds=decision_deadline_seconds,
+            run_identity=identity,
+        )
+        summary = runner.run_sequence(inputs)
+    finally:
+        store.close()
+    result = summary.to_dict()
+    result.update(
+        {
+            "run_id": run_id,
+            "config": str(config_path),
+            "input": str(input_path),
+            "input_hash": hashlib.sha256(input_path.read_bytes()).hexdigest(),
+            "source": "controlled_file",
+            "lp_enabled": False,
+        }
+    )
+    return result
+
+
+def _shadow_freeze(config_path: Path, start_time: str) -> dict[str, Any]:
+    frozen = freeze_shadow_config(config_path, start_time=start_time)
+    return {
+        "status": "frozen",
+        "config": str(config_path),
+        "config_hash": frozen.config_hash,
+        "start_time": frozen.start_time,
+        "operating_mode": "read_only",
+        "hypothetical_only": True,
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _operator_check(config_path: Path, shadow_config_path: Path, manifest_path: Path) -> dict[str, Any]:
+    """Check a local operator installation without network or state mutation."""
+
+    config = _load_json(config_path)
+    shadow_config = _load_json(shadow_config_path)
+    fixture = _fixture_check(manifest_path)
+    checks = {
+        "python_3_12": sys.version_info[:2] == (3, 12),
+        "willfly_importable": True,
+        "source_config_present": config_path.is_file(),
+        "shadow_config_present": shadow_config_path.is_file(),
+        "fixture_checks": fixture["failed"] == 0,
+        "read_only_config": config.get("operating_mode") == "read_only",
+        "lp_disabled_in_shadow": shadow_config.get("lp_enabled") is False,
+    }
+    platform_name = sys.platform
+    wsl = bool(__import__("os").environ.get("WSL_DISTRO_NAME"))
+    return {
+        "status": "ready" if all(checks.values()) else "degraded",
+        "checks": checks,
+        "fixture": fixture,
+        "platform": {"sys_platform": platform_name, "wsl": wsl},
+        "network_probe": "not_run",
+        "shadow_window": "frozen" if shadow_config.get("config_hash") else "not_started",
+        "launch_source_gate": config.get("selection", {}).get("gate_status", "unknown"),
+        "lp_gate": "disabled",
+        "operating_mode": "read_only",
+        "hypothetical_only": True,
+        "signing": False,
+        "broadcast": False,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -604,6 +738,27 @@ def build_parser() -> argparse.ArgumentParser:
     shadow = subparsers.add_parser("shadow", help="check or prepare the read-only hypothetical shadow loop")
     shadow.add_argument("--config", type=Path, default=ROOT / "configs/shadow/config.json")
     shadow.add_argument("--state-db", type=Path, default=ROOT / "tmp/shadow.sqlite")
+
+    shadow_freeze = subparsers.add_parser(
+        "shadow-freeze", help="freeze a prospective shadow config before its first observation"
+    )
+    shadow_freeze.add_argument("--config", type=Path, default=ROOT / "configs/shadow/config.json")
+    shadow_freeze.add_argument("--start-time", required=True, help="timezone-aware RFC-3339 start time")
+
+    shadow_run = subparsers.add_parser(
+        "shadow-run", help="consume a controlled observation file through the hypothetical shadow loop"
+    )
+    shadow_run.add_argument("--config", type=Path, default=ROOT / "configs/shadow/config.json")
+    shadow_run.add_argument("--state-db", type=Path, required=True)
+    shadow_run.add_argument("--input", type=Path, required=True)
+    shadow_run.add_argument("--fixed-entry-atomic", type=int, required=True)
+    shadow_run.add_argument("--initial-cash-atomic", type=int, required=True)
+    shadow_run.add_argument("--max-positions", type=int, default=None)
+
+    operator = subparsers.add_parser("operator-check", help="check local read-only operator setup without network")
+    operator.add_argument("--config", type=Path, default=ROOT / "configs/sources/robinhood-chain-v0.1.json")
+    operator.add_argument("--shadow-config", type=Path, default=ROOT / "configs/shadow/config.json")
+    operator.add_argument("--manifest", type=Path, default=ROOT / "tests/fixtures/manifest.json")
     return parser
 
 
@@ -680,6 +835,19 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "shadow":
             result = _shadow_plan(args.config, args.state_db)
+        elif args.command == "shadow-freeze":
+            result = _shadow_freeze(args.config, args.start_time)
+        elif args.command == "shadow-run":
+            result = _execute_shadow_run(
+                config_path=args.config,
+                state_db=args.state_db,
+                input_path=args.input,
+                fixed_entry_atomic=args.fixed_entry_atomic,
+                initial_cash_atomic=args.initial_cash_atomic,
+                max_positions=args.max_positions,
+            )
+        elif args.command == "operator-check":
+            result = _operator_check(args.config, args.shadow_config, args.manifest)
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:
@@ -714,6 +882,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["status"] == "pass" else 1
     if args.command == "shadow":
         return 0 if result["status"] == "ready_hypothetical" else 1
+    if args.command == "shadow-freeze":
+        return 0 if result["status"] == "frozen" else 1
+    if args.command == "shadow-run":
+        return 0 if result["status"] == "completed" else 1
+    if args.command == "operator-check":
+        return 0 if result["status"] == "ready" else 1
     if args.command in {"capture", "backfill"}:
         if result.get("status") == "plan_only":
             return 3  # A non-executed plan cannot be mistaken for successful capture.

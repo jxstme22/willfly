@@ -885,3 +885,43 @@ complete-grid review that refuses attribution when cells are missing,
 unavailable, mismatched or undocumented. Hybrid metrics remain dependent on
 the shared replay/prospective evaluator; no optional source or text feature is
 treated as a free or historically available contribution.
+
+
+## 2026-09-14 — M3-02 controlled shadow runner and live capture probe
+
+Added `willfly shadow-run` and the restart-safe `ShadowRunner.run_sequence`
+adapter for controlled observation files. It binds source/config/feature/policy
+and capital identities, persists observations and decisions atomically, counts
+healthy/stale/degraded intervals and missed deadlines, and keeps execution
+hypothetical with signing and broadcast disabled. The actual controlled run
+processed two inputs (one healthy entry and one delayed healthy watch) and the
+same-input resume returned a duplicate without creating a second action.
+
+Also performed one bounded read-only RPC capture at block 61693479. Chain ID
+4663 and the configured contract filters were accepted; the range was empty,
+one header was persisted, the run acknowledged the range, and no event batch
+was fabricated. The capture ended with `ancestry_anchor_state: unavailable`,
+so this is a bounded source probe rather than completeness or launch-history
+evidence. The real prospective shadow window remains unfrozen and the M1/M3
+elapsed-time gates remain open.
+
+
+## 2026-09-14 — operator packaging loop
+
+Added the offline `operator-check` and explicit `shadow-freeze` CLI commands,
+plus a macOS/Linux/WSL2 operator runbook. The check reports installation and
+read-only safety state without probing the network; freezing remains an
+operator-controlled, one-time local mutation. No production daemon, signer,
+funding path, LP enablement or 14-day prospective claim was added.
+
+
+## 2026-09-14 — MaleCNS artifact integration recheck
+
+Re-ran the bounded verifier against the local official MaleCNS v1.0 artifacts.
+The 14,483,314-byte annotation companion and 1,051,241,946-byte graph matched
+their manifest hashes. The first 20,000 release-order edges yielded 10,868
+nodes and drove a three-step reservoir smoke run with graph hash
+`eb5dfdda9aa560520e947bd6311304056d2263b97668c5272cd6262c631dd6e9`. This
+confirms the artifact-to-graph-to-reservoir path only; whole-CNS execution,
+five-seed chronological holdout evidence and any biological or financial edge
+remain open.

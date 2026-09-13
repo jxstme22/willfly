@@ -1,6 +1,7 @@
 import json
 
 from willfly.cli import main
+from willfly.shadow.config import freeze_shadow_config
 from willfly.storage import RawBatchStore
 
 
@@ -42,6 +43,34 @@ def test_shadow_command_stops_at_unfrozen_config(capsys):
     assert result["reason"] == "shadow_config_not_frozen"
     assert result["hypothetical_only"] is True
     assert result["broadcast"] is False
+
+
+def test_operator_check_is_offline_and_shadow_freeze_is_explicit(tmp_path, capsys):
+    source = tmp_path / "source.json"
+    source.write_text("{}", encoding="utf-8")
+    shadow = tmp_path / "shadow.json"
+    shadow.write_text(
+        json.dumps(
+            {
+                "status": "pending",
+                "model_id": "ordinary-baseline-v0.1",
+                "feature_version": "observatory.features.v0.1",
+                "source_config": str(source),
+                "lp_enabled": False,
+                "start_time": None,
+                "config_hash": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert main(["shadow-freeze", "--config", str(shadow), "--start-time", "2026-01-01T00:00:00Z"]) == 0
+    frozen = json.loads(capsys.readouterr().out)
+    assert frozen["status"] == "frozen"
+    assert frozen["signing"] is False and frozen["broadcast"] is False
+    assert main(["operator-check", "--config", str(source), "--shadow-config", str(shadow)]) == 1
+    degraded = json.loads(capsys.readouterr().out)
+    assert degraded["status"] == "degraded"
+    assert degraded["network_probe"] == "not_run"
 
 
 def test_audit_command_reports_degraded_non_independent_data(tmp_path, capsys):
@@ -106,3 +135,78 @@ def test_materialize_persists_a_read_only_observatory_projection(tmp_path, capsy
     with RawBatchStore(store_path) as store:
         saved = store.load_snapshot(result["snapshot_id"])
     assert saved["discovery"]["launches"][0]["lifecycle_state"] == "non_graduate"
+
+
+def test_shadow_run_consumes_controlled_file_and_resumes(tmp_path, capsys):
+    source_config = tmp_path / "source.json"
+    source_config.write_text("{}", encoding="utf-8")
+    config_path = tmp_path / "shadow.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "0.1.0",
+                "status": "pending",
+                "model_id": "ordinary-baseline-v0.1",
+                "feature_version": "observatory.features.v0.1",
+                "source_config": str(source_config),
+                "max_simultaneous_positions": 1,
+                "lp_enabled": False,
+                "decision_interval_seconds": 15,
+                "start_time": None,
+                "config_hash": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    freeze_shadow_config(config_path, start_time="2026-01-01T00:00:00Z")
+    input_path = tmp_path / "observations.json"
+    input_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "willfly.shadow-input.v0.1",
+                "observations": [
+                    {
+                        "observation": {
+                            "observation_id": "cli-1",
+                            "asset": "TOKEN",
+                            "received_at": "2026-01-01T00:00:01Z",
+                            "quality_state": "healthy",
+                            "source_refs": ["controlled:1"],
+                        },
+                        "prediction": {
+                            "model_id": "ordinary-baseline-v0.1",
+                            "expected_return_bps": 150,
+                            "uncertainty_bps": 20,
+                            "as_of_time": "2026-01-01T00:00:01Z",
+                        },
+                        "decision_time": "2026-01-01T00:00:02Z",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    state_db = tmp_path / "shadow.sqlite"
+    command = [
+        "shadow-run",
+        "--config",
+        str(config_path),
+        "--state-db",
+        str(state_db),
+        "--input",
+        str(input_path),
+        "--fixed-entry-atomic",
+        "50",
+        "--initial-cash-atomic",
+        "100",
+    ]
+    assert main(command) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert first["status"] == "completed"
+    assert first["source"] == "controlled_file"
+    assert first["processed_count"] == 1
+    assert first["signing"] is False and first["broadcast"] is False
+    assert main(command) == 0
+    second = json.loads(capsys.readouterr().out)
+    assert second["processed_count"] == 0
+    assert second["duplicate_count"] == 1

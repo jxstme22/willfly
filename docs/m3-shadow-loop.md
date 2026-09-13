@@ -24,9 +24,52 @@ deduplication, shared cash, filled entry/exit inventory, missing-entry handling,
 stale/contradictory health and read-only API behavior. The loop does not submit,
 sign or fund transactions.
 
+## Controlled-source integration
+
+`willfly shadow-run` consumes a JSON object with an `observations` array. Each
+item contains an `observation` (`observation_id`, asset, received time, quality
+state and optional source references), a prediction (`model_id`, expected return
+and uncertainty in basis points, and an as-of time), and optional decision time
+and independent quote inputs. Quotes are passed through the same modeled fill
+path as the Python runner; absent state remains `missing_state`.
+
+The command requires a frozen config, an explicit SQLite state path and explicit
+atomic capital units:
+
+```text
+.venv/bin/willfly shadow-run \
+  --config /path/to/frozen-shadow.json \
+  --state-db /path/to/shadow.sqlite \
+  --input /path/to/observations.json \
+  --fixed-entry-atomic 50 \
+  --initial-cash-atomic 100
+```
+
+The output reports processed versus duplicate observations, health states,
+missed deadlines, action and modeled-fill counts, durable checkpoints and
+modeled positions. A repeated prefix is safe to resume; a changed run identity
+or out-of-order new observation fails closed. This controlled path was run on
+2026-09-14 with two synthetic observations: one healthy `enter`, one delayed
+healthy observation classified as `stale`/`watch`, one missed decision, and no
+modeled position. That is integration evidence, not prospective market
+evidence and not a claim about model quality or returns.
+
+The separate `willfly shadow` command remains a gate check. The repository
+config is intentionally unfrozen, so it returns `shadow_config_not_frozen`
+until an operator explicitly starts the real observation window.
+
+To freeze a config explicitly, use `shadow-freeze` with a timezone-aware start
+time. This mutates only the supplied local config and refuses to overwrite an
+already frozen file:
+
+```text
+.venv/bin/willfly shadow-freeze \
+  --config /path/to/shadow.json \
+  --start-time 2026-09-14T00:00:00Z
+```
+
 Reproduction:
 
 ```text
 .venv/bin/python -m pytest -q tests/test_shadow.py tests/test_api.py
 ```
-

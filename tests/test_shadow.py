@@ -5,7 +5,7 @@ from willfly.policies.prediction import Prediction
 from willfly.replay.execution import PoolQuote
 from willfly.shadow.config import freeze_shadow_config
 from willfly.shadow.health import assess_shadow_health
-from willfly.shadow.runner import ShadowCheckpointStore, ShadowObservation, ShadowRunner
+from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowObservation, ShadowRunner
 
 
 def test_shadow_config_freeze_records_hash_before_observation(tmp_path):
@@ -194,6 +194,78 @@ def test_shadow_modeled_missing_entry_does_not_open_inventory(tmp_path):
     )
     assert next_entry.decision.action == "enter"
     assert "max_concurrent_positions" not in next_entry.decision.reason
+    store.close()
+
+
+def test_shadow_sequence_measures_health_and_resumes_idempotently(tmp_path):
+    identity = {"config_hash": "a" * 64, "policy_version": "ordinary-baseline-v0.1"}
+    store = ShadowCheckpointStore(str(tmp_path / "sequence.sqlite"), run_identity=identity)
+    runner = ShadowRunner(
+        store,
+        fixed_entry_atomic=100,
+        max_positions=1,
+        initial_cash_atomic=1_000,
+        run_identity=identity,
+    )
+    quote = {
+        "pool_id": "pool-1",
+        "input_asset": "ETH",
+        "output_asset": "TOKEN",
+        "reserve_input_atomic": 100_000,
+        "reserve_output_atomic": 200_000,
+        "fee_bps": 30,
+        "observed_at": "2026-01-01T00:00:00Z",
+    }
+    entries = (
+        ShadowInput.from_dict(
+            {
+                "observation": {
+                    "observation_id": "entry",
+                    "asset": "TOKEN",
+                    "received_at": "2026-01-01T00:00:00Z",
+                    "quality_state": "healthy",
+                },
+                "prediction": {
+                    "model_id": "ordinary-v1",
+                    "expected_return_bps": 200,
+                    "uncertainty_bps": 10,
+                    "as_of_time": "2026-01-01T00:00:00Z",
+                },
+                "entry_quote": quote,
+                "model_execution": True,
+                "decision_time": "2026-01-01T00:00:05Z",
+            }
+        ),
+        ShadowInput.from_dict(
+            {
+                "observation": {
+                    "observation_id": "stale",
+                    "asset": "OTHER",
+                    "received_at": "2026-01-01T00:00:06Z",
+                    "quality_state": "healthy",
+                },
+                "prediction": {
+                    "model_id": "ordinary-v1",
+                    "expected_return_bps": 200,
+                    "uncertainty_bps": 10,
+                    "as_of_time": "2026-01-01T00:00:06Z",
+                },
+                "decision_time": "2026-01-01T00:00:30Z",
+            }
+        ),
+    )
+    summary = runner.run_sequence(entries + (entries[0],))
+    assert summary.input_count == 3
+    assert summary.processed_count == 2
+    assert summary.duplicate_count == 1
+    assert summary.health_counts["healthy"] == 2
+    assert summary.health_counts["stale"] == 1
+    assert summary.missed_decision_count == 1
+    assert summary.action_counts["enter"] == 2
+    assert summary.action_counts["watch"] == 1
+    assert summary.modeled_fill_counts["filled"] == 2
+    assert summary.signing is False and summary.broadcast is False
+    assert summary.modeled_positions.get("TOKEN", 0) > 0
     store.close()
 
 

@@ -40,11 +40,18 @@ python3 -m venv .venv
 .venv/bin/python -m pytest
 .venv/bin/willfly fixture-check
 .venv/bin/willfly doctor
+.venv/bin/willfly shadow
+.venv/bin/willfly operator-check
 ```
 
 The source-tree equivalent is `PYTHONPATH=src python3 -m willfly ...`. `doctor`
 is intentionally read-only and reports an open launch-source gate until Pons V2
-history and ABI evidence are complete.
+history and ABI evidence are complete. `shadow` refuses to start until an
+operator freezes the prospective config. A frozen config can be exercised with
+`willfly shadow-run` against a controlled observation JSON file; it records
+hypothetical decisions only and never signs or broadcasts.
+See [the operator runbook](docs/runbooks/operator.md) for WSL2 setup,
+controlled shadow replay and bounded live capture.
 
 ## Verify and maintain planning
 
