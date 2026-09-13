@@ -868,6 +868,16 @@ as research-only, prospective and economic gates remain inconclusive, LP is
 disabled, and execution/funding remains disabled.
 
 
+## 2026-09-14 — M1-07/M2-01/M2-02/M3-03 status reconciliation
+
+Reconciled the roadmap statuses so implemented mechanics are marked
+IN_PROGRESS rather than TODO while real acceptance gates remain open. The
+observatory review now records its partial 72-hour evidence state; execution
+and accounting retain benchmark-only limits; and the prospective shadow review
+records its time-gate boundary without claiming elapsed coverage. No synthetic
+time, provider recall or economic result was promoted into acceptance.
+
+
 ## 2026-09-14 — M4-05 hybrid attribution loop
 
 Added dataset/config identity and evidence references to factorial cells, plus a

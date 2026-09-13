@@ -297,7 +297,7 @@
       "id": "M1-07",
       "phase": "M1",
       "title": "Accept the Observatory evidence bundle",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-06"
@@ -314,13 +314,21 @@
       "work": "Run clean-install demo, recovery drills and a real 72-hour bounded-scope capture audit against an independent canonical source. Measure provider availability and receipt delay separately from chain time.",
       "acceptance": "All declared v0.1 gates have measured numerators, denominators and gaps; required source families verified, 99.5% discovery recall target met, no unexplained gaps or duplicate logical events. Otherwise label partial/inconclusive.",
       "verification": "Retain the complete observation interval and independent query manifest; reproduce from another process; do not replace elapsed time with synthetic timestamps.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/releases/observatory-v0.1-reviewed.md",
+        "docs/runbooks/observatory.md",
+        "src/willfly/evaluation/coverage.py",
+        "tests/test_coverage.py",
+        "tests/test_quality.py",
+        "tests/test_capture_runner.py",
+        "tests/test_api.py"
+      ]
     },
     {
       "id": "M2-01",
       "phase": "M2",
       "title": "Implement one verified V4 quote path",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-07"
@@ -337,13 +345,19 @@
       "work": "Use deployed protocol math and historical state at follower execution availability for one explicitly supported pool/hook family. Define routing, fees, tick crossing, price impact, gas denomination and failure semantics.",
       "acceptance": "Supported quotes reconcile to observed transactions within declared tolerances; missing/stale/future state and unsupported hooks cannot generate validated fills. Toy constant-product outputs remain a separate benchmark.",
       "verification": "At least 20 observed action examples plus tick-boundary, low depth, revert, asset mismatch and delayed-entry stress cases.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m2-execution-accounting.md",
+        "src/willfly/replay/execution.py",
+        "src/willfly/adapters/protocols/v4.py",
+        "tests/test_execution.py",
+        "tests/test_replay_core.py"
+      ]
     },
     {
       "id": "M2-02",
       "phase": "M2",
       "title": "Connect idempotent portfolio accounting",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-01"
@@ -359,7 +373,13 @@
       "work": "Join proposals to modeled execution records using exact per-asset debits, credits, gas and fees. Track token inventory, residuals, deposit-adjusted equity and action idempotency; prevent duplicate economic actions.",
       "acceptance": "Cash is released only from reconciled exit proceeds, shared capital cannot be double allocated, fees are not counted twice and failed transactions retain applicable costs.",
       "verification": "Hand-calculated multi-asset round trips, duplicate action/restart, partial or failed exit, concurrent candidates and deposit/withdrawal invariants.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m2-execution-accounting.md",
+        "src/willfly/replay/ledger.py",
+        "src/willfly/policies/constraints.py",
+        "tests/test_replay_core.py",
+        "tests/test_constraints.py"
+      ]
     },
     {
       "id": "M2-03",
@@ -519,7 +539,7 @@
       "id": "M3-03",
       "phase": "M3",
       "title": "Qualify prospective behavior",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M3-02"
@@ -536,7 +556,11 @@
       "work": "Collect at least 14 real days and 200 eligible prospective launches with the frozen ordinary policy. Reconcile quotes, actual arrival delays, missed decisions, state revisions and accounting; report excluded intervals.",
       "acceptance": "Availability meets the declared 99% healthy-interval target with no unresolved gaps or ledger discrepancy. Results remain hypothetical; unmet duration/sample produces inconclusive, not a fabricated pass.",
       "verification": "Evidence-backed interval audit, independent ledger reconstruction and replay-versus-prospective mismatch report.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m3-shadow-loop.md",
+        "src/willfly/evaluation/shadow.py",
+        "tests/test_shadow.py"
+      ]
     },
     {
       "id": "M4-01",

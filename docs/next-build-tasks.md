@@ -142,7 +142,7 @@ Load persisted snapshots into the local API and route the dashboard. Add launch/
 
 ### M1-07 - Accept the Observatory evidence bundle
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M1-06
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M1-06
 
 **Target paths:** `docs/releases/observatory-v0.1-reviewed.md`, `docs/runbooks/`, `src/willfly/evaluation/coverage.py`
 
@@ -150,13 +150,15 @@ Run clean-install demo, recovery drills and a real 72-hour bounded-scope capture
 
 **Done when:** All declared v0.1 gates have measured numerators, denominators and gaps; required source families verified, 99.5% discovery recall target met, no unexplained gaps or duplicate logical events. Otherwise label partial/inconclusive.
 
+**Evidence:** docs/releases/observatory-v0.1-reviewed.md; docs/runbooks/observatory.md; src/willfly/evaluation/coverage.py; tests/test_coverage.py; tests/test_quality.py; tests/test_capture_runner.py; tests/test_api.py
+
 **Verification:** Retain the complete observation interval and independent query manifest; reproduce from another process; do not replace elapsed time with synthetic timestamps.
 
 ## M2 - Economically valid trading laboratory
 
 ### M2-01 - Implement one verified V4 quote path
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M1-07
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M1-07
 
 **Target paths:** `src/willfly/replay/execution.py`, `src/willfly/adapters/protocols/`, `configs/experiments/`
 
@@ -164,17 +166,21 @@ Use deployed protocol math and historical state at follower execution availabili
 
 **Done when:** Supported quotes reconcile to observed transactions within declared tolerances; missing/stale/future state and unsupported hooks cannot generate validated fills. Toy constant-product outputs remain a separate benchmark.
 
+**Evidence:** docs/m2-execution-accounting.md; src/willfly/replay/execution.py; src/willfly/adapters/protocols/v4.py; tests/test_execution.py; tests/test_replay_core.py
+
 **Verification:** At least 20 observed action examples plus tick-boundary, low depth, revert, asset mismatch and delayed-entry stress cases.
 
 ### M2-02 - Connect idempotent portfolio accounting
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-01
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-01
 
 **Target paths:** `src/willfly/replay/ledger.py`, `src/willfly/policies/constraints.py`
 
 Join proposals to modeled execution records using exact per-asset debits, credits, gas and fees. Track token inventory, residuals, deposit-adjusted equity and action idempotency; prevent duplicate economic actions.
 
 **Done when:** Cash is released only from reconciled exit proceeds, shared capital cannot be double allocated, fees are not counted twice and failed transactions retain applicable costs.
+
+**Evidence:** docs/m2-execution-accounting.md; src/willfly/replay/ledger.py; src/willfly/policies/constraints.py; tests/test_replay_core.py; tests/test_constraints.py
 
 **Verification:** Hand-calculated multi-asset round trips, duplicate action/restart, partial or failed exit, concurrent candidates and deposit/withdrawal invariants.
 
@@ -252,13 +258,15 @@ Wire live recorder observations to scheduled ticks, fixed model inference and hy
 
 ### M3-03 - Qualify prospective behavior
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M3-02
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M3-02
 
 **Target paths:** `src/willfly/evaluation/shadow.py`, `docs/results/shadow-review.md`
 
 Collect at least 14 real days and 200 eligible prospective launches with the frozen ordinary policy. Reconcile quotes, actual arrival delays, missed decisions, state revisions and accounting; report excluded intervals.
 
 **Done when:** Availability meets the declared 99% healthy-interval target with no unresolved gaps or ledger discrepancy. Results remain hypothetical; unmet duration/sample produces inconclusive, not a fabricated pass.
+
+**Evidence:** docs/m3-shadow-loop.md; src/willfly/evaluation/shadow.py; tests/test_shadow.py
 
 **Verification:** Evidence-backed interval audit, independent ledger reconstruction and replay-versus-prospective mismatch report.
 
