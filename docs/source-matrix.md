@@ -1,6 +1,6 @@
 # Source matrix
 
-Version 1.1 | 13 September 2026 | P0-02 in progress
+Version 1.2 | 14 September 2026 | M1-01 in progress
 
 This is an evidence ledger, not a promise of coverage. `observed` means a bounded
 read probe returned the field. `documented` means a primary source describes it.
@@ -48,6 +48,12 @@ claimed). A 39-page Pons scan over blocks `61616075`–`61694074` produced 1,130
 `26841846` are available (22 logs in the first 100 blocks), but historical code
 at that block is unavailable via public RPC (`metadata is not found`). No signer,
 broadcast endpoint or funded provider is configured.
+
+The repository-relative ABI manifests and their event-family declarations are
+also checked offline by `scripts/check_source_manifest.py`; this protects the
+source contract from accidental drift but does not replace live archive,
+coverage or availability evidence. See
+`docs/reports/m1-01-source-manifest.md` for the bounded result.
 
 ## Evidence links
 

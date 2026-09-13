@@ -10,6 +10,7 @@ from willfly.adapters.launchpad import (
     launch_from_events,
 )
 from willfly.adapters.robinhood_rpc import JsonRpcError, ReadOnlyRpcClient, WrongChainError
+from willfly.adapters.source_manifest import validate_source_manifest
 
 __all__ = [
     "DecodedLaunchEvent",
@@ -22,4 +23,5 @@ __all__ = [
     "decode_pons_v2_event",
     "deduplicate_launch_events",
     "launch_from_events",
+    "validate_source_manifest",
 ]

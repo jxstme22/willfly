@@ -1,6 +1,6 @@
 # Provider access and budget
 
-Version 1.1 | 13 September 2026 | P0-03 in progress
+Version 1.2 | 14 September 2026 | M1-01 in progress
 
 ## Bounded probe record
 
@@ -18,6 +18,11 @@ V4 deployment, and a 101-block `eth_getLogs` range for the PoolManager. The prob
 This establishes connectivity and identity only. It does not establish archive
 history, event completeness, latency guarantees, rate limits or production
 suitability. The raw facts and endpoint are recorded in the source manifest.
+
+The pinned source manifest and ABI hashes can be checked without network access
+with `scripts/check_source_manifest.py`. A passing offline check reports
+`ready_with_open_gates`; it does not measure provider availability, limits or
+completeness and cannot close M1-07.
 
 The subsequent bounded decoder check captured blocks `61436940`–`61437618`:
 2,791 raw PoolManager logs produced 2,742 supported decodes (`Swap` 2,319,

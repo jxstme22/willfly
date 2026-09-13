@@ -677,3 +677,14 @@ smoke run, with explicit positive-sign and log1p preprocessing assumptions.
 The subset is not whole-CNS coverage and does not claim a pretrained financial
 model, biological memory or financial advantage. B1 is complete for the
 subset/provenance contract; full-release resource/model gates remain open.
+
+
+## 2026-09-14 — M1-01 source manifest guard
+
+Added an offline validator for the pinned Robinhood Chain source manifest. It
+checks read-only mode, chain identity, credential-free endpoint declarations,
+Uniswap V4/Pons V2 ABI hashes and exact event-family sets, while preserving the
+recorded bounded probe and its open gates. The validator and focused tests pass;
+M1-01 remains IN_PROGRESS because historical code, non-graduate coverage,
+provider limits and the M1-07 elapsed-time completeness gate are still real
+external acceptance requirements.

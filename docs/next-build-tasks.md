@@ -54,11 +54,13 @@ Inspect candidate content for secrets and generated datasets; commit the reviewe
 
 **Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M0-02
 
-**Target paths:** `configs/sources/`, `docs/source-matrix.md`, `docs/provider-budget.md`
+**Target paths:** `configs/sources/`, `docs/source-matrix.md`, `docs/provider-budget.md`, `docs/reports/m1-01-source-manifest.md`, `src/willfly/adapters/source_manifest.py`, `scripts/check_source_manifest.py`
 
 Pin chain, PoolManager and launchpad bytecode/ABI/creation blocks with primary and chain evidence; verify archive methods and no-graduate coverage; audit optional vendor access without making it a recorder dependency.
 
 **Done when:** Versioned source manifest separates observed/documented/unavailable facts and includes contract provenance, limits, budget and tested event examples; unsupported history remains a release blocker.
+
+**Evidence:** configs/sources/robinhood-chain-v0.1.json; docs/reports/m1-01-source-manifest.md; scripts/check_source_manifest.py; src/willfly/adapters/source_manifest.py; tests/test_source_manifest.py
 
 **Verification:** Bounded RPC probes plus at least ten examples for each claimed event family; retain redacted responses and hashes.
 
