@@ -123,12 +123,12 @@
     "pool_source": "uniswap_v4",
     "launch_source": "pons_v2",
     "launch_source_status": "candidate_pending_archive_coverage",
-    "rationale": "Pons V2 is the candidate because its documented lifecycle includes non-graduating bonding-curve launches and later V4 graduation. The current factory source/ABI is pinned and a bounded live creation sample decodes; launch history remains gated until archive and non-graduate coverage are independently verified.",
+    "rationale": "Pons V2 is the candidate because its documented lifecycle includes non-graduating bonding-curve launches and later V4 graduation. The current factory source/ABI is pinned and bounded live samples decode all four lifecycle families; launch history remains gated until non-graduate coverage and historical-code archive limits are independently verified.",
     "gate_status": "OPEN",
     "gate_failures": [
-      "Native archive coverage for the documented Pons V2 creation block is not verified.",
-      "No lifecycle sample beyond current TokenLaunched events yet.",
-      "Archive/history coverage and provider limits remain unmeasured."
+      "Native historical-code archive at the documented Pons V2 creation block is unavailable via public RPC (metadata not found); logs and block headers at creation remain available.",
+      "Non-graduate coverage has not yet been demonstrated with tracked TokenLaunched tokens that remain without PoolGraduated after a declared window.",
+      "Archive/history coverage and provider limits remain partially measured; 72-hour completeness is an M1-07 gate."
     ]
   },
   "last_bounded_probe": {
@@ -174,7 +174,7 @@
       "malformed_logs": 0,
       "zero_block_timestamps": 34,
       "result": "pass",
-      "note": "Bounded live creation-event sample. The endpoint returned zero blockTimestamp values for these logs, so capture must use arrival-time fallback; no lifecycle-completeness or non-graduate-history claim is made."
+      "note": "Bounded live creation-event sample. The endpoint returned zero blockTimestamp values for these logs, so capture must resolve event time via hash-matched block headers or fail without acknowledgement; no lifecycle-completeness or non-graduate-history claim is made."
     },
     "live_v4_capture_probe": {
       "date": "2026-09-13",
@@ -204,6 +204,64 @@
       "matching_receipt_logs": 1,
       "result": "pass",
       "note": "One bounded live receipt/log consistency check; not a trade attribution coverage claim."
+    },
+    "m1_01_verification_2026_09_13": {
+      "date": "2026-09-13",
+      "endpoint": "https://rpc.mainnet.chain.robinhood.com",
+      "observed_chain_id": 4663,
+      "observed_head": 61694909,
+      "code_reverified": {
+        "uniswap_v4_pool_manager_bytes": 24009,
+        "uniswap_v4_pool_manager_sha256_bytes": "6eb21c69298b064e37fcf8089a941ae096fe08c0f179b2d399567aef1b10585b",
+        "pons_v2_factory_bytes": 24177,
+        "pons_v2_factory_sha256_bytes": "226a042e6d68a69a6038d4fda211925b03eb5299399434b87a7877f79f6e3848"
+      },
+      "v4_sample": {
+        "from_block": 61692800,
+        "to_block": 61693478,
+        "blocks": 679,
+        "raw_logs": 1853,
+        "topic_counts": {
+          "Swap": 1249,
+          "ModifyLiquidity": 551,
+          "Initialize": 12,
+          "unsupported_other": 41
+        },
+        "note": "All three claimed V4 families have at least ten bounded examples. The 41 other logs use topic 0x1b3d7edb and are observed but not claimed as supported."
+      },
+      "pons_lifecycle_scan": {
+        "scanned_interval": "61616075-61694074",
+        "pages_of_2000": 39,
+        "event_counts": {
+          "TokenLaunched": 1130,
+          "LaunchSwept": 10,
+          "GraduationTokensPermanentlyLocked": 10,
+          "PoolGraduated": 10,
+          "unsupported_other_topic_0x308c390e": 127
+        },
+        "note": "All four claimed Pons lifecycle families have at least ten bounded examples via paged 2000-block requests. The 127 other logs are observed but outside the pinned subset."
+      },
+      "header_resolution": {
+        "sample_block": 61691574,
+        "sample_block_hash": "0xa9642e86b12ae8ae16e94bbafdde2fffb52ab0249c2e2665ef0f4940c2f1ab35",
+        "log_block_timestamp": "0x0",
+        "header_timestamp": "0x6aa62de1",
+        "hash_match": true,
+        "note": "Pons logs carry a zero blockTimestamp sentinel; hash-matched headers supply real event time. Capture must use header evidence or fail without acknowledgement."
+      },
+      "archive_checks": {
+        "pons_creation_block": 26841846,
+        "creation_block_header": "0xad2287ac8e3bef23782c4692d0f9eb1fdc7240aade77f9325a58fcbbf4fbbe39",
+        "logs_in_first_100_blocks": 22,
+        "historical_code_at_creation": "unavailable_via_public_rpc",
+        "historical_code_error": "metadata is not found",
+        "note": "Logs and headers at creation are available; historical code state is not. Public RPC is not an archive-code source."
+      },
+      "open_gates": [
+        "Historical-code archive remains unavailable; do not claim creation-block code verification.",
+        "Non-graduate coverage requires tracked TokenLaunched tokens with no PoolGraduated after a declared window; not yet demonstrated.",
+        "72-hour completeness and provider limits remain M1-07 gates."
+      ]
     }
   }
 }

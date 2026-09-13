@@ -1,4 +1,4 @@
-# Next build roadmap — Muse Sparks 1.3
+# Next build roadmap — DeepSeek V4.1 Flash continuation
 
 Version 2.0 | 13 September 2026 | Based on the Astra implementation audit
 
@@ -34,6 +34,12 @@ Dependencies describe acceptance evidence, not a ban on independent offline draf
 
 The first useful vertical test is: fixture RPC with one true launch, one non-graduate, a genuine swap, an unrelated airdrop, a quiet block and a fork → durable capture → restart → canonical projections → localhost HTTP views → lossless export. Then repeat the supported path against bounded real data. Synthetic fixtures can validate mechanics, but cannot certify chain coverage or profitability.
 
+## Current continuation batch
+
+The original first-batch list above describes the integration sequence; several slices now have working implementations. Resume from actual code and evidence rather than repeating them. The additional M1-03 blocker is explicit anchor qualification: bounded parent walks currently remain unresolved at their oldest missing parent. Persist a verified starting boundary with a declared trust policy, require consecutive heights and fail closed on gaps or forks beyond the boundary.
+
+M1-06 explicitly includes the [terminal UI brief](ui-terminal-design.md): launches, tape, pools and data health backed by persistent records, with working inspection, search, sort, filters, pagination, refresh/pause and scoped export. Implement the views while source/timed gates are pending, but keep acceptance open until their prerequisites and real-data demonstrations qualify. Defer model performance, hypothetical PnL and LP valuation panels until their underlying phases provide valid data.
+
 ## Contracts to settle before orchestration
 
 - **CaptureRun:** run ID, chain/filter/ABI/config hash, operator start/stop, provider identity, attempted and durably acknowledged ranges, header evidence, errors and retained raw batches. Zero-event ranges need evidence too.
@@ -57,6 +63,6 @@ LP remains disabled until exact math, owned-position accounting and observed fee
 
 ## Review and handoff discipline
 
-Use [Muse Sparks 1.3 handoff](muse-sparks-1.3-handoff.md). The model name records the user's next implementation preference; this plan does not assert a provider, install a model or switch this session. There is no automatic new task.
+Use [DeepSeek V4.1 Flash continuation handoff](deepseek-v4.1-flash-handoff.md). Preserve the GLM implementation checkpoint and keep Terra paused; use one implementation writer. The next batch covers M1-03 anchor qualification, M1-05 export round-trip evidence, M1-07 coverage scaffolding and the full M1-06 terminal monitoring UI. The 72-hour qualification window does not pause independent development, but elapsed time and missing source evidence cannot be replaced by implementation tests.
 
 Update JSON after each verified batch, then run `python scripts/render_planning.py` and `python scripts/check_planning.py`. Preserve historical evidence and the original task IDs. Record failures as well as passing commands in the implementation log. Do not rerun the old temporary backlog generator, which resets statuses. Acceptance must reference actual work and completed dependencies; elapsed observation time cannot be simulated into completion.

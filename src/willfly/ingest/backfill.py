@@ -28,6 +28,7 @@ class BackfillCheckpoint:
     next_block: int
     page_size: int
     updated_at: str
+    filter_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -60,10 +61,15 @@ class BackfillCheckpointStore:
                 target_block INTEGER NOT NULL,
                 next_block INTEGER NOT NULL,
                 page_size INTEGER NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                filter_hash TEXT
             )
             """
         )
+        # Migrate legacy stores created before filter binding.
+        columns = {row[1] for row in self.connection.execute("PRAGMA table_info(backfill_checkpoints)").fetchall()}
+        if "filter_hash" not in columns:
+            self.connection.execute("ALTER TABLE backfill_checkpoints ADD COLUMN filter_hash TEXT")
         self.connection.commit()
 
     def close(self) -> None:
@@ -77,23 +83,30 @@ class BackfillCheckpointStore:
 
     def get(self, source: str) -> BackfillCheckpoint | None:
         row = self.connection.execute(
-            "SELECT source, start_block, target_block, next_block, page_size, updated_at FROM backfill_checkpoints WHERE source = ?",
+            "SELECT source, start_block, target_block, next_block, page_size, updated_at, filter_hash FROM backfill_checkpoints WHERE source = ?",
             (source,),
         ).fetchone()
-        return None if row is None else BackfillCheckpoint(*row)
+        if row is None:
+            return None
+        # Legacy rows predate filter binding; filter_hash may be NULL.
+        values = tuple(row)
+        if len(values) == 6:
+            values = (*values, None)
+        return BackfillCheckpoint(*values)
 
     def save(self, checkpoint: BackfillCheckpoint) -> None:
         with self.connection:
             self.connection.execute(
                 """
-                INSERT INTO backfill_checkpoints(source, start_block, target_block, next_block, page_size, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO backfill_checkpoints(source, start_block, target_block, next_block, page_size, updated_at, filter_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(source) DO UPDATE SET
                     start_block = excluded.start_block,
                     target_block = excluded.target_block,
                     next_block = excluded.next_block,
                     page_size = excluded.page_size,
-                    updated_at = excluded.updated_at
+                    updated_at = excluded.updated_at,
+                    filter_hash = excluded.filter_hash
                 """,
                 (
                     checkpoint.source,
@@ -102,6 +115,7 @@ class BackfillCheckpointStore:
                     checkpoint.next_block,
                     checkpoint.page_size,
                     checkpoint.updated_at,
+                    checkpoint.filter_hash,
                 ),
             )
 
@@ -118,8 +132,18 @@ def backfill_range(
     checkpoint_store: BackfillCheckpointStore | None = None,
     on_page: PageCallback | None = None,
     clock: Clock | None = None,
+    retain_events: bool = True,
+    expected_filter_hash: str | None = None,
 ) -> BackfillResult:
-    """Fetch a range with adaptive pages and checkpoint after accepted pages."""
+    """Fetch a range with adaptive pages and checkpoint after accepted pages.
+
+    When ``retain_events`` is False, pages stream through ``on_page`` without
+    accumulating full history in memory; the returned ``events`` tuple is empty
+    while ``ranges`` still records durable progress. When
+    ``expected_filter_hash`` is set, a stored checkpoint with a different
+    filter hash cannot be inherited. Header persistence and parent rebinding
+    are handled by the runner's ``on_page`` callback via ``RawBatchStore``.
+    """
 
     if start_block < 0 or target_block < start_block:
         raise ValueError("backfill range is invalid")
@@ -131,6 +155,9 @@ def backfill_range(
     checkpoint = checkpoint_store.get(source) if checkpoint_store is not None else None
     if checkpoint is not None and (checkpoint.start_block != start_block or checkpoint.target_block != target_block):
         raise BackfillError("checkpoint range does not match requested backfill")
+    if checkpoint is not None and expected_filter_hash is not None:
+        if checkpoint.filter_hash != expected_filter_hash:
+            raise BackfillError("checkpoint filter does not match requested backfill")
     cursor = checkpoint.next_block if checkpoint is not None else start_block
     current_page_size = min(page_size, 2000)
     events: list[RawEvent] = []
@@ -153,13 +180,14 @@ def backfill_range(
         page_events = tuple(_raw_event(log, run_id=run_id, source=source, received_at=received_at) for log in resolved_logs)
         if on_page is not None:
             on_page(page_events, cursor, end_block)
-        events.extend(page_events)
+        if retain_events:
+            events.extend(page_events)
         ranges.append((cursor, end_block))
         page_sizes.append(current_page_size)
         cursor = end_block + 1
         if checkpoint_store is not None:
             checkpoint_store.save(
-                BackfillCheckpoint(source, start_block, target_block, cursor, current_page_size, now())
+                BackfillCheckpoint(source, start_block, target_block, cursor, current_page_size, now(), expected_filter_hash)
             )
     return BackfillResult(source, start_block, target_block, cursor, tuple(events), tuple(ranges), tuple(page_sizes))
 
@@ -178,6 +206,7 @@ def _validate_page(logs: Iterable[RpcLog], start_block: int, end_block: int) -> 
 def _raw_event(log: RpcLog, *, run_id: str, source: str, received_at: str) -> RawEvent:
     if log.block_timestamp is None:
         raise BackfillError("missing block timestamp; verified header required")
+    parent_hash: str | None = None
     event_time = (
         datetime.fromtimestamp(log.block_timestamp, timezone.utc).isoformat()
         if log.block_timestamp is not None
@@ -190,7 +219,7 @@ def _raw_event(log: RpcLog, *, run_id: str, source: str, received_at: str) -> Ra
             "source_schema_version": "rpc-log.v0.1",
             "block_number": log.block_number,
             "block_hash": log.block_hash,
-            "parent_hash": None,
+            "parent_hash": parent_hash,
             "transaction_hash": log.transaction_hash,
             "log_index": log.log_index,
             "event_time": event_time,

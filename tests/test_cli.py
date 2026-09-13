@@ -1,6 +1,7 @@
 import json
 
 from willfly.cli import main
+from willfly.storage import RawBatchStore
 
 
 def test_fixture_check_passes(capsys):
@@ -23,13 +24,13 @@ def test_strict_doctor_fails_while_launch_gate_is_open(capsys):
     assert result["status"] == "failed"
 
 
-def test_capture_and_backfill_commands_return_read_only_run_ids(capsys):
-    assert main(["capture", "--from-block", "10", "--to-block", "12"]) == 3
+def test_capture_and_backfill_dry_run_return_read_only_plans(capsys):
+    assert main(["capture", "--from-block", "10", "--to-block", "12", "--dry-run"]) == 3
     capture = json.loads(capsys.readouterr().out)
     assert capture["run_id"].startswith("capture-")
     assert capture["operating_mode"] == "read_only"
     assert capture["status"] == "plan_only" and capture["executed"] is False
-    assert main(["backfill", "--from-block", "10", "--to-block", "12"]) == 3
+    assert main(["backfill", "--from-block", "10", "--to-block", "12", "--dry-run"]) == 3
     backfill = json.loads(capsys.readouterr().out)
     assert backfill["run_id"].startswith("backfill-")
 
@@ -66,3 +67,42 @@ def test_audit_command_reports_degraded_non_independent_data(tmp_path, capsys):
     assert main(["audit", "--expected", str(expected), "--observed", str(observed)]) == 1
     result = json.loads(capsys.readouterr().out)
     assert result["report"]["state"] == "degraded"
+
+
+def test_materialize_persists_a_read_only_observatory_projection(tmp_path, capsys):
+    token = "0x" + "11" * 20
+    payload = {
+        "launches": [
+            {
+                "chain_id": 4663,
+                "token": token,
+                "launch_contract": None,
+                "launch_contract_version": None,
+                "creation_evidence": ["launch:1"],
+                "creator": None,
+                "created_at": None,
+                "first_seen_at": "2026-09-13T00:00:00Z",
+                "origin_confidence": "observed",
+                "linked_pool_ids": [],
+                "lifecycle_state": "graduated",
+            }
+        ],
+        "pools": [],
+        "raw_events": [],
+        "trades": [],
+        "lifecycle_revisions": [
+            {"token": token, "lifecycle_state": "non_graduate", "observed_at": "2026-09-13T00:00:01Z", "raw_references": ["lifecycle:1"]}
+        ],
+    }
+    input_path = tmp_path / "projection-input.json"
+    store_path = tmp_path / "store"
+    input_path.write_text(json.dumps(payload))
+    assert main([
+        "materialize", "--input", str(input_path), "--as-of-time", "2026-09-13T00:05:00Z",
+        "--store-dir", str(store_path), "--source", "cli-projection",
+    ]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "materialized"
+    with RawBatchStore(store_path) as store:
+        saved = store.load_snapshot(result["snapshot_id"])
+    assert saved["discovery"]["launches"][0]["lifecycle_state"] == "non_graduate"

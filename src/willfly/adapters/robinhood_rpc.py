@@ -18,6 +18,7 @@ READ_METHODS = frozenset(
     {
         "eth_chainId",
         "eth_blockNumber",
+        "eth_getBlockByHash",
         "eth_getBlockByNumber",
         "eth_getCode",
         "eth_getLogs",
@@ -36,6 +37,16 @@ class WrongChainError(JsonRpcError):
 
 
 Transport = Callable[[str, list[Any]], Mapping[str, Any]]
+
+
+@dataclass(frozen=True)
+class BlockHeader:
+    """Validated header fields required for canonical ancestry."""
+
+    number: int
+    block_hash: str
+    parent_hash: str | None
+    timestamp: int
 
 
 @dataclass(frozen=True)
@@ -134,7 +145,50 @@ class ReadOnlyRpcClient:
         return _hex_int(self.request("eth_blockNumber"), "blockNumber")
 
     def block(self, block_number: int) -> Mapping[str, Any]:
+        if block_number < 0:
+            raise ValueError("block number must be non-negative")
         return self.request("eth_getBlockByNumber", [hex(block_number), False])
+
+    def validated_header(self, block_number: int) -> "BlockHeader":
+        """Return a strictly validated header for canonical-ancestry work.
+
+        Zero-timestamp headers are rejected: a canonical chain must not carry a
+        fabricated 1970 event time. Parent of genesis is the zero hash.
+        """
+
+        header = self.block(block_number)
+        if not isinstance(header, Mapping):
+            raise JsonRpcError(f"header for block {block_number} is not an object")
+        number = _hex_int(header.get("number"), "header.number")
+        if number != block_number:
+            raise JsonRpcError(f"header number {number} does not match requested {block_number}")
+        block_hash = header.get("hash")
+        if not isinstance(block_hash, str) or len(block_hash) != 66 or not block_hash.startswith("0x"):
+            raise JsonRpcError(f"header for block {block_number} has no valid hash")
+        parent_hash = header.get("parentHash")
+        if parent_hash is None or (
+            isinstance(parent_hash, str) and parent_hash.lower() == "0x" + "00" * 32 and number == 0
+        ):
+            parent_hash = None
+        elif isinstance(parent_hash, str) and parent_hash.lower() == "0x" + "00" * 32:
+            # A non-genesis block with a zero parent is not a real chain link.
+            raise JsonRpcError(f"non-genesis header for block {block_number} has a zero parent hash")
+        elif not isinstance(parent_hash, str) or len(parent_hash) != 66 or not parent_hash.startswith("0x"):
+            raise JsonRpcError(f"header for block {block_number} has an invalid parent hash")
+        timestamp = _optional_block_timestamp(header.get("timestamp"))
+        if timestamp is None:
+            raise JsonRpcError(f"header for block {block_number} has a zero or missing timestamp")
+        return BlockHeader(number=number, block_hash=block_hash, parent_hash=parent_hash, timestamp=timestamp)
+
+    def block_by_hash(self, block_hash: str) -> Mapping[str, Any] | None:
+        """Read a specific fork header without widening the client surface."""
+
+        if not isinstance(block_hash, str) or len(block_hash) != 66 or not block_hash.startswith("0x"):
+            raise ValueError("block hash must be a 32-byte hex value")
+        result = self.request("eth_getBlockByHash", [block_hash, False])
+        if result is not None and not isinstance(result, Mapping):
+            raise JsonRpcError("eth_getBlockByHash: result is not an object or null")
+        return result
 
     def code(self, address: str, block_tag: str = "latest") -> str:
         return self.request("eth_getCode", [address, block_tag])

@@ -146,7 +146,10 @@ class RawEvent(ContractMixin):
         _timestamp(self.received_time, "received_time")
         _mapping(self.payload, "payload")
         _text(self.ingestion_run, "ingestion_run")
-        _require(self.canonical_status in {"provisional", "canonical", "orphaned", "quarantined"}, "unsupported canonical_status")
+        _require(
+            self.canonical_status in {"provisional", "canonical", "orphaned", "unresolved", "quarantined"},
+            "unsupported canonical_status",
+        )
         if self.canonical_status == "orphaned":
             _require(self.block_hash is not None, "orphaned events retain their block hash")
 
@@ -314,6 +317,9 @@ class TradeEvidence(ContractMixin):
     as_of_time: str
     retrieved_time: str
     raw_event_refs: tuple[str, ...]
+    route_status: str = "uncertain"
+    trade_direction: str = "unknown"
+    refund_legs: tuple[PaymentLeg, ...] = ()
 
     def __post_init__(self) -> None:
         _bytes32(self.transaction_hash, "transaction_hash")
@@ -322,8 +328,15 @@ class TradeEvidence(ContractMixin):
         _require(self.classification in {"genuine_swap", "transfer", "gift_or_airdrop", "ambiguous"}, "unsupported trade classification")
         _require(all(isinstance(leg, PaymentLeg) for leg in self.payment_legs), "payment_legs must contain PaymentLeg records")
         _require(all(isinstance(leg, PaymentLeg) for leg in self.receipt_legs), "receipt_legs must contain PaymentLeg records")
+        _require(all(isinstance(leg, PaymentLeg) for leg in self.refund_legs), "refund_legs must contain PaymentLeg records")
+        _require(self.route_status in {"verified", "uncertain", "unsupported"}, "unsupported route_status")
+        _require(self.trade_direction in {"buy", "sell", "unknown"}, "unsupported trade_direction")
         if self.classification == "genuine_swap":
             _require(bool(self.payment_legs) and bool(self.receipt_legs), "a genuine swap requires payment and receipt legs", ambiguous=True)
+            _require(self.route_status == "verified", "a genuine swap requires verified route evidence", ambiguous=True)
+            _require(self.trade_direction in {"buy", "sell"}, "a genuine swap requires a known direction", ambiguous=True)
+        if self.refund_legs:
+            _require(all(leg.direction == "in" for leg in self.refund_legs), "refund legs must flow into the wallet", ambiguous=True)
         if self.quote_asset is not None and self.quote_asset.lower() != "native:eth":
             _address(self.quote_asset, "quote_asset")
         if self.estimated_usd:
@@ -340,11 +353,12 @@ class TradeEvidence(ContractMixin):
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "TradeEvidence":
+        classification = _text(data.get("classification"), "classification")
         return cls(
             transaction_hash=_bytes32(data.get("transaction_hash"), "transaction_hash"),
             wallet=_address(data.get("wallet"), "wallet"),
             token=_address(data.get("token"), "token"),
-            classification=_text(data.get("classification"), "classification"),
+            classification=classification,
             payment_legs=tuple(PaymentLeg.from_dict(item) for item in data.get("payment_legs", [])),
             receipt_legs=tuple(PaymentLeg.from_dict(item) for item in data.get("receipt_legs", [])),
             quote_asset=_optional_text(data.get("quote_asset"), "quote_asset"),
@@ -356,6 +370,12 @@ class TradeEvidence(ContractMixin):
             as_of_time=_timestamp(data.get("as_of_time"), "as_of_time"),
             retrieved_time=_timestamp(data.get("retrieved_time"), "retrieved_time"),
             raw_event_refs=_list_of_text(data.get("raw_event_refs"), "raw_event_refs"),
+            # Pre-M1-04 fixture evidence used the old contract. Keep it
+            # readable, but every newly constructed genuine trade must provide
+            # the explicit v0.2 route/direction fields above.
+            route_status=_text(data.get("route_status", "verified" if classification == "genuine_swap" else "uncertain"), "route_status"),
+            trade_direction=_text(data.get("trade_direction", "buy" if classification == "genuine_swap" else "unknown"), "trade_direction"),
+            refund_legs=tuple(PaymentLeg.from_dict(item) for item in data.get("refund_legs", [])),
         )
 
 

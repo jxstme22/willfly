@@ -21,6 +21,34 @@ class BatchCorruptionError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class BlockHeader:
+    """Immutable chain-header evidence retained independently of selected logs.
+
+    A block can be important to canonicality even when none of the configured
+    contracts emitted a log in it.  ``timestamp`` is intentionally optional:
+    a provider's zero/missing timestamp is evidence of missing metadata, not a
+    reason to invent an instant.
+    """
+
+    number: int
+    block_hash: str
+    parent_hash: str | None
+    timestamp: int | None = None
+    parent_known: bool = True
+
+    def __post_init__(self) -> None:
+        if self.number < 0:
+            raise ValueError("block header number must be non-negative")
+        _validate_hash(self.block_hash, "block header hash")
+        if self.parent_hash is not None:
+            _validate_hash(self.parent_hash, "block header parent hash")
+        if self.timestamp is not None and self.timestamp < 0:
+            raise ValueError("block header timestamp must be non-negative")
+        if not isinstance(self.parent_known, bool):
+            raise ValueError("block header parent_known must be boolean")
+
+
+@dataclass(frozen=True)
 class StoredBatch:
     batch_id: str
     source: str
@@ -29,6 +57,15 @@ class StoredBatch:
     event_count: int
     byte_count: int
     acknowledged: bool
+
+
+@dataclass(frozen=True)
+class StoredSnapshot:
+    snapshot_id: str
+    source: str
+    snapshot_type: str
+    as_of_time: str
+    replaces_snapshot_id: str | None
 
 
 class RawBatchStore:
@@ -80,8 +117,68 @@ class RawBatchStore:
                 batch_id TEXT NOT NULL REFERENCES batches(batch_id),
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS empty_range_acks (
+                source TEXT PRIMARY KEY,
+                last_block_number INTEGER,
+                last_block_hash TEXT,
+                run_id TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS block_headers (
+                block_hash TEXT PRIMARY KEY,
+                block_number INTEGER NOT NULL,
+                parent_hash TEXT,
+                parent_known INTEGER NOT NULL DEFAULT 1,
+                block_timestamp INTEGER,
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS block_headers_number_idx ON block_headers(block_number, block_hash);
+            CREATE TABLE IF NOT EXISTS header_range_evidence (
+                source TEXT NOT NULL,
+                range_start INTEGER NOT NULL,
+                range_end INTEGER NOT NULL,
+                run_id TEXT NOT NULL,
+                header_count INTEGER NOT NULL,
+                missing_blocks TEXT NOT NULL,
+                tip_hash TEXT,
+                observed_at TEXT NOT NULL,
+                PRIMARY KEY(source, range_start, range_end, run_id)
+            );
+            CREATE TABLE IF NOT EXISTS canonical_event_projections (
+                source TEXT NOT NULL,
+                event_key TEXT NOT NULL,
+                block_number INTEGER,
+                block_hash TEXT,
+                canonical_status TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(source, event_key)
+            );
+            CREATE TABLE IF NOT EXISTS canonical_checkpoints (
+                source TEXT PRIMARY KEY,
+                tip_hash TEXT,
+                last_block_number INTEGER,
+                last_block_hash TEXT,
+                state TEXT NOT NULL,
+                missing_parent_hashes TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS observatory_snapshots (
+                snapshot_id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                snapshot_type TEXT NOT NULL,
+                as_of_time TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                replaces_snapshot_id TEXT REFERENCES observatory_snapshots(snapshot_id),
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS observatory_snapshots_source_idx
+                ON observatory_snapshots(source, snapshot_type, as_of_time, created_at);
             """
         )
+        header_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(block_headers)").fetchall()}
+        if "parent_known" not in header_columns:
+            self._connection.execute("ALTER TABLE block_headers ADD COLUMN parent_known INTEGER NOT NULL DEFAULT 1")
         self._connection.commit()
 
     @staticmethod
@@ -171,6 +268,312 @@ class RawBatchStore:
     def get_checkpoint(self, source: str) -> sqlite3.Row | None:
         return self._connection.execute("SELECT * FROM checkpoints WHERE source = ?", (source,)).fetchone()
 
+    def acknowledge_empty_range(
+        self, *, source: str, last_block_number: int | None, last_block_hash: str | None, run_id: str
+    ) -> None:
+        """Acknowledge a zero-event range with header evidence and no batch.
+
+        Empty ranges are evidence, not gaps. The checkpoint records the covered
+        head block and its hash (when available) so a restart does not rescan
+        silently and an outage remains visible as a missing acknowledgement.
+        """
+
+        if not source or source in {".", ".."} or "/" in source or "\\" in source and ":" not in source:
+            # Filter-bound sources contain colons (e.g. capture:4663:abc123); only
+            # reject path traversal and bare dot names.
+            if source in {".", ".."} or "/" in source or "\\" in source:
+                raise ValueError("source must be a simple partition name or filter-bound key")
+        if not run_id:
+            raise ValueError("run_id is required for empty-range acknowledgement")
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO empty_range_acks(source, last_block_number, last_block_hash, run_id, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(source) DO UPDATE SET
+                    last_block_number = excluded.last_block_number,
+                    last_block_hash = excluded.last_block_hash,
+                    run_id = excluded.run_id,
+                    updated_at = excluded.updated_at
+                """,
+                (source, last_block_number, last_block_hash, run_id, now),
+            )
+
+    def get_empty_range_ack(self, source: str) -> sqlite3.Row | None:
+        return self._connection.execute("SELECT * FROM empty_range_acks WHERE source = ?", (source,)).fetchone()
+
+    def persist_headers(self, headers: Iterable[BlockHeader]) -> tuple[BlockHeader, ...]:
+        """Store immutable header evidence, upgrading only previously unknown fields.
+
+        A hash may be observed repeatedly, including through a restarted
+        process. Conflicting known parent hashes or timestamps are refused so a
+        faulty provider cannot silently rewrite ancestry evidence.
+        """
+
+        records = tuple(headers)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            for header in records:
+                if not isinstance(header, BlockHeader):
+                    raise TypeError("headers must be BlockHeader instances")
+                existing = self._connection.execute(
+                    "SELECT block_number, parent_hash, parent_known, block_timestamp FROM block_headers WHERE block_hash = ?",
+                    (header.block_hash,),
+                ).fetchone()
+                if existing is None:
+                    self._connection.execute(
+                        """
+                        INSERT INTO block_headers(block_hash, block_number, parent_hash, parent_known, block_timestamp, first_seen_at, last_seen_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (header.block_hash, header.number, header.parent_hash, int(header.parent_known), header.timestamp, now, now),
+                    )
+                    continue
+                if existing["block_number"] != header.number:
+                    raise ValueError(f"conflicting block number for header {header.block_hash}")
+                known_parent = existing["parent_hash"]
+                known_parent_known = bool(existing["parent_known"])
+                known_timestamp = existing["block_timestamp"]
+                if known_parent_known and header.parent_known and known_parent != header.parent_hash:
+                    raise ValueError(f"conflicting parent hash for header {header.block_hash}")
+                if known_timestamp is not None and header.timestamp is not None and known_timestamp != header.timestamp:
+                    raise ValueError(f"conflicting timestamp for header {header.block_hash}")
+                self._connection.execute(
+                    """
+                    UPDATE block_headers
+                    SET parent_hash = CASE WHEN parent_known = 0 AND ? THEN ? ELSE parent_hash END,
+                        parent_known = CASE WHEN parent_known = 1 OR ? = 0 THEN parent_known ELSE 1 END,
+                        block_timestamp = COALESCE(block_timestamp, ?),
+                        last_seen_at = ?
+                    WHERE block_hash = ?
+                    """,
+                    (int(header.parent_known), header.parent_hash, int(header.parent_known), header.timestamp, now, header.block_hash),
+                )
+        return records
+
+    def list_headers(self) -> list[BlockHeader]:
+        rows = self._connection.execute(
+            "SELECT block_number, block_hash, parent_hash, parent_known, block_timestamp FROM block_headers ORDER BY block_number, block_hash"
+        ).fetchall()
+        return [BlockHeader(row["block_number"], row["block_hash"], row["parent_hash"], row["block_timestamp"], bool(row["parent_known"])) for row in rows]
+
+    def get_header(self, block_hash: str) -> BlockHeader | None:
+        row = self._connection.execute(
+            "SELECT block_number, block_hash, parent_hash, parent_known, block_timestamp FROM block_headers WHERE block_hash = ?",
+            (block_hash,),
+        ).fetchone()
+        if row is None:
+            return None
+        return BlockHeader(row["block_number"], row["block_hash"], row["parent_hash"], row["block_timestamp"], bool(row["parent_known"]))
+
+    def record_header_range(
+        self,
+        *,
+        source: str,
+        range_start: int,
+        range_end: int,
+        run_id: str,
+        headers: Iterable[BlockHeader],
+        missing_blocks: Iterable[int] = (),
+    ) -> None:
+        """Retain both complete header coverage and explicit acquisition gaps."""
+
+        if range_start < 0 or range_end < range_start:
+            raise ValueError("header range is invalid")
+        if not run_id:
+            raise ValueError("run_id is required for header evidence")
+        records = tuple(headers)
+        missing = tuple(sorted(set(missing_blocks)))
+        if any(block < range_start or block > range_end for block in missing):
+            raise ValueError("missing header block lies outside recorded range")
+        tip = next((header.block_hash for header in records if header.number == range_end), None)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO header_range_evidence(source, range_start, range_end, run_id, header_count, missing_blocks, tip_hash, observed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source, range_start, range_end, run_id) DO UPDATE SET
+                    header_count = excluded.header_count,
+                    missing_blocks = excluded.missing_blocks,
+                    tip_hash = excluded.tip_hash,
+                    observed_at = excluded.observed_at
+                """,
+                (source, range_start, range_end, run_id, len(records), json.dumps(missing), tip, now),
+            )
+
+    def list_header_ranges(self, source: str) -> list[sqlite3.Row]:
+        return self._connection.execute(
+            "SELECT * FROM header_range_evidence WHERE source = ? ORDER BY observed_at, range_start, range_end",
+            (source,),
+        ).fetchall()
+
+    def events_for_source(self, source: str) -> tuple[RawEvent, ...]:
+        return tuple(event for batch in self.list_batches(source=source) for event in self.read(batch.batch_id))
+
+    def rebuild_canonical_projection(self, *, source: str, tip_hash: str, confirmations: int = 0):
+        """Atomically replace a source's derived fork projection from raw evidence.
+
+        Raw batches remain append-only. The derived rows and canonical
+        checkpoint change together, so a restart never observes a half-applied
+        fork repair.
+        """
+
+        # Import lazily to keep storage independent at module import time.
+        from willfly.ingest.canonicalize import canonicalize_events
+
+        result = canonicalize_events(
+            self.events_for_source(source),
+            tip_hash=tip_hash,
+            headers=self.list_headers(),
+            confirmations=confirmations,
+        )
+        states = [
+            *((event, "canonical") for event in result.canonical_events),
+            *((event, "orphaned") for event in result.orphaned_events),
+            *((event, "quarantined") for event in result.quarantined_events),
+            *((event, "unresolved") for event in result.unresolved_events),
+        ]
+        tip = self.get_header(tip_hash)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            self._connection.execute("DELETE FROM canonical_event_projections WHERE source = ?", (source,))
+            self._connection.executemany(
+                """
+                INSERT INTO canonical_event_projections(source, event_key, block_number, block_hash, canonical_status, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        source,
+                        _event_key(event),
+                        event.block_number,
+                        event.block_hash,
+                        status,
+                        now,
+                    )
+                    for event, status in states
+                ],
+            )
+            resolved = result.is_resolved and tip is not None
+            self._connection.execute(
+                """
+                INSERT INTO canonical_checkpoints(source, tip_hash, last_block_number, last_block_hash, state, missing_parent_hashes, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source) DO UPDATE SET
+                    tip_hash = excluded.tip_hash,
+                    last_block_number = excluded.last_block_number,
+                    last_block_hash = excluded.last_block_hash,
+                    state = excluded.state,
+                    missing_parent_hashes = excluded.missing_parent_hashes,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    source,
+                    tip_hash,
+                    tip.number if resolved else None,
+                    tip.block_hash if resolved else None,
+                    "canonical" if resolved else "unresolved",
+                    json.dumps(result.missing_parent_hashes),
+                    now,
+                ),
+            )
+        return result
+
+    def get_canonical_checkpoint(self, source: str) -> sqlite3.Row | None:
+        return self._connection.execute("SELECT * FROM canonical_checkpoints WHERE source = ?", (source,)).fetchone()
+
+    def list_canonical_projection(self, source: str) -> list[sqlite3.Row]:
+        return self._connection.execute(
+            "SELECT * FROM canonical_event_projections WHERE source = ? ORDER BY block_number, event_key",
+            (source,),
+        ).fetchall()
+
+    def save_snapshot(
+        self,
+        snapshot: Mapping[str, object] | object,
+        *,
+        source: str,
+        snapshot_type: str = "observatory_projection",
+        replaces_snapshot_id: str | None = None,
+    ) -> StoredSnapshot:
+        """Persist a typed immutable projection bundle in the raw-store database."""
+
+        if not source or source in {".", ".."} or "/" in source or "\\" in source:
+            raise ValueError("snapshot source must be a simple key")
+        if not snapshot_type or not snapshot_type.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("snapshot_type must be a simple identifier")
+        if hasattr(snapshot, "to_dict"):
+            payload = snapshot.to_dict()  # type: ignore[union-attr]
+        elif isinstance(snapshot, Mapping):
+            payload = dict(snapshot)
+        else:
+            raise TypeError("snapshot must be a mapping or provide to_dict")
+        if not isinstance(payload, Mapping):
+            raise TypeError("snapshot serialization must be an object")
+        as_of_time = payload.get("as_of_time")
+        if not isinstance(as_of_time, str):
+            raise ValueError("snapshot must include as_of_time")
+        parsed_as_of = datetime.fromisoformat(as_of_time.replace("Z", "+00:00"))
+        if parsed_as_of.tzinfo is None:
+            raise ValueError("snapshot as_of_time must include a timezone")
+        payload_json = self._canonical_json(payload).decode("utf-8")
+        snapshot_id = hashlib.sha256(
+            self._canonical_json({"source": source, "snapshot_type": snapshot_type, "payload": payload})
+        ).hexdigest()[:24]
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            if replaces_snapshot_id is not None:
+                prior = self._connection.execute(
+                    "SELECT source, snapshot_type FROM observatory_snapshots WHERE snapshot_id = ?", (replaces_snapshot_id,)
+                ).fetchone()
+                if prior is None:
+                    raise KeyError(f"unknown prior snapshot: {replaces_snapshot_id}")
+                if prior["source"] != source or prior["snapshot_type"] != snapshot_type:
+                    raise ValueError("replacement snapshot must share source and type")
+            existing = self._connection.execute(
+                "SELECT * FROM observatory_snapshots WHERE snapshot_id = ?", (snapshot_id,)
+            ).fetchone()
+            if existing is not None:
+                if existing["payload_json"] != payload_json or existing["source"] != source:
+                    raise ValueError("snapshot hash collision or conflicting snapshot evidence")
+                return self._row_to_snapshot(existing)
+            self._connection.execute(
+                """
+                INSERT INTO observatory_snapshots(snapshot_id, source, snapshot_type, as_of_time, payload_json, replaces_snapshot_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (snapshot_id, source, snapshot_type, as_of_time, payload_json, replaces_snapshot_id, now),
+            )
+        return StoredSnapshot(snapshot_id, source, snapshot_type, as_of_time, replaces_snapshot_id)
+
+    def load_snapshot(self, snapshot_id: str) -> dict[str, object]:
+        row = self._connection.execute(
+            "SELECT payload_json FROM observatory_snapshots WHERE snapshot_id = ?", (snapshot_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"unknown snapshot: {snapshot_id}")
+        payload = json.loads(row["payload_json"])
+        if not isinstance(payload, dict):
+            raise ValueError("stored snapshot payload is not an object")
+        return payload
+
+    def list_snapshots(self, *, source: str | None = None, snapshot_type: str | None = None) -> list[StoredSnapshot]:
+        clauses: list[str] = []
+        params: list[str] = []
+        if source is not None:
+            clauses.append("source = ?")
+            params.append(source)
+        if snapshot_type is not None:
+            clauses.append("snapshot_type = ?")
+            params.append(snapshot_type)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        rows = self._connection.execute(
+            "SELECT * FROM observatory_snapshots" + where + " ORDER BY as_of_time, created_at, snapshot_id", params
+        ).fetchall()
+        return [self._row_to_snapshot(row) for row in rows]
+
     def list_batches(self, *, source: str | None = None) -> list[StoredBatch]:
         if source is None:
             rows = self._connection.execute("SELECT * FROM batches ORDER BY created_at, batch_id").fetchall()
@@ -219,3 +622,26 @@ class RawBatchStore:
             byte_count=row["byte_count"],
             acknowledged=bool(row["acknowledged"]),
         )
+
+    @staticmethod
+    def _row_to_snapshot(row: sqlite3.Row) -> StoredSnapshot:
+        return StoredSnapshot(
+            snapshot_id=row["snapshot_id"],
+            source=row["source"],
+            snapshot_type=row["snapshot_type"],
+            as_of_time=row["as_of_time"],
+            replaces_snapshot_id=row["replaces_snapshot_id"],
+        )
+
+
+def _validate_hash(value: str, field_name: str) -> None:
+    if not isinstance(value, str) or len(value) != 66 or not value.startswith("0x"):
+        raise ValueError(f"{field_name} must be a 32-byte hex value")
+    try:
+        int(value[2:], 16)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a 32-byte hex value") from exc
+
+
+def _event_key(event: RawEvent) -> str:
+    return json.dumps(event.logical_key, separators=(",", ":"), ensure_ascii=False)

@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Iterable
 
 from willfly.domain import TradeEvidence, WalletCohort, Observation
+from willfly.adapters.protocols.v4 import deduplicate_trade_evidence
 
 
 def build_token_timeline(
@@ -34,18 +35,41 @@ def build_token_timeline(
         for trade in all_records
         if _parse(trade.as_of_time) <= event_limit and _parse(trade.retrieved_time) <= arrival_limit
     )
-    verified = tuple(trade for trade in included if trade.classification == "genuine_swap")
+    verified_candidates = tuple(
+        trade
+        for trade in included
+        if trade.classification == "genuine_swap"
+        and trade.route_status == "verified"
+        and trade.trade_direction in {"buy", "sell"}
+        and trade.method_version == "trade-evidence.v0.2"
+    )
+    verified = deduplicate_trade_evidence(verified_candidates)
+    verified_buys = tuple(trade for trade in verified if trade.trade_direction == "buy")
+    verified_sells = tuple(trade for trade in verified if trade.trade_direction == "sell")
     verified_token_in = sum(
         int(leg.amount_atomic)
-        for trade in verified
+        for trade in verified_buys
         for leg in trade.receipt_legs
         if leg.asset.lower() == token_lower and leg.direction == "in"
     )
+    verified_token_out = sum(
+        int(leg.amount_atomic)
+        for trade in verified_sells
+        for leg in trade.payment_legs
+        if leg.asset.lower() == token_lower and leg.direction == "out"
+    )
     payment_out: dict[str, int] = {}
-    for trade in verified:
+    quote_in: dict[str, int] = {}
+    for trade in verified_buys:
         for leg in trade.payment_legs:
             if leg.direction == "out":
                 payment_out[leg.asset] = payment_out.get(leg.asset, 0) + int(leg.amount_atomic)
+        for refund in trade.refund_legs:
+            payment_out[refund.asset] = payment_out.get(refund.asset, 0) - int(refund.amount_atomic)
+    for trade in verified_sells:
+        for leg in trade.receipt_legs:
+            if leg.direction == "in":
+                quote_in[leg.asset] = quote_in.get(leg.asset, 0) + int(leg.amount_atomic)
     cohort_state, cohort_wallet_count, cohort_missingness, cohort_lineage = _cohort_summary(
         cohorts, cohort_id, arrival_limit
     )
@@ -56,12 +80,17 @@ def build_token_timeline(
         missingness.append("ambiguous_activity_excluded_from_verified_flow")
     if any(trade.classification in {"transfer", "gift_or_airdrop"} for trade in included):
         missingness.append("non_swap_activity_excluded_from_verified_flow")
+    if any(trade.classification == "genuine_swap" and trade not in verified_candidates for trade in included):
+        missingness.append("unverified_trade_evidence_excluded_from_verified_flow")
     lineage = tuple(ref for trade in included for ref in trade.raw_event_refs) or (f"timeline:{token}:{event_cutoff}",)
     values = {
         "trade_count": len(included),
-        "verified_buy_count": len(verified),
+        "verified_buy_count": len(verified_buys),
+        "verified_sell_count": len(verified_sells),
         "verified_token_in_atomic": str(verified_token_in),
+        "verified_token_out_atomic": str(verified_token_out),
         "verified_payment_out_atomic": {asset: str(amount) for asset, amount in sorted(payment_out.items())},
+        "verified_quote_in_atomic": {asset: str(amount) for asset, amount in sorted(quote_in.items())},
         "ambiguous_activity_count": sum(trade.classification == "ambiguous" for trade in included),
         "transfer_activity_count": sum(trade.classification == "transfer" for trade in included),
         "gift_or_airdrop_count": sum(trade.classification == "gift_or_airdrop" for trade in included),

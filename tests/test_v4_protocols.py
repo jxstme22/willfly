@@ -12,11 +12,12 @@ from willfly.adapters.protocols.v4 import (
     UnsupportedV4Event,
     classify_trade_origin,
     deduplicate_decoded_events,
+    deduplicate_trade_evidence,
     decode_v4_event,
     pool_identity_from_initialize,
     trade_evidence_from_receipt,
 )
-from willfly.domain import PaymentLeg, RawEvent
+from willfly.domain import PaymentLeg, PoolIdentity, RawEvent
 
 
 MANAGER = "0x8366a39cc670b4001a1121b8f6a443a643e40951"
@@ -25,6 +26,8 @@ WALLET = "0x2222222222222222222222222222222222222222"
 TX = "0x" + "44" * 32
 POOL_ID = "0x" + "11" * 32
 ZERO_ADDRESS = "0x" + "0" * 40
+OTHER = "0x3333333333333333333333333333333333333333"
+FEE_RECIPIENT = "0x4444444444444444444444444444444444444444"
 
 
 def _word(value: int) -> str:
@@ -101,6 +104,25 @@ def _transfer_log(asset: str, sender: str, recipient: str, amount: int, index: i
         "data": "0x" + _word(amount),
         "logIndex": hex(index),
     }
+
+
+def _swap_receipt_log(index: int = 0) -> dict[str, Any]:
+    return {"address": MANAGER, "topics": [SWAP_TOPIC], "data": "0x", "logIndex": hex(index)}
+
+
+def _pool(quote_asset: str) -> PoolIdentity:
+    return PoolIdentity(
+        chain_id=4663,
+        protocol="uniswap_v4",
+        manager_or_factory=MANAGER,
+        pool_address=None,
+        pool_id=POOL_ID,
+        currency0=ZERO_ADDRESS if quote_asset == "native:ETH" else quote_asset,
+        currency1=TOKEN,
+        fee=3000,
+        tick_spacing=10,
+        hook=ZERO_ADDRESS,
+    )
 
 
 def test_initialize_swap_and_modify_liquidity_decode_with_exact_fields():
@@ -183,6 +205,8 @@ def test_routed_swap_becomes_one_verified_wallet_purchase():
         as_of_time="2026-09-13T00:00:02Z",
         retrieved_time="2026-09-13T00:00:03Z",
         raw_event_refs=["raw:payment", "raw:receipt"],
+        route_status="verified",
+        trade_direction="buy",
     )
     assert trade.classification == "genuine_swap"
     assert len(trade.payment_legs) == 1
@@ -232,6 +256,7 @@ def test_receipt_join_builds_exact_erc20_payment_and_receipt_legs():
     receipt = {
         "transactionHash": transaction_hash,
         "logs": [
+            _swap_receipt_log(),
             _transfer_log(quote, WALLET, MANAGER, 1000),
             _transfer_log(TOKEN, MANAGER, WALLET, 2500, index=1),
         ],
@@ -244,6 +269,7 @@ def test_receipt_join_builds_exact_erc20_payment_and_receipt_legs():
         transaction={"from": WALLET, "to": MANAGER, "value": "0x0"},
         swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
         quote_assets=[quote],
+        pool_identities=[_pool(quote)],
         as_of_time="2026-09-13T00:00:02Z",
         retrieved_time="2026-09-13T00:00:03Z",
     )
@@ -261,11 +287,13 @@ def test_receipt_join_accepts_native_eth_value_as_an_exact_payment_leg():
         token=TOKEN,
         receipt={
             "transactionHash": transaction_hash,
-            "logs": [_transfer_log(TOKEN, MANAGER, WALLET, 2500)],
+            "logs": [_swap_receipt_log(), _transfer_log(TOKEN, MANAGER, WALLET, 2500)],
         },
         transaction={"from": WALLET, "to": MANAGER, "value": "0x3e8"},
         swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
         quote_assets=["native:ETH"],
+        pool_identities=[_pool("native:ETH")],
+        native_refunds_accounted=True,
         as_of_time="2026-09-13T00:00:02Z",
         retrieved_time="2026-09-13T00:00:03Z",
     )
@@ -337,6 +365,172 @@ def test_receipt_join_rejects_failed_receipts_and_cross_transaction_events():
             as_of_time="2026-09-13T00:00:02Z",
             retrieved_time="2026-09-13T00:00:03Z",
         )
+
+
+def test_unrelated_airdrop_and_forged_issuer_never_become_genuine_swaps():
+    transaction_hash = "0x" + "dd" * 32
+    quote = OTHER
+    airdrop = trade_evidence_from_receipt(
+        transaction_hash=transaction_hash,
+        wallet=WALLET,
+        token=TOKEN,
+        receipt={
+            "transactionHash": transaction_hash,
+            "logs": [
+                _swap_receipt_log(),
+                _transfer_log(quote, WALLET, MANAGER, 1000, index=1),
+                _transfer_log(TOKEN, OTHER, WALLET, 2500, index=2),
+            ],
+        },
+        transaction={"from": WALLET, "to": MANAGER, "value": "0x0"},
+        swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
+        quote_assets=[quote],
+        pool_identities=[_pool(quote)],
+        as_of_time="2026-09-13T00:00:02Z",
+        retrieved_time="2026-09-13T00:00:03Z",
+    )
+    assert airdrop.classification == "ambiguous"
+    assert "unrelated_token_transfer_excluded" in airdrop.reason_flags
+
+    forged_raw = _swap(transaction_hash=transaction_hash)
+    forged = decode_v4_event(replace(forged_raw, payload={**forged_raw.payload, "address": OTHER}))
+    forged_trade = trade_evidence_from_receipt(
+        transaction_hash=transaction_hash,
+        wallet=WALLET,
+        token=TOKEN,
+        receipt={
+            "transactionHash": transaction_hash,
+            "logs": [
+                _swap_receipt_log(),
+                _transfer_log(quote, WALLET, MANAGER, 1000, index=1),
+                _transfer_log(TOKEN, MANAGER, WALLET, 2500, index=2),
+            ],
+        },
+        transaction={"from": WALLET, "to": MANAGER, "value": "0x0"},
+        swap_events=[forged],
+        quote_assets=[quote],
+        pool_identities=[_pool(quote)],
+        as_of_time="2026-09-13T00:00:02Z",
+        retrieved_time="2026-09-13T00:00:03Z",
+    )
+    assert forged_trade.classification == "ambiguous"
+    assert forged_trade.route_status == "unsupported"
+    assert "swap_issuer_or_event_mismatch" in forged_trade.reason_flags
+
+
+def test_refunded_native_input_wrap_route_and_fee_split_are_explicit():
+    transaction_hash = "0x" + "ee" * 32
+    native_pool = _pool("native:ETH")
+    refunded = trade_evidence_from_receipt(
+        transaction_hash=transaction_hash,
+        wallet=WALLET,
+        token=TOKEN,
+        receipt={"transactionHash": transaction_hash, "logs": [_swap_receipt_log(), _transfer_log(TOKEN, MANAGER, WALLET, 2500, 1)]},
+        transaction={"from": WALLET, "to": MANAGER, "value": "0x3e8"},
+        swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
+        quote_assets=["native:ETH"],
+        pool_identities=[native_pool],
+        native_refunds_accounted=True,
+        native_refund_legs=[_payment("native:ETH", "1000", "in", MANAGER, WALLET, "trace:refund")],
+        as_of_time="2026-09-13T00:00:02Z",
+        retrieved_time="2026-09-13T00:00:03Z",
+    )
+    assert refunded.classification == "ambiguous"
+    assert "fully_refunded_or_zero_net_input" in refunded.reason_flags
+    assert refunded.refund_legs[0].amount_atomic == "1000"
+
+    wrapped = trade_evidence_from_receipt(
+        transaction_hash=transaction_hash,
+        wallet=WALLET,
+        token=TOKEN,
+        receipt={
+            "transactionHash": transaction_hash,
+            "logs": [
+                _swap_receipt_log(),
+                _transfer_log(OTHER, WALLET, MANAGER, 1000, 1),
+                _transfer_log(TOKEN, MANAGER, WALLET, 2500, 2),
+            ],
+        },
+        transaction={"from": WALLET, "to": MANAGER, "value": "0x0"},
+        swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
+        quote_assets=[OTHER],
+        pool_identities=[native_pool],
+        as_of_time="2026-09-13T00:00:02Z",
+        retrieved_time="2026-09-13T00:00:03Z",
+    )
+    assert wrapped.classification == "ambiguous"
+    assert "quote_asset_not_in_verified_pool_currency" in wrapped.reason_flags
+
+    quote = OTHER
+    fee_split = trade_evidence_from_receipt(
+        transaction_hash=transaction_hash,
+        wallet=WALLET,
+        token=TOKEN,
+        receipt={
+            "transactionHash": transaction_hash,
+            "logs": [
+                _swap_receipt_log(),
+                _transfer_log(quote, WALLET, MANAGER, 1000, 1),
+                _transfer_log(TOKEN, MANAGER, WALLET, 2400, 2),
+                _transfer_log(TOKEN, MANAGER, FEE_RECIPIENT, 100, 3),
+            ],
+        },
+        transaction={"from": WALLET, "to": MANAGER, "value": "0x0"},
+        swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
+        quote_assets=[quote],
+        pool_identities=[_pool(quote)],
+        as_of_time="2026-09-13T00:00:02Z",
+        retrieved_time="2026-09-13T00:00:03Z",
+    )
+    assert fee_split.classification == "genuine_swap"
+    assert fee_split.receipt_legs[0].amount_atomic == "2400"
+    assert "token_fee_or_route_split_observed" in fee_split.reason_flags
+
+
+def test_sell_direction_and_duplicate_source_evidence_do_not_multiply_volume():
+    transaction_hash = "0x" + "ef" * 32
+    quote = OTHER
+    receipt = {
+        "transactionHash": transaction_hash,
+        "logs": [
+            _swap_receipt_log(),
+            _transfer_log(TOKEN, WALLET, MANAGER, 2500, 1),
+            _transfer_log(quote, MANAGER, WALLET, 1000, 2),
+        ],
+    }
+    first = trade_evidence_from_receipt(
+        transaction_hash=transaction_hash,
+        wallet=WALLET,
+        token=TOKEN,
+        receipt=receipt,
+        transaction={"from": WALLET, "to": MANAGER, "value": "0x0"},
+        swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
+        quote_assets=[quote],
+        pool_identities=[_pool(quote)],
+        as_of_time="2026-09-13T00:00:02Z",
+        retrieved_time="2026-09-13T00:00:03Z",
+    )
+    duplicate = classify_trade_origin(
+        transaction_hash=first.transaction_hash,
+        wallet=first.wallet,
+        token=first.token,
+        swap_events=[decode_v4_event(_swap(transaction_hash=transaction_hash))],
+        payment_legs=first.payment_legs,
+        receipt_legs=first.receipt_legs,
+        refund_legs=first.refund_legs,
+        route_status=first.route_status,
+        trade_direction=first.trade_direction,
+        as_of_time=first.as_of_time,
+        retrieved_time=first.retrieved_time,
+        raw_event_refs=["provider:duplicate"],
+    )
+    deduplicated = deduplicate_trade_evidence([first, duplicate])
+    assert first.classification == "genuine_swap"
+    assert first.trade_direction == "sell"
+    assert [(leg.asset, leg.direction) for leg in first.payment_legs] == [(TOKEN, "out")]
+    assert [(leg.asset, leg.direction) for leg in first.receipt_legs] == [(quote, "in")]
+    assert len(deduplicated) == 1
+    assert "provider:duplicate" in deduplicated[0].raw_event_refs
     with pytest.raises(DecodeError, match="does not match receipt"):
         trade_evidence_from_receipt(
             transaction_hash=transaction_hash,

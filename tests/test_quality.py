@@ -33,6 +33,7 @@ def test_quality_reports_delay_lag_duplicates_and_unresolved_gaps():
         covered_ranges=[(10, 11)],
         retry_count=2,
         storage_bytes=123,
+        source_state="healthy",
     )
     assert report.state == "degraded"
     assert report.event_count == 3
@@ -47,9 +48,31 @@ def test_quality_reports_delay_lag_duplicates_and_unresolved_gaps():
 
 def test_quality_is_healthy_after_complete_coverage():
     event = _event(10, "2026-09-13T00:00:00Z", "2026-09-13T00:00:01Z")
-    report = assess_quality([event], expected_ranges=[(10, 10)], covered_ranges=[(10, 10)])
+    report = assess_quality(
+        [event], expected_ranges=[(10, 10)], covered_ranges=[(10, 10)], source_state="healthy"
+    )
     assert report.state == "healthy"
     assert report.gap_ranges == ()
+
+
+def test_unknown_or_stale_source_cannot_report_healthy_even_with_full_event_coverage():
+    event = _event(10, "2026-09-13T00:00:00Z", "2026-09-13T00:00:01Z")
+    for source_state in ("unknown", "stale"):
+        report = assess_quality(
+            [event],
+            expected_ranges=[(10, 10)],
+            covered_ranges=[(10, 10)],
+            source_state=source_state,
+        )
+        assert report.state == source_state
+    unresolved = assess_quality(
+        [event],
+        expected_ranges=[(10, 10)],
+        covered_ranges=[(10, 10)],
+        source_state="healthy",
+        missing_parent_hashes=("0x" + "11" * 32,),
+    )
+    assert unresolved.state == "degraded"
 
 
 def test_supervisor_recovers_disconnect_and_redacts_failure():

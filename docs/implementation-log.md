@@ -282,3 +282,269 @@ The remaining pipeline, protocol/accounting, source coverage, model controls and
 Verification: `.venv/bin/python -m pytest` (100 passed); `python3 scripts/check_planning.py` validates both catalogues and generated Markdown. A pinned-action Python 3.12 CI workflow was added. Publication and remote CI outcomes are recorded separately in `docs/reports/repository-publication.md`.
 
 Next implementation preference: Muse Sparks 1.3, selected by the user in their next session. No model/session was launched here. Start M1-01 after completing reviewed private publication; keep funded execution and LP disabled.
+
+## Batch 2026-09-13 — M1-01 verification and M1-02 durable capture (Muse Sparks 1.3)
+
+### Task status
+
+- M1-01 — IN_PROGRESS: source manifest, matrix and budget updated with 13 Sept 2026 bounded probes. All claimed families have 10+ examples; historical-code archive and non-graduate window coverage remain open gates.
+- M1-02 — IN_PROGRESS: `willfly capture` and `willfly backfill` now perform durable bounded work with filter-bound checkpoints, empty-range acknowledgements, streaming pages and run manifests. `--dry-run` preserves the old plan-only behavior (exit 3).
+
+### Changes
+
+- Verified chain 4663, V4 manager (24,009 bytes) and Pons V2 factory (24,177 bytes) code hashes via public RPC.
+- V4 679-block sample: 1,853 raw logs (Swap 1,249, ModifyLiquidity 551, Initialize 12, 41 unsupported observed).
+- Pons 39-page scan over `61616075`–`61694074`: 1,130 TokenLaunched, 10 LaunchSwept, 10 Locked, 10 PoolGraduated, 127 other observed.
+- Header resolution verified on block `61691574` (log `0x0` sentinel, header `0x6aa62de1`, hash match). Archive: creation block `26841846` header and 22 logs in first 100 blocks available; historical code unavailable (`metadata is not found`).
+- Added `src/willfly/ingest/runner.py` with filter identity, checkpoint source binding, capture/backfill-to-store orchestration and run manifests.
+- Extended `RawBatchStore` with `empty_range_acks` and `acknowledge_empty_range`; extended `BackfillCheckpointStore` with `filter_hash` binding, `retain_events=False` streaming and changed-filter rejection.
+- Fixed `capture_once` to honor `--to-block`; CLI now executes by default, `--dry-run` for plans, and returns nonzero on failures. No signing surface added.
+- Added `tests/test_capture_runner.py` (7 tests): durable capture, empty acknowledgement, crash resume without loss, changed-filter isolation, streaming, overlapping-range failure and read-only rejection.
+- Updated `tests/test_cli.py` for `--dry-run` plans; updated runbook with store/manifest documentation.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest                         107 passed
+python3 scripts/render_planning.py
+python3 scripts/check_planning.py                  both catalogues agree
+.venv/bin/python -m willfly capture --from-block 61694000 --to-block 61694100 --store-dir /tmp/willfly-m102-test --source m102-live
+  executed, 251 events, 1 batch, checkpoint m102-live:4663:6707..., exit 0
+.venv/bin/python -m willfly backfill --from-block 61694000 --to-block 61694100 --store-dir /tmp/willfly-m102-test --source m102-live-backfill --page-size 50
+  executed, 251 events, 2 batches, 3 covered ranges, exit 0
+.venv/bin/python -m willfly capture --from-block -5 --to-block 10
+  error, exit 2 (failures return nonzero)
+```
+
+Event time (header `05:04:24`) remains distinct from received time (`05:10:17`). Changed `--address` yields a different filter hash and namespace with empty header evidence. No `eth_sendRawTransaction` path exists in the runner.
+
+### Open gates and next task
+
+M1-01 remains open for historical-code archive (public RPC unavailable) and a declared non-graduate window sample. M1-02 remains IN_PROGRESS until M1-01 completes (dependency) and M1-03 header/fork persistence lands. Next: M1-03 persist headers and reconcile forks, then M1-04 attribution hardening, reusing this durable store. Later phases follow only after the Observatory evidence bundle (M1-07).
+
+## GPT Terra continuation dispatch — 13 September 2026
+
+The user requested handoff to GPT Terra to continue the remaining work. Prepared `docs/gpt-terra-handoff.md` and updated the active catalogue/model preference without changing M1-01/M1-02 statuses. The uncommitted Muse implementation checkpoint is preserved. Begin with a local verification/review of that checkpoint, then M1-03 ancestry/fork recovery and subsequent dependency-ready work. Real qualification windows remain measured evidence gates, not reasons to stop independent implementation. The existing implementation task is being resumed with `gpt-5.6-terra`; no additional task or timed automation is created.
+
+## Batch 2026-09-13 — M1-03 header ancestry and fork reconciliation (GPT Terra)
+
+### Status
+
+- M1-03 — IN_PROGRESS: complete header evidence, quiet-block persistence,
+  transactional canonical projections and conservative health handling are
+  implemented and fixture-verified. It cannot be marked DONE while M1-02 is
+  still gated by M1-01, and it has not been qualified against a fresh live
+  Observatory source.
+
+### Changes
+
+- Added an immutable SQLite header ledger separate from append-only raw batches,
+  with persisted header-range evidence and explicit missing-block records.
+- Capture and backfill now request every header in their bounded ranges, so
+  selected-log-free blocks participate in ancestry. Header acquisition errors
+  are redacted in run manifests rather than being swallowed.
+- Canonical rebuilds replace only derived projection/checkpoint rows in one
+  transaction; raw batches remain unchanged. A newer branch therefore marks
+  former selected events orphaned while a quiet block can become the repaired
+  canonical checkpoint.
+- Missing parent hashes and absent parent metadata leave all non-quarantined
+  evidence unresolved/provisional. They cannot be misclassified as an orphan
+  branch or a canonical root. Zero header timestamps fail event-time resolution.
+- Extended quality reports with an explicit source state (default `unknown`) and
+  unresolved-parent evidence. Full event coverage alone cannot report healthy.
+
+### Verification
+
+```text
+.venv/bin/python -m pytest -q                 114 passed
+git diff --check                               passed
+.venv/bin/python -m compileall -q src tests    passed
+```
+
+`tests/test_header_reconciliation.py` covers a restarted multi-block fork with
+quiet intermediate blocks, header-only tip, missing parent, provider outage,
+zero timestamp and header-hash mismatch. Existing capture/backfill, storage,
+canonicalization and quality tests continue to pass. The test fixtures are not
+evidence of real provider coverage, latency, archive access or a completed
+72-hour Observatory audit.
+
+### Next dependency-ready work
+
+Proceed with M1-04 route attribution hardening. M1-01 source-history and
+non-graduate gates remain open; no signal, funded trade, LP position or shadow
+qualification is claimed.
+
+## Batch 2026-09-13 — M1-04 route proof and net cash flow (GPT Terra)
+
+### Status
+
+- M1-04 — IN_PROGRESS: the v0.2 `TradeEvidence` route/cash boundary and
+  adversarial receipt fixtures are implemented. Live sampled-receipt evidence,
+  the M1-01/M1-02 dependency gates and integrated M1-05 projection evidence
+  remain open.
+
+### Changes
+
+- V4 decoding now retains the emitting contract address. A verified route must
+  match the configured V4 manager, a declared pool ID/currencies, the receipt's
+  swap-log index and the wallet's supported asset direction.
+- `genuine_swap` now requires verified route evidence, explicit `buy` or `sell`
+  direction and positive net wallet input after recorded refunds. Route status,
+  direction and inbound refund legs are serialized in `TradeEvidence` v0.2.
+- Receipt parsing only accepts route-actor transfers for the selected token and
+  verified pool quote asset. It records fee/route splits, keeps airdrops and
+  unrelated multicall legs out of receipts, treats unmatched wraps/unwraps as
+  uncertain and requires explicit native-refund coverage.
+- Added economic trade deduplication by transaction, wallet, token and
+  direction. Equivalent source deliveries merge lineage; conflicting duplicate
+  cash flows fail closed.
+- Timelines now exclude legacy or uncertain genuine-swap claims from verified
+  flow, deduplicate v0.2 evidence, and report verified buys, sells, token
+  outflow, quote inflow and net buy payments separately.
+
+### Verification
+
+```text
+.venv/bin/python -m pytest -q tests/test_v4_protocols.py tests/test_features.py tests/test_ui.py    passed
+git diff --check && .venv/bin/python -m compileall -q src tests                                    passed
+```
+
+The V4 fixtures cover a routed buy, sell, duplicate source delivery, unrelated
+airdrop plus swap, fee/route split, full native refund, unproved wrapped-native
+path, forged issuer, failed receipt and cross-transaction event. They are local
+mechanics evidence only; they do not establish deployed route coverage or a
+tradable signal.
+
+## Batch 2026-09-13 — M1-05/M1-06 causal persistence and local Observatory (GPT Terra)
+
+### Status
+
+- M1-05 — IN_PROGRESS: immutable causal projections, dated lifecycle revisions,
+  exclusion records and restart-safe snapshot persistence are implemented.
+- M1-06 — IN_PROGRESS: a persisted snapshot now feeds the read-only API and HTML
+  dashboard, but the prerequisite source acceptance and qualified live launch
+  demonstration remain open.
+
+### Changes
+
+- Added `LifecycleRevision` and `ObservatoryProjection`. A current launch record
+  cannot rewrite a prior snapshot: lifecycle is `unknown` until a dated revision
+  available at the projection cutoff supplies `active`, `non_graduate` or
+  `graduated`.
+- Materialization takes canonical raw evidence only. Orphaned/quarantined raw
+  rows and unverified legacy trade claims remain explicit projection exclusions;
+  they are not silently removed or counted as flow.
+- Added immutable snapshot records to the recorder SQLite store with content IDs,
+  source/type validation and an optional prior-snapshot link. A fresh process can
+  restore the same serialized projection without reading mutable current data.
+- Added `willfly materialize --input ... --as-of-time ...` for typed offline JSON
+  inputs and `willfly serve --store-dir ... --snapshot-id ...` for inspecting the
+  resulting local-only bundle. The API now exposes `/exclusions` and
+  `/evidence/{reference}`; `/` and `/dashboard` render the persisted dashboard.
+- The dashboard displays quality/missingness, launch lifecycle/evidence, buy/sell
+  timeline values and excluded evidence instead of presenting empty state as
+  healthy zero activity.
+
+### Verification
+
+```text
+.venv/bin/python -m pytest -q tests/test_cli.py tests/test_observatory_projection.py tests/test_api.py    passed (one socket test skipped)
+.venv/bin/python -m pytest -q                                                                    passed (one socket test skipped)
+python3 scripts/render_planning.py && python3 scripts/check_planning.py                         passed
+git diff --check && .venv/bin/python -m compileall -q src tests                                 passed
+```
+
+The projection fixture proves future-lifecycle append invariance, orphan exclusion,
+revision persistence and fresh-store API restoration. It includes a launch that is
+currently marked graduated but correctly appears active/non-graduate only when the
+respective dated revision is available. The managed sandbox denies loopback socket
+binding (`PermissionError`), so the real HTTP request segment skips there after
+route/dashboard construction has passed; this is recorded rather than treated as a
+network success. No real launch collection or 72-hour audit is claimed.
+
+## Batch 2026-09-13 — M1-03/M1-04 verification, live receipt sampling and integrated demo (Muse Sparks 1.3 continuation)
+
+### Status
+
+- M1-03 — IN_PROGRESS: prior checkpoint verified; live restart evidence collected.
+  A bounded live window is honestly `unresolved` below its oldest stored header
+  (boundary == oldest header's parent), and each ancestry extension moves the
+  boundary back without ever orphaning in-window history.
+- M1-04 — IN_PROGRESS: prior checkpoint verified; the "sampled supported receipts"
+  gate is now satisfied with real chain receipts classified through the v0.2 path.
+- M1-05/M1-06 — IN_PROGRESS: an integrated live demo now runs capture → headers →
+  projection → launch decode → materialize → fresh-process HTTP serving.
+
+### Deduplication note
+
+A redundant parallel `src/willfly/ingest/headers.py` (separate HeaderStore) and
+unused `backfill_range(header_store=...)` plumbing from an overlapping editing
+stream were removed. The canonical header pipeline is `RawBatchStore.persist_headers`
+plus `rebuild_canonical_projection`, matching the M1-03 target paths. 121 tests
+pass after the cleanup.
+
+### Live evidence (all read-only, public RPC, 13 September 2026)
+
+```text
+M1-03 live restart evidence (store /tmp/willfly-m103-small):
+- capture 61932990-61932997: 40 events, 8 headers, no gaps, tip persisted
+- fresh-process restart: batches=8 durable, 60 headers persisted incl. quiet blocks,
+  8 header-range records, checkpoint tip stable across restarts
+- ancestry boundary behaviour: each window extension (61932989...61932938) moves the
+  missing-parent boundary exactly one block back; boundary == oldest stored header's
+  parent hash at every step; in-window events stay unresolved (never orphaned)
+- final projection: 320 events, all 'unresolved' (bounded window, honest state)
+
+M1-04 live sampled receipts (v0.2 trade_evidence_from_receipt):
+- 41 recent pool Initialize events decoded into verified pool identities
+- sample 1: tx 0x5f1e3c85b013... pool 0x0000.../0x7a96e16127 hook 0xe5e70264
+  -> genuine_swap | route verified | buy; native ETH payment 8033484769109287;
+  receipt 426762970571021803740779 of token 0x7a96e16127; flag token_fee_or_route_split_observed
+- sample 2: tx 0x09bb66d3439c... same pool -> genuine_swap | verified | buy
+  (20e13 wei native payment)
+- ambiguous live cases correctly stay ambiguous: router-mediated swaps where the
+  wallet has no direct legs remain 'ambiguous' with no_readable_cash_leg; a
+  zero-currency0 pool with a native tx value but no native payment leg stays ambiguous
+  (native_input_outside_verified_pool_currency / quote_asset_not_in_verified_pool_currency)
+
+Integrated demo (store /tmp/willfly-pons-demo):
+- capture 61959990-61960000 (Pons): 1 TokenLaunched event decoded
+  -> launch 0x166c79d40996b9d3fe64a2b19c4f3199f4f7d258, state 'active',
+  created_at from header time 2026-09-13T12:33:28+00:00 (distinct from received)
+- materialize_observatory_projection saved as immutable snapshot
+  49b00c29de2681ebd7e444dc (source pons-demo)
+- fresh-process serve: GET /launches returns the launch; GET / renders the dashboard
+  including the launch token; GET /exclusions total=1 (the single unresolved
+  provisional raw event); GET /evidence/<ref> returns the raw evidence record
+```
+
+### Verification
+
+```text
+.venv/bin/python -m pytest                 121 passed
+python3 scripts/render_planning.py
+python3 scripts/check_planning.py          both catalogues agree
+.venv/bin/python -m compileall -q src tests
+git diff --check                           passed
+```
+
+### Open gates
+
+- M1-01: historical-code archive and non-graduate window coverage remain open, so
+  M1-02 through M1-06 cannot be marked DONE.
+- The 72-hour capture audit (M1-07) and 14-day shadow (M3-03) are timed evidence
+  gates that continue to gate their own acceptance, not the implementation.
+- Live bounded windows resolve to `canonical` only when their ancestry reaches a
+  declared boundary; production collection windows must either overlap or use an
+  explicit window anchor decision recorded in the runbook.
+
+
+## 2026-09-13 — DeepSeek continuation and explicit M1-06 assignment
+
+User selected DeepSeek V4.1 Flash for the next external implementation session and explicitly included the terminal monitoring UI. Added docs/deepseek-v4.1-flash-handoff.md, linked it from README and the active roadmap, and updated the JSON model preference and unfinished-task ownership without changing completion statuses. M1-06 now carries the full terminal design, real-data interactions, accessibility, stale-state and browser verification requirements from docs/ui-terminal-design.md.
+
+Recorded an additional M1-03 acceptance issue: finite parent walks remain unresolved at the oldest missing ancestor without an explicit verified anchor. The next builder must define anchor provenance, consecutive heights and fork-boundary invalidation; this planning update does not implement the fix. M1-05 export evidence and M1-07 coverage scaffolding precede/reinforce the UI batch; source and elapsed-time gates remain open.
+
+Preserved all inherited implementation changes. Verification: managed-sandbox suite 120 passed / 1 skipped; targeted permitted localhost HTTP test passed, so all 121 tests were exercised successfully across the two runs. Both planning catalogues validate; compileall and diff whitespace checks pass. Changed-file credential-pattern scan found no matches (not a comprehensive security audit). Live RPC samples were not rerun during this documentation/checkpoint batch.
+
+DeepSeek has not been launched by this task: available Codex model controls do not expose it. Terra remains paused; use a single external implementation writer with the new handoff. Checkpoint publication records code and open gates, not Observatory acceptance.

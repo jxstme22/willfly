@@ -1,4 +1,4 @@
-# Next build task backlog — Muse Sparks 1.3
+# Next build task backlog — DeepSeek V4.1 Flash continuation
 
 Version 2.0 | 2026-09-13 | 26 tasks
 
@@ -52,7 +52,7 @@ Inspect candidate content for secrets and generated datasets; commit the reviewe
 
 ### M1-01 - Verify one deployable source configuration
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M0-02
+**Status:** IN_PROGRESS | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M0-02
 
 **Target paths:** `configs/sources/`, `docs/source-matrix.md`, `docs/provider-budget.md`
 
@@ -64,7 +64,7 @@ Pin chain, PoolManager and launchpad bytecode/ABI/creation blocks with primary a
 
 ### M1-02 - Connect durable bounded capture and backfill
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-01
+**Status:** IN_PROGRESS | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-01
 
 **Target paths:** `src/willfly/cli.py`, `src/willfly/ingest/`, `src/willfly/storage/raw.py`
 
@@ -76,55 +76,71 @@ Wire actual CLI work to validated RPC and durable batches. Acknowledge empty and
 
 ### M1-03 - Persist headers and reconcile forks
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-02
+**Status:** IN_PROGRESS | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-02
 
-**Target paths:** `src/willfly/ingest/canonicalize.py`, `src/willfly/adapters/robinhood_rpc.py`, `src/willfly/ingest/quality.py`
+**Target paths:** `src/willfly/ingest/canonicalize.py`, `src/willfly/adapters/robinhood_rpc.py`, `src/willfly/ingest/quality.py`, `src/willfly/ingest/runner.py`, `src/willfly/storage/raw.py`, `tests/test_header_reconciliation.py`
 
-Fetch hash-matched headers and parent ancestry including quiet blocks, retain gaps, normalize instants, and rebuild canonical projections transactionally. Preserve unknown metadata without fabricating timestamps.
+Fetch hash-matched headers and parent ancestry including quiet blocks, retain gaps, normalize instants, and rebuild canonical projections transactionally. Preserve unknown metadata without fabricating timestamps. Define and persist a source-verified ancestry anchor for bounded collection, including chain/hash/height/provenance, consecutive parent heights and fork handling at or beyond the anchor; never treat an arbitrary missing parent as a trusted root.
 
-**Done when:** A fork through blocks with no selected logs repairs projections and checkpoints; missing ancestry remains unresolved rather than orphaning unrelated history; stale and unknown sources cannot report healthy.
+**Done when:** A fork through blocks with no selected logs repairs projections and checkpoints; missing ancestry remains unresolved rather than orphaning unrelated history; stale and unknown sources cannot report healthy. A qualified bounded window can resolve without fetching back to genesis; an unverified anchor, interior gap, nonconsecutive parent or fork crossing the trusted boundary degrades or invalidates acceptance explicitly.
 
-**Verification:** Multi-block fork, missing parent, no-log tip, zero timestamp, header mismatch, outage and restarted-process integration fixtures.
+**Evidence:** src/willfly/ingest/canonicalize.py; src/willfly/storage/raw.py; tests/test_header_reconciliation.py; docs/implementation-log.md
+
+**Review note:** Implementation and fixture coverage are present; live restart evidence (2026-09-13) confirms quiet-block header persistence, stable checkpoints across restarts, and honest unresolved boundaries (never orphaning in-window history) for bounded live windows. M1-03 remains IN_PROGRESS until M1-02 can satisfy its M1-01 dependency and the fresh-process/live Observatory evidence is rerun against a qualified source. Continuation review identified an additional open design gate: the current parent walk has no explicit verified starting anchor, so extending a bounded live window only moves its unresolved boundary backward. This is independent of the M1-01 dependency.
+
+**Verification:** Multi-block fork, missing parent, no-log tip, zero timestamp, header mismatch, outage and restarted-process integration fixtures. Anchor qualification, restart, changed chain/config, nonconsecutive heights and forks at/beyond the anchor.
 
 ### M1-04 - Prove route attribution and net cash flow
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-02
+**Status:** IN_PROGRESS | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-02
 
-**Target paths:** `src/willfly/adapters/protocols/v4.py`, `src/willfly/domain/contracts.py`, `tests/test_v4_protocols.py`
+**Target paths:** `src/willfly/adapters/protocols/v4.py`, `src/willfly/domain/contracts.py`, `src/willfly/features/timelines.py`, `tests/test_v4_protocols.py`, `tests/test_features.py`
 
 Verify issuing contracts, receipt/log inclusion, pool currencies, token route and wallet direction; account for refunds, multi-hop, native currency and wrap/unwrap without counting unrelated multicall transfers. Version uncertain classifications.
 
 **Done when:** Positive swaps have matched route and cash evidence; unrelated transfers remain ambiguous, quoted estimates never become spend, sells and buys reconcile separately, duplicate sources do not multiply volume.
 
+**Evidence:** src/willfly/adapters/protocols/v4.py; src/willfly/domain/contracts.py; src/willfly/features/timelines.py; tests/test_v4_protocols.py; docs/implementation-log.md
+
+**Review note:** The v0.2 route/cash boundary and adversarial fixtures are implemented, and live sampled receipts (2026-09-13) classify as genuine_swap/verified/buy through the v0.2 path while router-mediated and native-ambiguous cases stay ambiguous. M1-04 remains IN_PROGRESS pending M1-02's M1-01 dependency and integrated M1-05 through M1-07 evidence.
+
 **Verification:** Adversarial unrelated airdrop plus swap, fee-on-transfer, refunded native input, forged issuer, failed receipt, sell and routed swap fixtures plus sampled supported receipts.
 
 ### M1-05 - Build causal projections and portable snapshots
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-03, M1-04
+**Status:** IN_PROGRESS | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-03, M1-04
 
-**Target paths:** `src/willfly/features/`, `src/willfly/storage/export.py`
+**Target paths:** `src/willfly/features/`, `src/willfly/storage/export.py`, `src/willfly/storage/raw.py`, `tests/test_observatory_projection.py`
 
 Materialize as-of launch lifecycle, pool and token views from canonical evidence and arrival cutoffs. Deduplicate trade identity, preserve cohort revisions and uncertainty; add typed analytical projections beside lossless raw export.
 
 **Done when:** Future graduation or leaderboard changes cannot rewrite an earlier snapshot; orphaned facts disappear only through explicit revisions; export preserves large values and all source metadata with atomic publication.
 
+**Evidence:** src/willfly/features/projections.py; src/willfly/features/timelines.py; src/willfly/storage/raw.py; tests/test_observatory_projection.py; docs/implementation-log.md
+
+**Review note:** Causal projection materialization, revision persistence and fresh-store restoration are implemented with fixture evidence, and a live integrated demo (2026-09-13) materialized a captured Pons launch into an immutable snapshot served over HTTP. M1-05 remains IN_PROGRESS until M1-03/M1-04 have completed their M1-02/M1-01 prerequisites and the qualified source/export evidence is available.
+
 **Verification:** Future-data append invariance, mixed timezone cohort updates, duplicate trades, fork correction and fresh-process export/re-import tests.
 
-### M1-06 - Serve a populated Observatory
+### M1-06 - Build the functional terminal-style Observatory UI
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-05
+**Status:** IN_PROGRESS | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-05
 
-**Target paths:** `src/willfly/api/server.py`, `src/willfly/ui/dashboard.py`, `src/willfly/cli.py`
+**Target paths:** `src/willfly/api/server.py`, `src/willfly/ui/dashboard.py`, `src/willfly/cli.py`, `tests/test_observatory_projection.py`, `docs/ui-terminal-design.md`
 
-Load persisted snapshots into the local API and route the dashboard. Add launch/pool/timeline lookup, source evidence, excluded rows, stale states and pagination; refresh consistently during capture.
+Load persisted snapshots into the local API and route the dashboard. Add launch/pool/timeline lookup, source evidence, excluded rows, stale states and pagination; refresh consistently during capture. Apply docs/ui-terminal-design.md: terminal-style launches, tape, pools and data-health views with searchable/sortable paginated real data, detail/evidence panels, copy feedback, URL view state, refresh-preserved focus/selection, viewport pause and scoped provenance exports. Keep Python backend; choose a frontend framework only if warranted and document dependencies.
 
-**Done when:** A fresh process displays a recorded active launch and a non-graduate, resolves raw evidence, and reports a simulated outage. Empty state is visibly distinct from healthy zero activity.
+**Done when:** A fresh process displays a recorded active launch and a non-graduate, resolves raw evidence, and reports a simulated outage. Empty state is visibly distinct from healthy zero activity. All shipped controls work against persisted backend data; refresh preserves user context and pause does not stop ingestion. Unknown, stale, unsupported and observed zero are distinct. Desktop/mobile and keyboard operation remain usable; untrusted metadata cannot execute HTML or script. Advanced financial/model metrics appear only when actually available.
 
-**Verification:** Subprocess recorder-to-store-to-HTTP test, browser inspection, pagination/error tests and default localhost binding check.
+**Evidence:** src/willfly/api/server.py; src/willfly/ui/dashboard.py; src/willfly/cli.py; tests/test_observatory_projection.py; docs/implementation-log.md
+
+**Review note:** Fresh-store API/dashboard loading, pagination, evidence and exclusions are implemented; a fresh-process live serve (2026-09-13) returned the captured launch over /launches, rendered the dashboard, and exposed /exclusions and /evidence. M1-06 remains IN_PROGRESS pending M1-05's acceptance dependencies, a qualified captured launch/non-graduate bundle and an environment that permits the full localhost socket check. The user explicitly includes the complete monitoring UI in this continuation batch; existing dashboard rendering alone does not satisfy the terminal design or interaction requirements.
+
+**Verification:** Subprocess recorder-to-store-to-HTTP test, browser inspection, pagination/error tests and default localhost binding check. Browser interaction checks for search/filter/sort/pagination, selection/copy/evidence, refresh/pause/reconnect, scoped export and loading/empty/error/stale states; inspect desktop, tablet and mobile screenshots and hostile metadata. Fixture demonstrations cannot satisfy live non-graduate evidence.
 
 ### M1-07 - Accept the Observatory evidence bundle
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-06
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-06
 
 **Target paths:** `docs/releases/observatory-v0.1-reviewed.md`, `docs/runbooks/`, `src/willfly/evaluation/coverage.py`
 
@@ -138,7 +154,7 @@ Run clean-install demo, recovery drills and a real 72-hour bounded-scope capture
 
 ### M2-01 - Implement one verified V4 quote path
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-07
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-07
 
 **Target paths:** `src/willfly/replay/execution.py`, `src/willfly/adapters/protocols/`, `configs/experiments/`
 
@@ -150,7 +166,7 @@ Use deployed protocol math and historical state at follower execution availabili
 
 ### M2-02 - Connect idempotent portfolio accounting
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-01
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-01
 
 **Target paths:** `src/willfly/replay/ledger.py`, `src/willfly/policies/constraints.py`
 
@@ -162,7 +178,7 @@ Join proposals to modeled execution records using exact per-asset debits, credit
 
 ### M2-03 - Generate genuine horizon labels and splits
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-02
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-02
 
 **Target paths:** `src/willfly/features/labels.py`, `src/willfly/evaluation/splits.py`
 
@@ -174,7 +190,7 @@ Create each 1/5/15-minute label from a specified entry and horizon liquidation a
 
 ### M2-04 - Measure actual portfolio and scenario outcomes
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-03
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-03
 
 **Target paths:** `src/willfly/evaluation/metrics.py`, `src/willfly/evaluation/walk_forward.py`, `src/willfly/evaluation/replay_audit.py`
 
@@ -186,7 +202,7 @@ Compute net return and percentage drawdown from ordered equity, rerun each cost/
 
 ### M2-05 - Publish a reproducible baseline laboratory
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-04
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-04
 
 **Target paths:** `src/willfly/policies/`, `src/willfly/models/conventional.py`, `docs/releases/trading-laboratory.md`
 
@@ -200,7 +216,7 @@ Compare idle, confirmation, verified flow and causal follower rules under one le
 
 ### M3-01 - Bind shadow state to a frozen run
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-05
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-05
 
 **Target paths:** `src/willfly/shadow/config.py`, `src/willfly/shadow/runner.py`, `configs/shadow/`
 
@@ -212,7 +228,7 @@ Hash source/model/feature/policy identities and enforce one config per persisten
 
 ### M3-02 - Connect the prospective hypothetical runner
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M3-01
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M3-01
 
 **Target paths:** `src/willfly/cli.py`, `src/willfly/shadow/`, `src/willfly/api/`
 
@@ -224,7 +240,7 @@ Wire live recorder observations to scheduled ticks, fixed model inference and hy
 
 ### M3-03 - Qualify prospective behavior
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M3-02
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M3-02
 
 **Target paths:** `src/willfly/evaluation/shadow.py`, `docs/results/shadow-review.md`
 
@@ -238,7 +254,7 @@ Collect at least 14 real days and 200 eligible prospective launches with the fro
 
 ### M4-01 - Validate connectome provenance and dynamics
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-05
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-05
 
 **Target paths:** `configs/connectome/`, `src/willfly/models/connectome/`, `src/willfly/models/reservoir.py`
 
@@ -250,7 +266,7 @@ Pin the actual release/license/hash and preprocessing; verify edge direction, si
 
 ### M4-02 - Run fair neural and ordinary comparisons
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M4-01
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M4-01
 
 **Target paths:** `src/willfly/models/`, `src/willfly/evaluation/neural.py`
 
@@ -262,7 +278,7 @@ Use numerically validated readout training and a sufficiently capable ordinary r
 
 ### M4-03 - Implement only supported optional source adapters
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M1-07
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M1-07
 
 **Target paths:** `src/willfly/adapters/lpagent.py`, `src/willfly/adapters/rhtrenches.py`, `src/willfly/adapters/mezzanine.py`
 
@@ -274,7 +290,7 @@ Verify official API/export support, terms and authentication per endpoint before
 
 ### M4-04 - Enforce real LLM budgets and provenance
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-05
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-05
 
 **Target paths:** `src/willfly/features/llm.py`, `src/willfly/features/text_schema.py`, `src/willfly/evaluation/contamination.py`
 
@@ -286,7 +302,7 @@ Use a transport with enforceable deadline/cancellation, persistent per-run reque
 
 ### M4-05 - Attribute each hybrid contribution
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M4-02, M4-03, M4-04
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M4-02, M4-03, M4-04
 
 **Target paths:** `src/willfly/evaluation/factorial.py`, `src/willfly/ui/decisions/`, `docs/results/hybrid-review.md`
 
@@ -300,7 +316,7 @@ Run distinct trader, contract-risk, social, LP-data and text ablations across or
 
 ### M5-01 - Replace LP toy mechanics and ledger
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M2-04
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M2-04
 
 **Target paths:** `src/willfly/replay/lp_positions.py`, `src/willfly/replay/lp_execution.py`, `configs/lp/`
 
@@ -312,7 +328,7 @@ Pin one supported family; implement exact sqrt-price/range and modular inside-fe
 
 ### M5-02 - Evaluate selective LP under shared capital
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M5-01, M2-05
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M5-01, M2-05
 
 **Target paths:** `src/willfly/policies/lp_baselines.py`, `src/willfly/policies/mode_selection.py`, `src/willfly/evaluation/lp_stress.py`
 
@@ -324,7 +340,7 @@ Compare spot, idle and restricted LP ranges under the same numeraire, execution 
 
 ### M5-03 - Publish the next research decision
 
-**Status:** TODO | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M3-03, M4-05
+**Status:** TODO | **Owner role:** DeepSeek V4.1 Flash implementation session | **Depends on:** M3-03, M4-05
 
 **Target paths:** `docs/releases/research-decision.md`, `docs/next-build-tasks.json`
 

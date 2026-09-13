@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Iterable, Mapping, Sequence
 
 from willfly.domain import PaymentLeg, PoolIdentity, RawEvent, TradeEvidence
@@ -33,6 +33,7 @@ class DecodedV4Event:
     event_type: str
     pool_id: str
     sender: str | None
+    emitter: str
     fields: Mapping[str, Any]
     raw_event_key: tuple[int, str | None, str | None, int | None]
     raw_lineage: tuple[str, ...]
@@ -53,6 +54,7 @@ def decode_v4_event(event: RawEvent) -> DecodedV4Event:
     event_type = EVENT_TOPICS.get(topic0)
     if event_type is None:
         raise UnsupportedV4Event(f"unsupported PoolManager topic: {topic0}")
+    emitter = _address(payload.get("address"), "V4 event emitter")
     pool_id = _topic_bytes32(topics, 1, "pool_id")
     words = _data_words(data)
     lineage = (_raw_ref(event),)
@@ -70,7 +72,7 @@ def decode_v4_event(event: RawEvent) -> DecodedV4Event:
             "tick": _signed(words[4], 24, "tick"),
         }
         reason_flags = () if hooks == "0x" + "0" * 40 else ("unsupported_hook_behavior",)
-        return DecodedV4Event(event_type, pool_id, None, fields, event.logical_key, lineage, reason_flags)
+        return DecodedV4Event(event_type, pool_id, None, emitter, fields, event.logical_key, lineage, reason_flags)
 
     sender = _topic_address(topics, 2, "sender")
     if event_type == "Swap":
@@ -83,7 +85,7 @@ def decode_v4_event(event: RawEvent) -> DecodedV4Event:
             "tick": _signed(words[4], 24, "tick"),
             "fee": _unsigned(words[5], 24, "fee"),
         }
-        return DecodedV4Event(event_type, pool_id, sender, fields, event.logical_key, lineage)
+        return DecodedV4Event(event_type, pool_id, sender, emitter, fields, event.logical_key, lineage)
 
     _require_lengths(topics, words, topic_count=3, word_count=4)
     fields = {
@@ -92,7 +94,7 @@ def decode_v4_event(event: RawEvent) -> DecodedV4Event:
         "liquidity_delta": _signed(words[2], 256, "liquidity_delta"),
         "salt": _word_bytes32(words[3], "salt"),
     }
-    return DecodedV4Event(event_type, pool_id, sender, fields, event.logical_key, lineage)
+    return DecodedV4Event(event_type, pool_id, sender, emitter, fields, event.logical_key, lineage)
 
 
 def pool_identity_from_initialize(event: DecodedV4Event, *, chain_id: int, manager: str) -> PoolIdentity:
@@ -121,10 +123,11 @@ def deduplicate_decoded_events(events: Iterable[DecodedV4Event]) -> tuple[Decode
         if existing is None:
             result[event.raw_event_key] = event
             continue
-        if (existing.event_type, existing.pool_id, existing.sender, dict(existing.fields)) != (
+        if (existing.event_type, existing.pool_id, existing.sender, existing.emitter, dict(existing.fields)) != (
             event.event_type,
             event.pool_id,
             event.sender,
+            event.emitter,
             dict(event.fields),
         ):
             raise DecodeError(f"conflicting duplicate event: {event.raw_event_key}")
@@ -134,10 +137,41 @@ def deduplicate_decoded_events(events: Iterable[DecodedV4Event]) -> tuple[Decode
             existing.event_type,
             existing.pool_id,
             existing.sender,
+            existing.emitter,
             existing.fields,
             existing.raw_event_key,
             tuple(dict.fromkeys(existing.raw_lineage + event.raw_lineage)),
             existing.reason_flags,
+        )
+    return tuple(result.values())
+
+
+def deduplicate_trade_evidence(records: Iterable[TradeEvidence]) -> tuple[TradeEvidence, ...]:
+    """Deduplicate repeated source observations without multiplying cash flow.
+
+    Economic identity is a transaction, wallet, token and established direction.
+    A conflicting duplicate fails closed; an equivalent duplicate contributes its
+    raw source references and flags to the one retained record.
+    """
+
+    result: dict[tuple[str, str, str, str], TradeEvidence] = {}
+    for record in records:
+        key = (
+            record.transaction_hash.lower(),
+            record.wallet.lower(),
+            record.token.lower(),
+            record.trade_direction,
+        )
+        existing = result.get(key)
+        if existing is None:
+            result[key] = record
+            continue
+        if _trade_shape(existing) != _trade_shape(record):
+            raise DecodeError(f"conflicting duplicate trade evidence: {record.transaction_hash}")
+        result[key] = replace(
+            existing,
+            raw_event_refs=tuple(dict.fromkeys((*existing.raw_event_refs, *record.raw_event_refs))),
+            reason_flags=tuple(dict.fromkeys((*existing.reason_flags, *record.reason_flags))),
         )
     return tuple(result.values())
 
@@ -157,13 +191,31 @@ def classify_trade_origin(
     vendor_claims: Sequence[str] = (),
     estimated_usd_value: str | None = None,
     valuation_method: str | None = None,
+    route_status: str = "uncertain",
+    trade_direction: str = "unknown",
+    refund_legs: Sequence[PaymentLeg] = (),
 ) -> TradeEvidence:
-    """Create one trade-evidence record for a transaction, not one per route leg."""
+    """Create one route-aware trade record for a transaction, not route legs.
+
+    ``genuine_swap`` is deliberately a high bar: matching transaction hashes
+    and transfers are insufficient until the caller has supplied verified route
+    evidence, wallet direction and non-refunded net cash flow.
+    """
 
     if activity_kind not in {"transfer", "gift_or_airdrop"}:
         raise ValueError("activity_kind must be transfer or gift_or_airdrop")
     if estimated_usd_value is not None and valuation_method is None:
         raise ValueError("estimated USD requires valuation_method")
+    if route_status not in {"verified", "uncertain", "unsupported"}:
+        raise ValueError("unsupported route_status")
+    if trade_direction not in {"buy", "sell", "unknown"}:
+        raise ValueError("unsupported trade_direction")
+    if any(leg.direction != "out" for leg in payment_legs):
+        raise ValueError("payment legs must flow out of the wallet")
+    if any(leg.direction != "in" for leg in receipt_legs):
+        raise ValueError("receipt legs must flow into the wallet")
+    if any(leg.direction != "in" for leg in refund_legs):
+        raise ValueError("refund legs must flow into the wallet")
     refs = list(dict.fromkeys([*raw_event_refs, *(ref for event in swap_events for ref in event.raw_lineage)]))
     if not refs:
         raise ValueError("raw_event_refs cannot be empty")
@@ -171,9 +223,21 @@ def classify_trade_origin(
     if len(swap_events) > 1:
         reason_flags.append("multi_hop_route_collapsed_to_one_wallet_purchase")
 
-    if swap_events and payment_legs and receipt_legs:
+    net_payment = _net_outflow(payment_legs, refund_legs)
+    if swap_events and payment_legs and receipt_legs and route_status == "verified" and trade_direction != "unknown" and net_payment:
         classification = "genuine_swap"
+    elif swap_events and payment_legs and receipt_legs:
+        classification = "ambiguous"
+        if route_status != "verified":
+            reason_flags.append("route_evidence_unverified")
+        if trade_direction == "unknown":
+            reason_flags.append("wallet_direction_unresolved")
+        if not net_payment:
+            reason_flags.append("fully_refunded_or_zero_net_input")
     elif swap_events and receipt_legs and not payment_legs:
+        classification = "ambiguous"
+        reason_flags.extend(["no_readable_cash_leg", "vendor_or_swap_label_is_not_spend"])
+    elif swap_events and not payment_legs:
         classification = "ambiguous"
         reason_flags.extend(["no_readable_cash_leg", "vendor_or_swap_label_is_not_spend"])
     elif not swap_events and receipt_legs and not payment_legs:
@@ -183,7 +247,10 @@ def classify_trade_origin(
         classification = "ambiguous"
         reason_flags.append("unsupported_or_unresolved_cash_flow")
 
-    quote_asset = payment_legs[0].asset if payment_legs and all(leg.asset == payment_legs[0].asset for leg in payment_legs) else None
+    if refund_legs:
+        reason_flags.append("refund_observed")
+    quote_legs = payment_legs if trade_direction != "sell" else receipt_legs
+    quote_asset = quote_legs[0].asset if quote_legs and all(leg.asset == quote_legs[0].asset for leg in quote_legs) else None
     estimated = estimated_usd_value is not None
     return TradeEvidence(
         transaction_hash=transaction_hash,
@@ -197,10 +264,13 @@ def classify_trade_origin(
         estimated_usd=estimated,
         estimated_usd_value=estimated_usd_value,
         reason_flags=tuple(reason_flags),
-        method_version="trade-evidence.v0.1",
+        method_version="trade-evidence.v0.2",
         as_of_time=as_of_time,
         retrieved_time=retrieved_time,
         raw_event_refs=tuple(refs),
+        route_status=route_status,
+        trade_direction=trade_direction,
+        refund_legs=tuple(refund_legs),
     )
 
 
@@ -218,12 +288,17 @@ def trade_evidence_from_receipt(
     vendor_claims: Sequence[str] = (),
     estimated_usd_value: str | None = None,
     valuation_method: str | None = None,
+    pool_identities: Sequence[PoolIdentity] = (),
+    route_actors: Sequence[str] = (),
+    native_refund_legs: Sequence[PaymentLeg] = (),
+    native_refunds_accounted: bool = False,
 ) -> TradeEvidence:
     """Join a receipt's exact cash/receipt legs to supported swap evidence.
 
-    The join is intentionally conservative. A missing transaction object or an
-    indirect router payment does not get replaced with a midpoint, vendor label,
-    or displayed estimate; the resulting activity stays ambiguous.
+    The join is intentionally conservative. A missing route context, issuer
+    mismatch, unlinked receipt log, indirect payment or unknown native refund
+    does not get replaced with a midpoint, vendor label, or displayed estimate;
+    the resulting activity stays ambiguous.
     """
 
     if not isinstance(receipt, Mapping):
@@ -249,10 +324,24 @@ def trade_evidence_from_receipt(
         raise DecodeError("quote assets must be strings")
     if transaction is not None and not isinstance(transaction, Mapping):
         raise DecodeError("transaction is not an object")
+    route_status, route_flags, pool_by_id = _verify_swap_route(
+        swap_events=swap_events,
+        receipt_logs=logs,
+        token=token,
+        pool_identities=pool_identities,
+        quote_assets=quote_assets,
+    )
+    actors = {actor.lower() for actor in route_actors}
+    actors.update(identity.manager_or_factory.lower() for identity in pool_by_id.values())
+    quote_set = _route_quote_assets(pool_by_id.values(), token=token, quote_assets=quote_assets)
     payment_legs: list[PaymentLeg] = []
     receipt_legs: list[PaymentLeg] = []
+    refund_legs: list[PaymentLeg] = list(native_refund_legs)
+    token_in: list[PaymentLeg] = []
+    token_out: list[PaymentLeg] = []
+    quote_in: list[PaymentLeg] = []
+    quote_out: list[PaymentLeg] = []
     raw_refs = [f"rpc:receipt:{transaction_hash}"]
-    normalized_quotes = {asset.lower() for asset in quote_assets}
     for index, log in enumerate(logs):
         if not isinstance(log, Mapping):
             raise DecodeError("receipt log is not an object")
@@ -274,10 +363,32 @@ def trade_evidence_from_receipt(
         amount = str(_unsigned(words[0], 256, "transfer_amount"))
         ref = f"rpc:receipt:{transaction_hash}:log:{log.get('logIndex', index)}"
         raw_refs.append(ref)
-        if to_address.lower() == wallet.lower() and asset.lower() == token.lower():
-            receipt_legs.append(PaymentLeg(asset, amount, "in", from_address, to_address, ref))
-        if from_address.lower() == wallet.lower() and asset.lower() in normalized_quotes:
-            payment_legs.append(PaymentLeg(asset, amount, "out", from_address, to_address, ref))
+        leg = PaymentLeg(asset, amount, "in", from_address, to_address, ref)
+        asset_key = asset.lower()
+        sender_is_route = from_address.lower() in actors
+        recipient_is_route = to_address.lower() in actors
+        if to_address.lower() == wallet.lower() and asset_key == token.lower():
+            if sender_is_route:
+                token_in.append(leg)
+            else:
+                route_flags.append("unrelated_token_transfer_excluded")
+        elif from_address.lower() == wallet.lower() and asset_key == token.lower():
+            if recipient_is_route:
+                token_out.append(PaymentLeg(asset, amount, "out", from_address, to_address, ref))
+            else:
+                route_flags.append("unrelated_token_transfer_excluded")
+        elif to_address.lower() == wallet.lower() and asset_key in quote_set:
+            if sender_is_route:
+                quote_in.append(leg)
+            else:
+                route_flags.append("unrelated_quote_transfer_excluded")
+        elif from_address.lower() == wallet.lower() and asset_key in quote_set:
+            if recipient_is_route:
+                quote_out.append(PaymentLeg(asset, amount, "out", from_address, to_address, ref))
+            else:
+                route_flags.append("unrelated_quote_transfer_excluded")
+        elif asset_key == token.lower() and sender_is_route:
+            route_flags.append("token_fee_or_route_split_observed")
 
     if transaction is not None:
         tx_from = transaction.get("from")
@@ -287,12 +398,36 @@ def trade_evidence_from_receipt(
             raise DecodeError("transaction.from is not an address string")
         if tx_to is not None and not isinstance(tx_to, str):
             raise DecodeError("transaction.to is not an address string")
-        if tx_from is not None and tx_from.lower() == wallet.lower() and tx_to is not None:
+        if tx_from is not None and tx_from.lower() == wallet.lower() and tx_to is not None and tx_to.lower() in actors:
             value = _hex_int_quantity(tx_value, "transaction.value")
             if value > 0:
                 ref = f"rpc:transaction:{transaction_hash}:native_value"
-                payment_legs.append(PaymentLeg("native:ETH", str(value), "out", tx_from, tx_to, ref))
+                if "native:eth" in quote_set:
+                    quote_out.append(PaymentLeg("native:ETH", str(value), "out", tx_from, tx_to, ref))
+                    if not native_refunds_accounted:
+                        route_status = "uncertain"
+                        route_flags.append("native_refund_coverage_unavailable")
+                else:
+                    route_flags.append("native_input_outside_verified_pool_currency")
                 raw_refs.append(ref)
+
+    _validate_native_refunds(native_refund_legs, wallet=wallet, actors=actors)
+    if token_in and quote_out and not token_out:
+        trade_direction = "buy"
+        payment_legs = quote_out
+        receipt_legs = token_in
+        refund_legs.extend(quote_in)
+    elif token_out and quote_in and not token_in:
+        trade_direction = "sell"
+        payment_legs = token_out
+        receipt_legs = quote_in
+        refund_legs.extend(token_in)
+    else:
+        trade_direction = "unknown"
+        payment_legs = [*quote_out, *token_out]
+        receipt_legs = [*token_in, *quote_in]
+        if token_in and token_out:
+            route_flags.append("mixed_wallet_token_direction")
 
     return classify_trade_origin(
         transaction_hash=transaction_hash,
@@ -304,10 +439,126 @@ def trade_evidence_from_receipt(
         as_of_time=as_of_time,
         retrieved_time=retrieved_time,
         raw_event_refs=raw_refs,
-        vendor_claims=vendor_claims,
+        vendor_claims=(*vendor_claims, *route_flags),
         estimated_usd_value=estimated_usd_value,
         valuation_method=valuation_method,
+        route_status=route_status,
+        trade_direction=trade_direction,
+        refund_legs=refund_legs,
     )
+
+
+def _verify_swap_route(
+    *,
+    swap_events: Sequence[DecodedV4Event],
+    receipt_logs: Sequence[object],
+    token: str,
+    pool_identities: Sequence[PoolIdentity],
+    quote_assets: Sequence[str],
+) -> tuple[str, list[str], dict[str, PoolIdentity]]:
+    """Verify issuer, pool currency and receipt inclusion for V4 swap logs."""
+
+    flags: list[str] = []
+    pools = {identity.pool_id.lower(): identity for identity in pool_identities if identity.pool_id is not None}
+    if not swap_events:
+        return "uncertain", ["no_supported_swap_route"], pools
+    if not pools:
+        return "uncertain", ["pool_identity_unavailable"], pools
+    if any(identity.protocol != "uniswap_v4" for identity in pools.values()):
+        return "unsupported", ["unsupported_pool_protocol"], pools
+    log_indices = {
+        _log_index(log)
+        for log in receipt_logs
+        if isinstance(log, Mapping)
+        and isinstance(log.get("address"), str)
+        and isinstance(log.get("topics"), list)
+        and log["topics"]
+        and isinstance(log["topics"][0], str)
+        and log["topics"][0].lower() == SWAP_TOPIC
+    }
+    for event in swap_events:
+        identity = pools.get(event.pool_id.lower())
+        if identity is None:
+            return "uncertain", [*flags, "swap_pool_identity_unavailable"], pools
+        if event.event_type != "Swap" or event.emitter.lower() != identity.manager_or_factory.lower():
+            return "unsupported", [*flags, "swap_issuer_or_event_mismatch"], pools
+        if "unsupported_hook_behavior" in event.reason_flags:
+            return "unsupported", [*flags, "unsupported_hook_route"], pools
+        if event.raw_event_key[3] not in log_indices:
+            return "uncertain", [*flags, "swap_log_not_linked_to_receipt"], pools
+        currencies = {_currency_asset(identity.currency0), _currency_asset(identity.currency1)}
+        if token.lower() not in currencies:
+            return "unsupported", [*flags, "token_not_in_verified_pool_currency"], pools
+        expected_quotes = currencies - {token.lower()}
+        supplied_quotes = {_normalize_asset(asset) for asset in quote_assets}
+        if not expected_quotes.intersection(supplied_quotes):
+            return "uncertain", [*flags, "quote_asset_not_in_verified_pool_currency"], pools
+    return "verified", flags, pools
+
+
+def _route_quote_assets(
+    identities: Iterable[PoolIdentity], *, token: str, quote_assets: Sequence[str]
+) -> set[str]:
+    supplied = {_normalize_asset(asset) for asset in quote_assets}
+    result: set[str] = set()
+    for identity in identities:
+        for currency in (identity.currency0, identity.currency1):
+            asset = _currency_asset(currency)
+            if asset != token.lower() and asset in supplied:
+                result.add(asset)
+    return result
+
+
+def _validate_native_refunds(refunds: Sequence[PaymentLeg], *, wallet: str, actors: set[str]) -> None:
+    for refund in refunds:
+        if refund.asset.lower() != "native:eth" or refund.direction != "in":
+            raise DecodeError("native refunds must be inbound native ETH legs")
+        if refund.to_address.lower() != wallet.lower() or refund.from_address.lower() not in actors:
+            raise DecodeError("native refund is not linked to the verified route")
+
+
+def _net_outflow(payments: Sequence[PaymentLeg], refunds: Sequence[PaymentLeg]) -> bool:
+    net: dict[str, int] = {}
+    for payment in payments:
+        net[payment.asset.lower()] = net.get(payment.asset.lower(), 0) + int(payment.amount_atomic)
+    for refund in refunds:
+        net[refund.asset.lower()] = net.get(refund.asset.lower(), 0) - int(refund.amount_atomic)
+    return any(amount > 0 for amount in net.values())
+
+
+def _trade_shape(record: TradeEvidence) -> tuple[object, ...]:
+    def leg_shape(leg: PaymentLeg) -> tuple[str, str, str, str, str]:
+        return (leg.asset.lower(), leg.amount_atomic, leg.direction, leg.from_address.lower(), leg.to_address.lower())
+
+    return (
+        record.classification,
+        record.route_status,
+        record.trade_direction,
+        tuple(leg_shape(leg) for leg in record.payment_legs),
+        tuple(leg_shape(leg) for leg in record.receipt_legs),
+        tuple(leg_shape(leg) for leg in record.refund_legs),
+        record.quote_asset.lower() if record.quote_asset else None,
+        record.estimated_usd,
+        record.estimated_usd_value,
+        record.valuation_method,
+    )
+
+
+def _log_index(log: Mapping[str, Any]) -> int | None:
+    value = log.get("logIndex")
+    if isinstance(value, str) and value.startswith("0x"):
+        return int(value, 16)
+    if isinstance(value, int) and value >= 0:
+        return value
+    return None
+
+
+def _currency_asset(value: str) -> str:
+    return "native:eth" if value.lower() == "0x" + "0" * 40 else value.lower()
+
+
+def _normalize_asset(value: str) -> str:
+    return "native:eth" if value.lower() == "native:eth" else value.lower()
 
 
 def _raw_ref(event: RawEvent) -> str:
@@ -338,6 +589,14 @@ def _topic_address(topics: list[str], index: int, field_name: str) -> str:
     if len(topics) <= index:
         raise DecodeError(f"missing indexed {field_name}")
     return _word_address(topics[index], field_name)
+
+
+def _address(value: object, field_name: str) -> str:
+    if not isinstance(value, str) or len(value) != 42 or not value.startswith("0x"):
+        raise DecodeError(f"{field_name} is not an address")
+    if any(character not in "0123456789abcdefABCDEF" for character in value[2:]):
+        raise DecodeError(f"{field_name} is not an address")
+    return value
 
 
 def _word_bytes32(word: str, field_name: str) -> str:

@@ -62,7 +62,16 @@ sample is captured. No subscription or credits were purchased.
 
 ## Explicit blockers
 
-1. Pons V2 creation history and ABI are not independently pinned.
-2. Archive-capable provider and retention are not selected.
+1. Pons V2 ABI/source is pinned, but historical code at creation block `26841846` is unavailable via public RPC (`metadata is not found`); logs/headers at creation are available. An archive-code provider remains unselected.
+2. Non-graduate window coverage and 72-hour completeness remain open (M1-07).
 3. RHTrenches has no verified public integration API in this research.
 4. Mezzanine scanner access/API was not verified; region restrictions are not bypassed.
+
+## 13 September 2026 archive verification
+
+Pons logs carry `blockTimestamp 0x0`; event time must come from hash-matched
+`eth_getBlockByNumber` headers (verified on block `61691574`). A 39-page
+2000-block scan demonstrates paged history access for all four Pons lifecycle
+families, but sustained throughput, rate limits and a 72-hour completeness
+audit remain unmeasured. Public RPC is a bounded-check source, not a
+production archive guarantee.

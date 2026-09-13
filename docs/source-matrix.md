@@ -12,7 +12,7 @@ still open.
 | Robinhood public RPC | chain reads | observed + documented | Chain ID 4663, bounded live reads and receipt/log probes respond | archive depth, limits and production completeness |
 | Robinhood sequencer feed | arrival-time context | documented only | Official docs publish the WSS endpoint | supported subscription behavior and timestamp semantics |
 | Uniswap V4 PoolManager | pool initialization, swaps and liquidity logs | observed + documented | Address, successful deployment receipt, block 9070, runtime size/hash, ABI-manifest hash and a bounded live decode sample with all three supported families | independent 72-hour completeness audit and archive depth |
-| Pons V2 | launch lifecycle candidate | candidate; gate open | Official source/ABI is pinned, current factory code is present at `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e`, and a bounded live sample decoded 34 `TokenLaunched` events | native archive verification, lifecycle events beyond creation and non-graduate history |
+| Pons V2 | launch lifecycle candidate | candidate; gate open | Official source/ABI is pinned, current factory code is present at `0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e` (24,177 bytes), and a bounded 78k-block scan on 13 Sept 2026 decoded 1,130 `TokenLaunched`, 10 `LaunchSwept`, 10 `GraduationTokensPermanentlyLocked` and 10 `PoolGraduated` events (plus 127 unsupported logs) | historical-code archive unavailable via public RPC, non-graduate window coverage, 72-hour completeness |
 | Pons V1 | historical comparison | documented candidate; retired | Project source publishes the V1 factory and describes its V3 launch flow | confirm historical coverage before any use; not selected for v0.1 |
 | pools.trade | comparative launch source | documented comparison only | Uniswap support describes the product; Bitquery documentation lists four launch contracts | first-party deployment/ABI evidence, access terms and independent coverage |
 | RHTrenches | optional trader/behavior comparison | UI observation only | Browser research observed tracked-wallet tape and warnings | no verified public integration API, cohort completeness, terms or history |
@@ -37,9 +37,16 @@ code probe returned 24,009 bytes with SHA-256
 The code hash is an evidence fingerprint, not an EVM code identity claim.
 
 The complete addresses and probe record are in
-`configs/sources/robinhood-chain-v0.1.json`. The latest bounded sample decoded
-2,319 `Swap`, 405 `ModifyLiquidity` and 18 `Initialize` logs from 2,791 raw
-PoolManager logs; 49 logs were outside the supported subset. No signer,
+`configs/sources/robinhood-chain-v0.1.json`. The 13 Sept 2026 verification
+decoded 1,249 `Swap`, 551 `ModifyLiquidity` and 12 `Initialize` logs from 1,853
+raw PoolManager logs in a 679-block window (41 unsupported logs observed but not
+claimed). A 39-page Pons scan over blocks `61616075`–`61694074` produced 1,130
+`TokenLaunched`, 10 `LaunchSwept`, 10 `GraduationTokensPermanentlyLocked` and 10
+`PoolGraduated` events (127 other logs observed). Pons logs carry a zero
+`blockTimestamp` sentinel; hash-matched headers supply real event time
+(sample block `61691574`). Logs and headers at the documented creation block
+`26841846` are available (22 logs in the first 100 blocks), but historical code
+at that block is unavailable via public RPC (`metadata is not found`). No signer,
 broadcast endpoint or funded provider is configured.
 
 ## Evidence links

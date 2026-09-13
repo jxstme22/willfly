@@ -43,6 +43,15 @@ transaction hashes agree; failed, malformed, indirect or missing cash flow remai
 quarantined or ambiguous. Non-zero V4 hooks carry an unsupported-behavior flag and
 are not treated as standard pool mechanics.
 
+Trade evidence version `v0.2` additionally records `route_status`
+(`verified`, `uncertain` or `unsupported`), a wallet-facing `buy`/`sell`
+direction and explicit inbound refund legs. `genuine_swap` requires all three:
+matched V4 issuer/pool/receipt-log evidence, a known wallet direction, and a
+positive net input after refunds. Legacy records remain losslessly readable but
+are excluded from verified timeline flow until revalidated. Unrelated multicall
+transfers, unproved wrapped-native paths and native input without refund coverage
+remain ambiguous rather than increasing a signal.
+
 `VendorAssessment` stores reason flags, method version, source as-of time,
 retrieval time, freshness, raw reference and unavailable state. Missing vendor
 history cannot be backdated. `WalletCohort` stores membership and relationship

@@ -5,11 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Mapping
 from urllib.parse import parse_qs, unquote, urlparse
 
 from willfly.domain import Launch, Observation
 from willfly.domain.contracts import ADDRESS_RE, BYTES32_RE
 from willfly.features.discovery import DiscoverySnapshot, PoolProjection
+from willfly.features.projections import ObservatoryProjection
+from willfly.storage.raw import RawBatchStore
+from willfly.ui.dashboard import render_dashboard
 
 
 @dataclass(frozen=True)
@@ -19,6 +23,9 @@ class ReadOnlyStore:
     timelines: tuple[Observation, ...] = ()
     quality_state: str = "unknown"
     quality_details: dict[str, object] | None = None
+    discovery_snapshot: DiscoverySnapshot | None = None
+    exclusions: tuple[Mapping[str, object], ...] = ()
+    evidence: Mapping[str, Mapping[str, object]] | None = None
 
     @classmethod
     def from_discovery(
@@ -28,7 +35,35 @@ class ReadOnlyStore:
         timelines: tuple[Observation, ...] = (),
         quality_details: dict[str, object] | None = None,
     ) -> "ReadOnlyStore":
-        return cls(snapshot.launches, snapshot.pools, timelines, snapshot.quality_state, quality_details)
+        return cls(
+            launches=snapshot.launches,
+            pools=snapshot.pools,
+            timelines=timelines,
+            quality_state=snapshot.quality_state,
+            quality_details=quality_details,
+            discovery_snapshot=snapshot,
+        )
+
+    @classmethod
+    def from_projection(cls, projection: ObservatoryProjection) -> "ReadOnlyStore":
+        return cls(
+            launches=projection.discovery.launches,
+            pools=projection.discovery.pools,
+            timelines=projection.timelines,
+            quality_state=projection.discovery.quality_state,
+            quality_details={
+                "as_of_time": projection.as_of_time,
+                "canonical_event_count": projection.discovery.canonical_event_count,
+                "exclusion_count": len(projection.exclusions),
+            },
+            discovery_snapshot=projection.discovery,
+            exclusions=projection.exclusions,
+            evidence=projection.evidence,
+        )
+
+    @classmethod
+    def from_persisted_snapshot(cls, store: RawBatchStore, snapshot_id: str) -> "ReadOnlyStore":
+        return cls.from_projection(ObservatoryProjection.from_dict(store.load_snapshot(snapshot_id)))
 
     def list_launches(self, *, cursor: int, limit: int, lifecycle: str | None = None) -> dict[str, object]:
         if cursor < 0 or limit <= 0 or limit > 100:
@@ -58,12 +93,51 @@ class ReadOnlyStore:
                 return pool
         raise KeyError(pool_id)
 
+    def list_exclusions(self, *, cursor: int, limit: int) -> dict[str, object]:
+        if cursor < 0 or limit <= 0 or limit > 100:
+            raise ValueError("cursor must be non-negative and limit must be between 1 and 100")
+        page = self.exclusions[cursor : cursor + limit]
+        next_cursor = cursor + len(page)
+        return {
+            "items": [dict(item) for item in page],
+            "next_cursor": None if next_cursor >= len(self.exclusions) else str(next_cursor),
+            "total": len(self.exclusions),
+        }
+
+    def get_evidence(self, reference: str) -> Mapping[str, object]:
+        if not reference:
+            raise ValueError("evidence reference is required")
+        details = (self.evidence or {}).get(reference)
+        if details is None:
+            raise KeyError(reference)
+        return details
+
+    def dashboard(self) -> str:
+        snapshot = self.discovery_snapshot or DiscoverySnapshot(
+            as_of_time="1970-01-01T00:00:00Z",
+            launches=self.launches,
+            pools=self.pools,
+            canonical_event_count=0,
+            unknown_lifecycle_count=sum(launch.lifecycle_state == "unknown" for launch in self.launches),
+            missingness=("persisted_projection_unavailable",),
+            quality_state=self.quality_state,
+            lineage=("dashboard:empty",),
+        )
+        return render_dashboard(snapshot, self.timelines, self.exclusions)
+
 
 def create_server(*, store: ReadOnlyStore, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
     """Create a local-only-by-default server with GET endpoints only."""
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+            if urlparse(self.path).path in {"/", "/dashboard"}:
+                body = store.dashboard().encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(body)
+                return
             try:
                 payload, status = _route(store, self.path)
             except KeyError as exc:
@@ -111,6 +185,10 @@ def _route(store: ReadOnlyStore, path: str) -> tuple[dict[str, object], int]:
             "trading_status": pool.trading_status,
             "raw_event_refs": list(pool.raw_event_refs),
         }, 200
+    if parts == ["exclusions"]:
+        return store.list_exclusions(cursor=_int_param(params, "cursor", 0), limit=_int_param(params, "limit", 25)), 200
+    if len(parts) == 2 and parts[0] == "evidence":
+        return dict(store.get_evidence(parts[1])), 200
     return {"status": "error", "error": "not found"}, 404
 
 

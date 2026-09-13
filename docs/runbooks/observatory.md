@@ -19,17 +19,25 @@ non-zero while Pons creation/archive evidence is unverified.
 
 ## Capture, recovery and audit
 
-Use bounded ranges only, preserving the run ID and source config:
+Use bounded ranges only. The recorder writes durable batches, filter-bound
+checkpoints and a run manifest under the store directory. `--dry-run` prints a
+plan and exits 3 without RPC reads or writes:
 
 ```text
-willfly capture --from-block BLOCK --to-block BLOCK
-willfly backfill --from-block BLOCK --to-block BLOCK
+willfly capture --from-block BLOCK --to-block BLOCK --store-dir data/observatory
+willfly backfill --from-block BLOCK --to-block BLOCK --store-dir data/observatory --page-size 500
+willfly capture --from-block BLOCK --to-block BLOCK --dry-run
 willfly audit --expected expected.json --observed observed.json
 ```
 
-The backfill checkpoint is committed only after a page callback accepts the
-page. A provider range error reduces the next request size; malformed or
-out-of-range data fails closed. Run `audit --provider-independent` only when
+Each run manifest records run ID, chain/filter/ABI/config hashes, operator
+start/stop, provider identity, attempted and acknowledged ranges, header
+evidence, errors and retained batches (`<store>/runs/<run-id>.json`). Empty
+ranges are acknowledged with header evidence and no batch. Changing `--address`
+changes the filter hash and checkpoint namespace, so a changed filter cannot
+inherit a prior cursor. The backfill checkpoint is committed only after a page
+is published; a provider range error reduces the next request size; malformed
+or out-of-range data fails closed. Run `audit --provider-independent` only when
 the expected interval came from a genuinely separate source.
 
 ## Export and inspect

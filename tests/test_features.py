@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from willfly.domain import Launch, PaymentLeg, PoolIdentity, RawEvent, TradeEvidence
 from willfly.features.discovery import PoolProjection, build_discovery_snapshot
 from willfly.features.timelines import build_token_timeline
@@ -39,10 +41,12 @@ def _trade(classification: str, event_time: str, retrieved_time: str, amount: st
         estimated_usd=False,
         estimated_usd_value=None,
         reason_flags=("fixture",),
-        method_version="test.v0.1",
+        method_version="trade-evidence.v0.2",
         as_of_time=event_time,
         retrieved_time=retrieved_time,
         raw_event_refs=(f"trade:{event_time}",),
+        route_status="verified" if classification == "genuine_swap" else "uncertain",
+        trade_direction="buy" if classification == "genuine_swap" else "unknown",
     )
 
 
@@ -80,3 +84,35 @@ def test_timeline_uses_event_and_arrival_cutoffs_and_excludes_planted_receipt() 
     assert snapshot.values["verified_token_in_atomic"] == "100"
     assert snapshot.values["ambiguous_activity_count"] == 1
     assert "ambiguous_activity_excluded_from_verified_flow" in snapshot.missingness
+
+
+def test_timeline_excludes_legacy_genuine_rows_and_reports_buys_sells_separately() -> None:
+    buy = _trade("genuine_swap", "2026-09-13T00:00:01Z", "2026-09-13T00:00:02Z", "100")
+    sell_payment = PaymentLeg(TOKEN, "40", "out", WALLET, QUOTE, "sell:payment")
+    sell_receipt = PaymentLeg(QUOTE, "7", "in", QUOTE, WALLET, "sell:receipt")
+    sell = replace(
+        buy,
+        transaction_hash="0x" + "99" * 32,
+        payment_legs=(sell_payment,),
+        receipt_legs=(sell_receipt,),
+        trade_direction="sell",
+        raw_event_refs=("sell",),
+    )
+    legacy = replace(
+        buy,
+        transaction_hash="0x" + "88" * 32,
+        method_version="trade-evidence.v0.1",
+        raw_event_refs=("legacy",),
+    )
+    snapshot = build_token_timeline(
+        [buy, sell, legacy],
+        token=TOKEN,
+        event_cutoff="2026-09-13T00:00:10Z",
+        arrival_cutoff="2026-09-13T00:00:10Z",
+    )
+    assert snapshot.values["verified_buy_count"] == 1
+    assert snapshot.values["verified_sell_count"] == 1
+    assert snapshot.values["verified_token_in_atomic"] == "100"
+    assert snapshot.values["verified_token_out_atomic"] == "40"
+    assert snapshot.values["verified_quote_in_atomic"] == {QUOTE: "7"}
+    assert "unverified_trade_evidence_excluded_from_verified_flow" in snapshot.missingness

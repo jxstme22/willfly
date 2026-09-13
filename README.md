@@ -2,7 +2,7 @@
 
 Read-only research software for a connectome-derived crypto decision agent.
 
-**Current build authority:** [Astra audit](docs/reports/astra-deep-audit.md), [next roadmap](docs/next-build-roadmap.md), [26-task JSON backlog](docs/next-build-tasks.json), and [Muse Sparks 1.3 handoff](docs/muse-sparks-1.3-handoff.md). The earlier handoffs and PDF are historical snapshots.
+**Current build authority:** [Astra audit](docs/reports/astra-deep-audit.md), [next roadmap](docs/next-build-roadmap.md), [26-task JSON backlog](docs/next-build-tasks.json), and [DeepSeek V4.1 Flash continuation handoff](docs/deepseek-v4.1-flash-handoff.md). The earlier handoffs and PDF are historical snapshots.
 
 **Current direction — 13 September 2026:** Robinhood Chain first; discover new launches and pairs, study memecoin trajectories, and choose between spot trading, selective liquidity provision, waiting and exiting. Expansion to other chains is a later possibility.
 
@@ -20,7 +20,7 @@ Read-only research software for a connectome-derived crypto decision agent.
 
 ## Status
 
-The direction remains Robinhood launch discovery, spot decisions and separately validated LP. The audit found useful components but no operational end-to-end platform. Capture/backfill CLI commands currently produce plans with exit 3; the HTTP server starts with an empty store; shadow does not consume collected observations. The local suite now has 100 passing tests, including audit regressions. V4 replay, LP accounting, portfolio evaluation, trade-route attribution and live evidence still need the work listed in the audit. LP and funded execution remain disabled. A biological advantage is unproven.
+The direction remains Robinhood launch discovery, spot decisions and separately validated LP. The current implementation checkpoint connects durable capture/backfill, header persistence, receipt attribution, immutable projections and fresh-process API/dashboard loading. The latest local suite reports 120 passed and one HTTP test skipped because loopback binding is unavailable in the managed sandbox; a separate permitted localhost run passed that remaining test (121 tests verified across the two runs). These checks do not certify Observatory acceptance. A verified ancestry-anchor policy, source archive/non-graduate evidence, export round-trip verification, the complete terminal UI and the measured 72-hour audit remain open. Shadow integration, validated V4 replay, portfolio economics and biological-model experiments remain later work. LP and funded execution remain disabled; a biological advantage is unproven.
 
 The existing 77-task tracker now distinguishes pre-audit fixture completion from full acceptance; use the new 26-task backlog for implementation order. Task status corrections preserve code and prior evidence rather than erasing progress.
 

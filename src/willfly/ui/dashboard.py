@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from html import escape
+from typing import Mapping
 
 from willfly.domain import Observation
 from willfly.features.discovery import DiscoverySnapshot
 
 
-def render_dashboard(snapshot: DiscoverySnapshot, timelines: tuple[Observation, ...] = ()) -> str:
+def render_dashboard(
+    snapshot: DiscoverySnapshot,
+    timelines: tuple[Observation, ...] = (),
+    exclusions: tuple[Mapping[str, object], ...] = (),
+) -> str:
     """Render evidence and exclusions without changing the underlying dataset."""
 
     launch_rows = "".join(
@@ -23,6 +28,14 @@ def render_dashboard(snapshot: DiscoverySnapshot, timelines: tuple[Observation, 
     ) or '<tr><td colspan="5">No launches available at this cutoff.</td></tr>'
     timeline_sections = "".join(_timeline_section(timeline) for timeline in timelines)
     missing = ", ".join(escape(item) for item in snapshot.missingness) or "none"
+    exclusion_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(item.get('kind', 'unknown')))}</td>"
+        f"<td>{escape(str(item.get('reason', 'unknown')))}</td>"
+        f"<td><code>{escape(str(item.get('transaction_hash', item.get('logical_key', 'unknown'))))}</code></td>"
+        "</tr>"
+        for item in exclusions
+    ) or '<tr><td colspan="3">No excluded rows in this projection.</td></tr>'
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Willfly Observatory</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}}
@@ -37,7 +50,9 @@ small{{color:#666}}</style></head><body>
 <h2>Launches</h2><table><thead><tr><th>Token</th><th>Lifecycle</th><th>Creation time</th>
 <th>First observed</th><th>Evidence</th></tr></thead><tbody>{launch_rows}</tbody></table>
 <h2>Token timelines</h2>{timeline_sections or '<p>No timeline available.</p>'}
-<p><small>Raw rows, excluded activity and source claims remain available through their lineage references.</small></p>
+<h2>Excluded evidence</h2><table><thead><tr><th>Kind</th><th>Reason</th><th>Reference</th></tr></thead>
+<tbody>{exclusion_rows}</tbody></table>
+<p><small>Raw rows and source claims remain available through their lineage references and the read-only evidence endpoint.</small></p>
 </body></html>"""
 
 
@@ -53,5 +68,7 @@ def _timeline_section(timeline: Observation) -> str:
         f"{escape(timeline.latest_included_arrival_time or 'unknown')}; "
         f"verified buys {values.get('verified_buy_count', 0)}; excluded activity {excluded}</p>"
         f"<p>verified token inflow (atomic): {escape(str(values.get('verified_token_in_atomic', 'unknown')))}; "
+        f"verified sells {values.get('verified_sell_count', 0)}; "
+        f"token outflow (atomic): {escape(str(values.get('verified_token_out_atomic', 'unknown')))}; "
         f"missingness: {escape(', '.join(timeline.missingness) or 'none')}</p></section>"
     )
