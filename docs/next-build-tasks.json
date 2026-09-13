@@ -1,10 +1,10 @@
 {
-  "title": "Next build task backlog \u2014 DeepSeek V4.1 Flash continuation",
+  "title": "Next build task backlog \u2014 Luna Extra High continuation",
   "version": "2.0",
   "date": "2026-09-13",
   "status": "reviewed_plan_not_platform_acceptance",
-  "implementation_model_preference": "DeepSeek V4.1 Flash",
-  "model_note": "User-selected implementation model. Select it in the external build environment; this handoff does not configure a provider or add a runtime LLM dependency.",
+  "implementation_model_preference": "GPT Luna Extra High",
+  "model_note": "User-authorized takeover after DeepSeek usage limit. Use gpt-5.6-luna with xhigh reasoning; fix independent audit findings before feature loops.",
   "audit_report": "docs/reports/astra-deep-audit.md",
   "task_count": 26,
   "phases": [
@@ -104,7 +104,7 @@
       "phase": "M1",
       "title": "Verify one deployable source configuration",
       "status": "IN_PROGRESS",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M0-02"
       ],
@@ -128,7 +128,7 @@
       "phase": "M1",
       "title": "Connect durable bounded capture and backfill",
       "status": "IN_PROGRESS",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-01"
       ],
@@ -153,7 +153,7 @@
       "phase": "M1",
       "title": "Persist headers and reconcile forks",
       "status": "IN_PROGRESS",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-02"
       ],
@@ -178,14 +178,14 @@
         "tests/test_header_reconciliation.py",
         "docs/implementation-log.md"
       ],
-      "review_note": "Implementation and fixture coverage are present; live restart evidence (2026-09-13) confirms quiet-block header persistence, stable checkpoints across restarts, and honest unresolved boundaries (never orphaning in-window history) for bounded live windows. M1-03 remains IN_PROGRESS until M1-02 can satisfy its M1-01 dependency and the fresh-process/live Observatory evidence is rerun against a qualified source. Continuation review identified an additional open design gate: the current parent walk has no explicit verified starting anchor, so extending a bounded live window only moves its unresolved boundary backward. This is independent of the M1-01 dependency."
+      "review_note": "Implementation and fixture coverage are present; live restart evidence (2026-09-13) confirms quiet-block header persistence, stable checkpoints across restarts, and honest unresolved boundaries (never orphaning in-window history) for bounded live windows. M1-03 remains IN_PROGRESS until M1-02 can satisfy its M1-01 dependency and the fresh-process/live Observatory evidence is rerun against a qualified source. Continuation review identified an additional open design gate: the current parent walk has no explicit verified starting anchor, so extending a bounded live window only moves its unresolved boundary backward. This is independent of the M1-01 dependency. Interrupted DeepSeek anchor implementation independently audited in docs/reports/deepseek-completion-audit.md: DS-01 through DS-06 remain open; Luna must repair and coordinator recheck before continuation."
     },
     {
       "id": "M1-04",
       "phase": "M1",
       "title": "Prove route attribution and net cash flow",
       "status": "IN_PROGRESS",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-02"
       ],
@@ -217,7 +217,7 @@
       "phase": "M1",
       "title": "Build causal projections and portable snapshots",
       "status": "IN_PROGRESS",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-03",
         "M1-04"
@@ -250,7 +250,7 @@
       "phase": "M1",
       "title": "Build the functional terminal-style Observatory UI",
       "status": "IN_PROGRESS",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-05"
       ],
@@ -282,7 +282,7 @@
       "phase": "M1",
       "title": "Accept the Observatory evidence bundle",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-06"
       ],
@@ -305,7 +305,7 @@
       "phase": "M2",
       "title": "Implement one verified V4 quote path",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-07"
       ],
@@ -328,7 +328,7 @@
       "phase": "M2",
       "title": "Connect idempotent portfolio accounting",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-01"
       ],
@@ -350,7 +350,7 @@
       "phase": "M2",
       "title": "Generate genuine horizon labels and splits",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-02"
       ],
@@ -372,7 +372,7 @@
       "phase": "M2",
       "title": "Measure actual portfolio and scenario outcomes",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-03"
       ],
@@ -397,7 +397,7 @@
       "phase": "M2",
       "title": "Publish a reproducible baseline laboratory",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-04"
       ],
@@ -422,7 +422,7 @@
       "phase": "M3",
       "title": "Bind shadow state to a frozen run",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-05"
       ],
@@ -445,7 +445,7 @@
       "phase": "M3",
       "title": "Connect the prospective hypothetical runner",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M3-01"
       ],
@@ -468,7 +468,7 @@
       "phase": "M3",
       "title": "Qualify prospective behavior",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M3-02"
       ],
@@ -491,7 +491,7 @@
       "phase": "M4",
       "title": "Validate connectome provenance and dynamics",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-05"
       ],
@@ -515,7 +515,7 @@
       "phase": "M4",
       "title": "Run fair neural and ordinary comparisons",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M4-01"
       ],
@@ -540,7 +540,7 @@
       "phase": "M4",
       "title": "Implement only supported optional source adapters",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M1-07"
       ],
@@ -563,7 +563,7 @@
       "phase": "M4",
       "title": "Enforce real LLM budgets and provenance",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-05"
       ],
@@ -587,7 +587,7 @@
       "phase": "M4",
       "title": "Attribute each hybrid contribution",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M4-02",
         "M4-03",
@@ -612,7 +612,7 @@
       "phase": "M5",
       "title": "Replace LP toy mechanics and ledger",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-04"
       ],
@@ -636,7 +636,7 @@
       "phase": "M5",
       "title": "Evaluate selective LP under shared capital",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M5-01",
         "M2-05"
@@ -663,7 +663,7 @@
       "phase": "M5",
       "title": "Publish the next research decision",
       "status": "TODO",
-      "owner_role": "DeepSeek V4.1 Flash implementation session",
+      "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M3-03",
         "M4-05"

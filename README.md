@@ -2,9 +2,13 @@
 
 Read-only research software for a connectome-derived crypto decision agent.
 
-**Current build authority:** [Astra audit](docs/reports/astra-deep-audit.md), [next roadmap](docs/next-build-roadmap.md), [26-task JSON backlog](docs/next-build-tasks.json), and [DeepSeek V4.1 Flash continuation handoff](docs/deepseek-v4.1-flash-handoff.md). The earlier handoffs and PDF are historical snapshots.
+**Current build authority:** [Astra audit](docs/reports/astra-deep-audit.md), [next roadmap](docs/next-build-roadmap.md), [26-task JSON backlog](docs/next-build-tasks.json), and [Luna Extra High continuation handoff](docs/luna-extra-high-handoff.md). The earlier handoffs and PDF are historical snapshots.
 
 **Current direction — 13 September 2026:** Robinhood Chain first; discover new launches and pairs, study memecoin trajectories, and choose between spot trading, selective liquidity provision, waiting and exiting. Expansion to other chains is a later possibility.
+
+**Main product priority:** [Brain signals with manual execution and verified learning](docs/brain-signal-product.md), with a [dedicated JSON plan](docs/brain-product-tasks.json). After the current DeepSeek batch, bring actual connectome training forward: coin/LP entry and exit signals, user execution through external tools, wallet feedback, and learning from historical/user/other-wallet evidence. Observation, outcome scoring and scheduled candidate training continue 24/7 even when the user makes no trades; evaluated model promotion is recorded separately. Monitoring supports this product. Automatic execution is outside this version.
+
+**Next builder:** GPT Luna Extra High, taking over after DeepSeek reached its usage limit. The [interrupted-checkpoint audit](docs/reports/deepseek-completion-audit.md) identifies six open repair findings. Follow the [staged handoff](docs/luna-extra-high-handoff.md) and [goal/loop JSON](docs/luna-build-loops.json): repair findings, independent recheck, then continuous in-scope build loops. Audit complete; repair-stage dispatch is the next action.
 
 ## Project documents
 

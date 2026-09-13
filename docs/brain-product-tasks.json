@@ -1,0 +1,187 @@
+{
+  "title": "Brain signals and manual execution product",
+  "version": "1.1",
+  "date": "2026-09-13",
+  "status": "approved_direction_unimplemented_plan",
+  "product_brief": "docs/brain-signal-product.md",
+  "implementation_model_preference": "GPT Luna Extra High",
+  "task_count": 11,
+  "tasks": [
+    {
+      "id": "B0",
+      "title": "Freeze targets and signal contracts",
+      "status": "TODO",
+      "depends_on": [],
+      "existing_task_references": [
+        "M1-05",
+        "M1-06"
+      ],
+      "work": "Define spot/LP/hold/exit identities, prediction horizons, expiry, portfolio context, confidence semantics and manual execution scope.",
+      "acceptance": "Versioned targets and schemas distinguish research predictions, qualified proposals, manual actions and outcomes; no model is claimed trained.",
+      "status_evidence": []
+    },
+    {
+      "id": "B1",
+      "title": "Load and validate actual connectome",
+      "status": "TODO",
+      "depends_on": [
+        "B0"
+      ],
+      "existing_task_references": [
+        "M4-01"
+      ],
+      "work": "Verify release/license/checksums, preserve neuron/edge metadata and test direction, signs and preprocessing.",
+      "acceptance": "Actual dataset drives recurrent computation; provenance and graph oracle reproduce; subset versus whole-brain coverage is explicit.",
+      "status_evidence": []
+    },
+    {
+      "id": "B2",
+      "title": "Build public-wallet and position observer",
+      "status": "TODO",
+      "depends_on": [
+        "B0"
+      ],
+      "existing_task_references": [
+        "M1-02",
+        "M1-03",
+        "M1-04"
+      ],
+      "work": "Track user/external-wallet activity with receipt/state evidence, failed transactions, position ownership, backfill and fork reconciliation.",
+      "acceptance": "Supported manual swaps and LP lifecycle changes survive restart without duplicates; unknown routes remain unresolved; no keys required.",
+      "status_evidence": []
+    },
+    {
+      "id": "B3",
+      "title": "Create causal historical and feedback datasets",
+      "status": "TODO",
+      "depends_on": [
+        "B2"
+      ],
+      "existing_task_references": [
+        "M1-05",
+        "M2-03"
+      ],
+      "work": "Combine frozen wallet cohorts and market history, preserve real acquisition times, all outcomes, ignored signals and external cash flows. Maintain a durable horizon-maturation queue for market and external-wallet outcomes even when the user does not trade.",
+      "acceptance": "Chronological plus wallet/token leakage checks pass; selected winners and leader prices cannot masquerade as deployable training evidence. Zero-personal-trade intervals still produce qualified examples; delayed, missing and fork-revised labels are reconciled; predictions cannot label themselves.",
+      "status_evidence": []
+    },
+    {
+      "id": "B4",
+      "title": "Train biological model locally with controls",
+      "status": "TODO",
+      "depends_on": [
+        "B1",
+        "B3"
+      ],
+      "existing_task_references": [
+        "M4-02"
+      ],
+      "work": "Implement checkpointed fixed-graph training/readout and practical ordinary, shuffled/random and no-state comparisons under matched budgets. Schedule automatic candidate training from sufficient qualified new examples and historical replay under resource budgets; measure forgetting against older data.",
+      "acceptance": "A Windows/WSL2 run resumes and reproduces held-out predictions; memory/runtime measured; no whole-brain/GPU or financial edge assumption. Training runs without a user trade or manual trigger; insufficient evidence yields an honest waiting state, not a claimed update.",
+      "status_evidence": []
+    },
+    {
+      "id": "B5",
+      "title": "Validate spot and LP outcome accounting",
+      "status": "TODO",
+      "depends_on": [
+        "B2",
+        "B3"
+      ],
+      "existing_task_references": [
+        "M2-01",
+        "M2-02",
+        "M2-04",
+        "M5-01"
+      ],
+      "work": "Reuse exact per-asset ledgers and one supported quote/position family; reconcile costs, failures, residuals, marks and exits.",
+      "acceptance": "Separate spot/LP readiness records reconcile independent examples; incomplete LP accounting keeps LP recommendations research-only.",
+      "status_evidence": []
+    },
+    {
+      "id": "B6",
+      "title": "Build brain signal inbox and position views",
+      "status": "TODO",
+      "depends_on": [
+        "B0",
+        "B4"
+      ],
+      "existing_task_references": [
+        "M1-06"
+      ],
+      "work": "Expose versioned predictions and constrained entry/hold/exit proposals with expiry, evidence and manual-action status in the terminal UI. Display observation/label freshness, training state, candidate evaluation and active-model/promotion history.",
+      "acceptance": "Real model outputs drive displayed signals; stale or unsupported outputs abstain; economic readiness is enforced per capability; all controls work.",
+      "status_evidence": []
+    },
+    {
+      "id": "B7",
+      "title": "Link manual actions and produce feedback",
+      "status": "TODO",
+      "depends_on": [
+        "B2",
+        "B6"
+      ],
+      "existing_task_references": [
+        "M3-01"
+      ],
+      "work": "Record pre-action proposals, match external transaction hashes conservatively, preserve human overrides, delays, failed and partial actions.",
+      "acceptance": "Supported actions auto-update positions; ambiguous links remain pending; actual and simulated counterfactual outcomes never merge.",
+      "status_evidence": []
+    },
+    {
+      "id": "B8",
+      "title": "Evaluate and promote model versions",
+      "status": "TODO",
+      "depends_on": [
+        "B4",
+        "B5",
+        "B7"
+      ],
+      "existing_task_references": [
+        "M2-04",
+        "M3-03",
+        "M4-02"
+      ],
+      "work": "Generate reproducible prediction and policy reports, prospective comparisons and held-out candidate-versus-active checks with rollback. Evaluate automatically trained candidates on forward windows while preserving an untouched final test and preventing repeated holdout-selection leakage.",
+      "acceptance": "Scheduled retraining is automatic, recorded and independent of user activity; model promotion requires declared evaluation gates and a versioned record; model lineage, uncertainty and separate spot/LP qualification remain visible; existing timed gates remain honest.",
+      "status_evidence": []
+    },
+    {
+      "id": "B9",
+      "title": "Package Windows/WSL2 laboratory and watcher",
+      "status": "TODO",
+      "depends_on": [
+        "B2",
+        "B4",
+        "B6",
+        "B7"
+      ],
+      "existing_task_references": [
+        "M1-07"
+      ],
+      "work": "Provide install/run/train/evaluate commands, durable storage, startup/recovery, resource limits and consistent backup/restore. Supervise durable observation, label-maturation, training and evaluation queues continuously with restart catch-up and explicit outage accounting.",
+      "acceptance": "Fresh PC setup and interrupted training/collection resume are verified; heavier training does not starve ingestion; no wallet secrets required. Exercise a zero-user-trade period with automatic observation-to-label-to-training-to-evaluation progress; separate scheduling fixtures from real elapsed-time evidence.",
+      "status_evidence": []
+    },
+    {
+      "id": "B10",
+      "title": "Accept manual-execution brain product",
+      "status": "TODO",
+      "depends_on": [
+        "B8",
+        "B9"
+      ],
+      "existing_task_references": [
+        "M4-05"
+      ],
+      "work": "Demonstrate real-connectome signals, user-controlled execution, verified feedback and measured retraining in one reproducible release.",
+      "acceptance": "Report research/qualified status independently for spot, LP and feedback; missing live demonstrations or timed evidence remain open; no signing or automatic transactions. Demonstrate the learning cycle continuing without personal trades; failed candidate evaluation preserves the active model.",
+      "status_evidence": []
+    }
+  ],
+  "dependency_note": "B dependencies govern this product track. Existing M references identify reusable work and capability acceptance gates, not a requirement to delay offline brain experiments until all M phases finish. No existing task is marked complete by this plan.",
+  "continuous_learning_requirement": "Operate observation, label maturation, scheduled candidate training and evaluation 24/7 independently of personal trading activity, subject to data availability and resource budgets. Promotion is evaluated and versioned; no self-generated truth labels or fabricated uptime.",
+  "implementation_model_id": "gpt-5.6-luna",
+  "reasoning_effort": "xhigh",
+  "execution_plan": "docs/luna-build-loops.json"
+}

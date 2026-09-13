@@ -29,7 +29,7 @@ from willfly.domain import RawEvent
 from willfly.ingest.backfill import BackfillCheckpointStore, BackfillError, backfill_range
 from willfly.ingest.capture import capture_once
 from willfly.ingest.supervisor import redact_error
-from willfly.storage.raw import BlockHeader, RawBatchStore
+from willfly.storage.raw import AncestryAnchor, BlockHeader, RawBatchStore
 
 Clock = Callable[[], str]
 
@@ -184,12 +184,70 @@ def _rebind_header_context(events: Sequence[RawEvent], headers: Sequence[BlockHe
     return tuple(rebound)
 
 
-def _reconcile_if_tipped(store: RawBatchStore, *, source: str, headers: Sequence[BlockHeader], tip_block: int) -> str | None:
+def _reconcile_if_tipped(
+    store: RawBatchStore,
+    *,
+    source: str,
+    headers: Sequence[BlockHeader],
+    tip_block: int,
+    chain_id: int,
+    config_identity: str,
+) -> tuple[str | None, str]:
     tip = next((header for header in headers if header.number == tip_block), None)
     if tip is None:
+        return None, "unavailable"
+    result = store.rebuild_canonical_projection(
+        source=source,
+        tip_hash=tip.block_hash,
+        chain_id=chain_id,
+        config_identity=config_identity,
+    )
+    return tip.block_hash, result.anchor_state
+
+
+def _validate_anchor_source(anchor: AncestryAnchor, source_key: str) -> None:
+    """Refuse to bind an anchor to a different source/config namespace."""
+
+    if anchor.source != source_key:
+        raise ValueError("anchor source does not match the capture namespace")
+
+
+def _qualify_genesis_anchor(
+    store: RawBatchStore,
+    *,
+    source: str,
+    chain_id: int,
+    config_identity: str,
+    headers: Sequence[BlockHeader],
+    run_id: str,
+    clock: Clock | None,
+) -> AncestryAnchor | None:
+    """Auto-qualify a genesis anchor only when block 0 is present in the window.
+
+    A window that does not begin at genesis has no chain-verifiable root here, so
+    this returns the existing anchor (if any) without inventing one from an
+    arbitrary oldest header.
+    """
+
+    existing = store.get_ancestry_anchor(source)
+    if existing is not None:
+        return existing
+    genesis = next((header for header in headers if header.number == 0), None)
+    if genesis is None or genesis.parent_hash is not None:
         return None
-    store.rebuild_canonical_projection(source=source, tip_hash=tip.block_hash)
-    return tip.block_hash
+    now = (clock or (lambda: datetime.now(timezone.utc).isoformat()))()
+    anchor = AncestryAnchor(
+        chain_id=chain_id,
+        height=0,
+        block_hash=genesis.block_hash,
+        qualification="genesis",
+        evidence=(f"genesis header captured in run {run_id}",),
+        config_identity=config_identity,
+        source=source,
+        recorded_at=now,
+    )
+    store.save_ancestry_anchor(anchor)
+    return anchor
 
 
 def capture_to_store(
@@ -206,6 +264,7 @@ def capture_to_store(
     abi_hashes: Sequence[str] = (),
     event_families: Sequence[str] = (),
     provider_endpoint: str = "",
+    anchor: AncestryAnchor | None = None,
     clock: Clock | None = None,
 ) -> RunManifest:
     """Execute one bounded capture and persist it durably."""
@@ -220,11 +279,24 @@ def capture_to_store(
         chain_id=chain_id, addresses=addresses, abi_hashes=abi_hashes, event_families=event_families
     )
     source_key = checkpoint_source(base_source, chain_id, filt_hash)
+    config_identity = config_hash or filt_hash
+    if anchor is not None:
+        _validate_anchor_source(anchor, source_key)
+        store.save_ancestry_anchor(anchor)
     result = capture_once(
         client, addresses=addresses, from_block=from_block, to_block=to_block, run_id=run_id, clock=clock
     )
     headers, header_gaps, header_errors = _capture_headers(client, from_block=from_block, to_block=result.to_block)
     store.persist_headers(headers)
+    _qualify_genesis_anchor(
+        store,
+        source=source_key,
+        chain_id=chain_id,
+        config_identity=config_identity,
+        headers=headers,
+        run_id=run_id,
+        clock=clock,
+    )
     store.record_header_range(
         source=source_key,
         range_start=from_block,
@@ -276,8 +348,16 @@ def capture_to_store(
         acknowledged = (from_block, result.to_block)
         event_count = 0
         empty = True
-    tip_hash = _reconcile_if_tipped(store, source=source_key, headers=headers, tip_block=result.to_block)
+    tip_hash, anchor_state = _reconcile_if_tipped(
+        store,
+        source=source_key,
+        headers=headers,
+        tip_block=result.to_block,
+        chain_id=chain_id,
+        config_identity=config_identity,
+    )
     header_evidence["canonical_tip_hash"] = tip_hash
+    header_evidence["ancestry_anchor_state"] = anchor_state
     finished = now()
     manifest = RunManifest(
         run_id=run_id,
@@ -320,6 +400,7 @@ def backfill_to_store(
     provider_endpoint: str = "",
     page_size: int = 2000,
     checkpoint_store: BackfillCheckpointStore | None = None,
+    anchor: AncestryAnchor | None = None,
     clock: Clock | None = None,
 ) -> RunManifest:
     """Stream a bounded backfill to durable batches without retaining history."""
@@ -338,6 +419,10 @@ def backfill_to_store(
         chain_id=chain_id, addresses=address_list, abi_hashes=abi_hashes, event_families=event_families
     )
     source_key = checkpoint_source(base_source, chain_id, filt_hash)
+    config_identity = config_hash or filt_hash
+    if anchor is not None:
+        _validate_anchor_source(anchor, source_key)
+        store.save_ancestry_anchor(anchor)
     batch_ids: list[str] = []
     covered: list[tuple[int, int]] = []
     total_events = 0
@@ -407,13 +492,21 @@ def backfill_to_store(
         retain_events=False,
         expected_filter_hash=filt_hash,
     )
-    canonical_tip = _reconcile_if_tipped(store, source=source_key, headers=all_headers, tip_block=target_block)
+    canonical_tip, anchor_state = _reconcile_if_tipped(
+        store,
+        source=source_key,
+        headers=all_headers,
+        tip_block=target_block,
+        chain_id=chain_id,
+        config_identity=config_identity,
+    )
     header_evidence = {
         "chain_id": chain_id,
         "covered_ranges": [list(r) for r in covered or result.ranges],
         "header_count": len(all_headers),
         "header_gaps": sorted(set(header_gaps)),
         "canonical_tip_hash": canonical_tip,
+        "ancestry_anchor_state": anchor_state,
     }
     acknowledged = (start_block, result.next_block - 1) if result.next_block > start_block else None
     empty = total_events == 0

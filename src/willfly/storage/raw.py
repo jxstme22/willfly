@@ -48,6 +48,89 @@ class BlockHeader:
             raise ValueError("block header parent_known must be boolean")
 
 
+#: Qualifications accepted for a persisted ancestry anchor, ordered from
+#: strongest to weakest. ``operator_declared_unverified`` is deliberately named
+#: so it cannot be mistaken for chain-verified evidence.
+ANCHOR_QUALIFICATIONS = (
+    "genesis",
+    "runtime_code_match",
+    "deployment_receipt_match",
+    "independent_header_cross_check",
+    "operator_declared_unverified",
+)
+#: Anchor states that must invalidate or degrade a projection explicitly.
+UNSATISFIED_ANCHOR_STATES = (
+    "unavailable",
+    "mismatch",
+    "boundary_crossed",
+    "nonconsecutive",
+    "config_mismatch",
+)
+
+
+@dataclass(frozen=True)
+class AncestryAnchor:
+    """A declared, source-verified starting boundary for bounded ancestry.
+
+    The oldest stored header in a bounded live window is not a trusted root. An
+    anchor records exactly which block at which height the operator is willing to
+    trust as the start of canonical history, together with the evidence that
+    justifies that trust and the configuration identity it applies to.
+    """
+
+    chain_id: int
+    height: int
+    block_hash: str
+    qualification: str
+    evidence: tuple[str, ...]
+    config_identity: str
+    source: str
+    recorded_at: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.chain_id, int) or isinstance(self.chain_id, bool) or self.chain_id <= 0:
+            raise ValueError("anchor chain_id must be a positive integer")
+        if not isinstance(self.height, int) or isinstance(self.height, bool) or self.height < 0:
+            raise ValueError("anchor height must be a non-negative integer")
+        _validate_hash(self.block_hash, "anchor block hash")
+        if self.qualification not in ANCHOR_QUALIFICATIONS:
+            raise ValueError("unsupported anchor qualification")
+        if not self.evidence or not all(isinstance(item, str) and item for item in self.evidence):
+            raise ValueError("anchor requires non-empty qualification evidence")
+        if not isinstance(self.config_identity, str) or not self.config_identity:
+            raise ValueError("anchor requires a configuration identity")
+        if not isinstance(self.source, str) or not self.source:
+            raise ValueError("anchor requires a source identity")
+        parsed = datetime.fromisoformat(self.recorded_at.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError("anchor recorded_at must include a timezone")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "chain_id": self.chain_id,
+            "height": self.height,
+            "block_hash": self.block_hash,
+            "qualification": self.qualification,
+            "evidence": list(self.evidence),
+            "config_identity": self.config_identity,
+            "source": self.source,
+            "recorded_at": self.recorded_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, object]) -> "AncestryAnchor":
+        return cls(
+            chain_id=int(data["chain_id"]),
+            height=int(data["height"]),
+            block_hash=str(data["block_hash"]),
+            qualification=str(data["qualification"]),
+            evidence=tuple(str(item) for item in data["evidence"]),
+            config_identity=str(data["config_identity"]),
+            source=str(data["source"]),
+            recorded_at=str(data["recorded_at"]),
+        )
+
+
 @dataclass(frozen=True)
 class StoredBatch:
     batch_id: str
@@ -161,6 +244,7 @@ class RawBatchStore:
                 last_block_hash TEXT,
                 state TEXT NOT NULL,
                 missing_parent_hashes TEXT NOT NULL,
+                anchor_state TEXT NOT NULL DEFAULT 'unavailable',
                 updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS observatory_snapshots (
@@ -174,11 +258,26 @@ class RawBatchStore:
             );
             CREATE INDEX IF NOT EXISTS observatory_snapshots_source_idx
                 ON observatory_snapshots(source, snapshot_type, as_of_time, created_at);
+            CREATE TABLE IF NOT EXISTS ancestry_anchors (
+                source TEXT PRIMARY KEY,
+                chain_id INTEGER NOT NULL,
+                height INTEGER NOT NULL,
+                block_hash TEXT NOT NULL,
+                qualification TEXT NOT NULL,
+                evidence_json TEXT NOT NULL,
+                config_identity TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
             """
         )
         header_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(block_headers)").fetchall()}
         if "parent_known" not in header_columns:
             self._connection.execute("ALTER TABLE block_headers ADD COLUMN parent_known INTEGER NOT NULL DEFAULT 1")
+        checkpoint_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(canonical_checkpoints)").fetchall()}
+        if "anchor_state" not in checkpoint_columns:
+            self._connection.execute(
+                "ALTER TABLE canonical_checkpoints ADD COLUMN anchor_state TEXT NOT NULL DEFAULT 'unavailable'"
+            )
         self._connection.commit()
 
     @staticmethod
@@ -367,6 +466,59 @@ class RawBatchStore:
             return None
         return BlockHeader(row["block_number"], row["block_hash"], row["parent_hash"], row["block_timestamp"], bool(row["parent_known"]))
 
+    def save_ancestry_anchor(self, anchor: AncestryAnchor) -> AncestryAnchor:
+        """Persist one source's declared ancestry anchor.
+
+        Re-recording an identical anchor is idempotent. A conflicting anchor for
+        the same source (different height/hash/chain/qualification/config) is
+        refused rather than silently replacing trusted lineage evidence.
+        """
+
+        if not isinstance(anchor, AncestryAnchor):
+            raise TypeError("anchor must be an AncestryAnchor")
+        existing = self.get_ancestry_anchor(anchor.source)
+        if existing is not None:
+            if existing.to_dict() != anchor.to_dict():
+                raise ValueError("conflicting ancestry anchor already stored for this source")
+            return existing
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO ancestry_anchors(source, chain_id, height, block_hash, qualification, evidence_json, config_identity, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    anchor.source,
+                    anchor.chain_id,
+                    anchor.height,
+                    anchor.block_hash,
+                    anchor.qualification,
+                    json.dumps(list(anchor.evidence)),
+                    anchor.config_identity,
+                    anchor.recorded_at,
+                ),
+            )
+        return anchor
+
+    def get_ancestry_anchor(self, source: str) -> AncestryAnchor | None:
+        row = self._connection.execute("SELECT * FROM ancestry_anchors WHERE source = ?", (source,)).fetchone()
+        if row is None:
+            return None
+        return AncestryAnchor(
+            chain_id=row["chain_id"],
+            height=row["height"],
+            block_hash=row["block_hash"],
+            qualification=row["qualification"],
+            evidence=tuple(str(item) for item in json.loads(row["evidence_json"])),
+            config_identity=row["config_identity"],
+            source=row["source"],
+            recorded_at=row["recorded_at"],
+        )
+
+    def list_ancestry_anchors(self) -> list[AncestryAnchor]:
+        rows = self._connection.execute("SELECT source FROM ancestry_anchors ORDER BY source").fetchall()
+        return [anchor for row in rows if (anchor := self.get_ancestry_anchor(row["source"])) is not None]
+
     def record_header_range(
         self,
         *,
@@ -412,22 +564,35 @@ class RawBatchStore:
     def events_for_source(self, source: str) -> tuple[RawEvent, ...]:
         return tuple(event for batch in self.list_batches(source=source) for event in self.read(batch.batch_id))
 
-    def rebuild_canonical_projection(self, *, source: str, tip_hash: str, confirmations: int = 0):
+    def rebuild_canonical_projection(
+        self,
+        *,
+        source: str,
+        tip_hash: str,
+        confirmations: int = 0,
+        chain_id: int | None = None,
+        config_identity: str | None = None,
+    ):
         """Atomically replace a source's derived fork projection from raw evidence.
 
         Raw batches remain append-only. The derived rows and canonical
         checkpoint change together, so a restart never observes a half-applied
-        fork repair.
+        fork repair. A persisted, source-verified ancestry anchor is used when
+        available so a bounded window can resolve without fetching to genesis.
         """
 
         # Import lazily to keep storage independent at module import time.
         from willfly.ingest.canonicalize import canonicalize_events
 
+        anchor = self.get_ancestry_anchor(source)
         result = canonicalize_events(
             self.events_for_source(source),
             tip_hash=tip_hash,
             headers=self.list_headers(),
             confirmations=confirmations,
+            anchor=anchor,
+            expected_chain_id=chain_id,
+            expected_config_identity=config_identity,
         )
         states = [
             *((event, "canonical") for event in result.canonical_events),
@@ -459,14 +624,15 @@ class RawBatchStore:
             resolved = result.is_resolved and tip is not None
             self._connection.execute(
                 """
-                INSERT INTO canonical_checkpoints(source, tip_hash, last_block_number, last_block_hash, state, missing_parent_hashes, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO canonical_checkpoints(source, tip_hash, last_block_number, last_block_hash, state, missing_parent_hashes, anchor_state, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(source) DO UPDATE SET
                     tip_hash = excluded.tip_hash,
                     last_block_number = excluded.last_block_number,
                     last_block_hash = excluded.last_block_hash,
                     state = excluded.state,
                     missing_parent_hashes = excluded.missing_parent_hashes,
+                    anchor_state = excluded.anchor_state,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -476,6 +642,7 @@ class RawBatchStore:
                     tip.block_hash if resolved else None,
                     "canonical" if resolved else "unresolved",
                     json.dumps(result.missing_parent_hashes),
+                    result.anchor_state,
                     now,
                 ),
             )

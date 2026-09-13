@@ -548,3 +548,25 @@ Recorded an additional M1-03 acceptance issue: finite parent walks remain unreso
 Preserved all inherited implementation changes. Verification: managed-sandbox suite 120 passed / 1 skipped; targeted permitted localhost HTTP test passed, so all 121 tests were exercised successfully across the two runs. Both planning catalogues validate; compileall and diff whitespace checks pass. Changed-file credential-pattern scan found no matches (not a comprehensive security audit). Live RPC samples were not rerun during this documentation/checkpoint batch.
 
 DeepSeek has not been launched by this task: available Codex model controls do not expose it. Terra remains paused; use a single external implementation writer with the new handoff. Checkpoint publication records code and open gates, not Observatory acceptance.
+
+
+## 2026-09-13 — Main product: brain signals and manual execution
+
+Recorded the user's explicit product priority in docs/brain-signal-product.md and docs/brain-product-tasks.json (B0–B10). The next track brings real-connectome training forward after the current DeepSeek batch, adds spot/LP/exit signals, public-wallet/position feedback, historical and external-wallet data, and evaluated model promotion on the Windows/WSL2 PC. Linked this priority from README, project direction and the roadmap. Existing M statuses and timed/economic gates are unchanged. This is a product/planning update, not implemented model or execution functionality. Active implementation changes in ingest/storage were left untouched.
+
+
+## 2026-09-13 — Continuous learning independent of personal trades
+
+Added the user's explicit 24/7 learning requirement to the brain product brief, B-track JSON v1.1, README, project direction and roadmap. Expanded B3/B4/B6/B8/B9/B10 acceptance to cover durable label maturation, automatic resource-bounded candidate training from external-wallet/market evidence and historical replay, truthful waiting/outage states, forward evaluation, versioned promotion and a zero-personal-trade learning demonstration. Observation is continuous while infrastructure is available; training cycles need qualified evidence and do not silently alter the active model. This documents required future behavior, not a running service or scheduled Codex automation. Active implementation files were not edited.
+
+
+## 2026-09-13 — Luna Extra High post-DeepSeek sequence
+
+User authorized continued build loops after DeepSeek finishes, with a coordinator audit first, Luna repairs, independent repair verification, then remaining in-scope phases. Prepared docs/luna-extra-high-handoff.md and docs/luna-build-loops.json (G0–G5); set the B-track model to gpt-5.6-luna/xhigh and linked current product authorities. DeepSeek's active M-catalogue preference/statuses and source edits were left intact. The final audit report is a future output, not a fabricated present finding. No Luna dispatch, goal execution, external-model completion watcher or funded scope was started.
+
+
+## 2026-09-13 — Interrupted DeepSeek checkpoint audit and Luna takeover
+
+User reports DeepSeek exhausted its limit during M1-03 and authorizes Luna Extra High takeover. Independently audited all six changed implementation/test files against f39bf5b. Added docs/reports/deepseek-completion-audit.md, input file hashes and executable diagnostic probes. Reproduced unverified/false-genesis/unreached anchors resolving, outside-window events falsely orphaned, invalid-config persistence blocking corrected retry, capture/backfill genesis inconsistency and coercive anchor import. Operator qualification CLI remains missing. Six repair findings are open.
+
+Verification: 128 passed / one skipped in sandbox; remaining localhost HTTP test passed separately (129 tests total). Planning and compileall pass; diff-check fails on an extra EOF blank line and is explicitly assigned to Luna. Preserved source edits; this is a known-incomplete checkpoint, not accepted M1-03. Updated model ownership to gpt-5.6-luna/xhigh. Existing task Implement Luna build plan is idle and will receive the repair-stage prompt; coordinator recheck gates subsequent feature loops.

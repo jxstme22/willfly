@@ -1,0 +1,12 @@
+{
+  "base_commit": "f39bf5b43f5723f7d15264597588f0ec71dfe8f2",
+  "files": {
+    "src/willfly/ingest/canonicalize.py": "438d18f6ae97c0ee35c7decf76a5c61bf7e0bd1eaeeb9854bfa5e15b84565430",
+    "src/willfly/ingest/runner.py": "5f4e2cb686464f2b860a34192358f46bdd217a61c990999b5d6c864d7aed2e2b",
+    "src/willfly/storage/raw.py": "503d04ccb66d50e7ec8255ed5493597bb0d4a7d47520e42474b516e053a10122",
+    "src/willfly/storage/__init__.py": "f874a13c50eb8607b7c142972c0c428b03e051b518e4996dd0d8c269397fe905",
+    "tests/test_canonicalize.py": "3b6345080ee1c32d410f3fc638f945ac8115d11734f54e0c1653fe86c3862ba1",
+    "tests/test_header_reconciliation.py": "54be80cef486b92689c2e850398de988bac4b257c7695a5ec626a5f82d62b32a"
+  },
+  "note": "Interrupted DeepSeek M1-03 input, before Luna repairs. Hashes identify the audited snapshot, not acceptance."
+}

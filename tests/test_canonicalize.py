@@ -2,7 +2,20 @@ import pytest
 
 from willfly.domain import RawEvent
 from willfly.ingest.canonicalize import CanonicalizationError, canonicalize_events
-from willfly.storage import BlockHeader
+from willfly.storage import AncestryAnchor, BlockHeader
+
+
+def _anchor(height: int, block_hash: str, *, chain_id: int = 4663) -> AncestryAnchor:
+    return AncestryAnchor(
+        chain_id=chain_id,
+        height=height,
+        block_hash=block_hash,
+        qualification="independent_header_cross_check",
+        evidence=("fixture: cross-checked header",),
+        config_identity="fixture-config",
+        source="capture:4663:fixture",
+        recorded_at="2026-09-13T00:00:00Z",
+    )
 
 
 def _event(number: int, block_hash: str, parent_hash: str | None, index: int, status: str = "provisional") -> RawEvent:
@@ -43,6 +56,7 @@ def test_multi_block_fork_promotes_tip_chain_and_retains_orphans():
         tip_hash=b3,
         headers=[BlockHeader(100, a1, None)],
         confirmations=1,
+        anchor=_anchor(100, a1),
     )
     assert [event.block_hash for event in result.canonical_events] == [a1, b2, b3]
     assert [event.block_hash for event in result.orphaned_events] == [a2, a3]
@@ -50,6 +64,8 @@ def test_multi_block_fork_promotes_tip_chain_and_retains_orphans():
     assert [event.block_hash for event in result.confirmed_events] == [a1, b2]
     assert [event.block_hash for event in result.provisional_events] == [b3]
     assert result.missing_parent_hashes == ()
+    assert result.anchor_state == "qualified"
+    assert result.is_resolved is True
 
 
 def test_missing_parent_and_quarantine_are_explicit():

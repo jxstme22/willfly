@@ -1,0 +1,117 @@
+{
+  "title": "Post-DeepSeek audit, repair and Luna build loops",
+  "version": "1.0",
+  "status": "AUDIT_COMPLETE_READY_FOR_LUNA_REPAIRS",
+  "model": {
+    "id": "gpt-5.6-luna",
+    "reasoning_effort": "xhigh",
+    "user_label": "Luna Extra High"
+  },
+  "handoff": "docs/luna-extra-high-handoff.md",
+  "authorities": [
+    "docs/brain-signal-product.md",
+    "docs/brain-product-tasks.json",
+    "docs/next-build-tasks.json",
+    "docs/reports/astra-deep-audit.md"
+  ],
+  "start_conditions": [
+    "User reports DeepSeek stopped at usage limit; interrupted M1-03 checkpoint has been audited and preserved.",
+    "Coordinator records final Git commit or exact diff and independently audits implementation and evidence.",
+    "Luna repair scope is derived from that audit; no overlapping implementation writer."
+  ],
+  "audit": {
+    "status": "COMPLETE_WITH_OPEN_FINDINGS",
+    "report": "docs/reports/deepseek-completion-audit.md",
+    "scope": [
+      "Ancestry-anchor qualification, chain/config binding, consecutive heights, deep-fork invalidation and restart recovery.",
+      "Durable capture, quiet blocks, failure checkpoints, receipt attribution, immutable causal snapshots and exact export round trip.",
+      "Real-data terminal UI interactions, stale/error states, evidence, injection resistance and fresh-process/browser behavior.",
+      "Coverage evidence and elapsed-time gates; no self-certified recall or silently skipped integration acceptance.",
+      "Changes outside the intended batch, regressions, dependency/security implications and discrepancies between code and reported completion."
+    ],
+    "finding_contract": [
+      "id",
+      "severity",
+      "file_and_line",
+      "reproduction",
+      "impact",
+      "required_fix",
+      "acceptance_check",
+      "status"
+    ]
+  },
+  "goals": [
+    {
+      "id": "G0",
+      "goal": "Audit and repair DeepSeek checkpoint",
+      "tasks": [],
+      "done_when": "Every release-blocking finding is fixed and independently rechecked; any deferred finding has an explicit affected-capability gate. A passing suite alone is insufficient."
+    },
+    {
+      "id": "G1",
+      "goal": "Run an actual connectome model and reproducible local training",
+      "tasks": [
+        "B0",
+        "B1",
+        "B3",
+        "B4"
+      ],
+      "done_when": "Verified biological graph drives reproducible trained predictions and matched controls; held-out report and measured PC resource requirements exist. Reuse B2 data work as its dependency requires."
+    },
+    {
+      "id": "G2",
+      "goal": "Observe wallets and learn continuously without user trades",
+      "tasks": [
+        "B2",
+        "B3",
+        "B4",
+        "B9"
+      ],
+      "done_when": "Durable observation, mature labels, automatic candidate training/evaluation and restart recovery work during a zero-personal-trade interval, with honest wait/outage states."
+    },
+    {
+      "id": "G3",
+      "goal": "Deliver entry, LP and exit signals with manual feedback",
+      "tasks": [
+        "B5",
+        "B6",
+        "B7"
+      ],
+      "done_when": "Versioned brain proposals, supported position accounting, manual transaction linkage and outcome feedback integrate; research-only versus qualified spot/LP status is explicit."
+    },
+    {
+      "id": "G4",
+      "goal": "Evaluate, version and accept the brain product",
+      "tasks": [
+        "B8",
+        "B9",
+        "B10"
+      ],
+      "done_when": "Forward evaluation, controlled promotion/rollback, Windows/WSL2 packaging and a reproducible manual-execution feedback demonstration meet acceptance."
+    },
+    {
+      "id": "G5",
+      "goal": "Close remaining authorized roadmap acceptance",
+      "tasks": [],
+      "done_when": "Reconcile all 26 next-build tasks and 77 original tasks against actual evidence, completing remaining in-scope engineering and real observation gates. Unsupported/conditional/external items stay explicitly open or conditional; no new signing scope is inferred."
+    }
+  ],
+  "loop": [
+    "Select a concrete dependency-ready slice from the B and mapped M tasks; bring biological experiments forward.",
+    "Declare objective, target files, acceptance evidence and applicable gates.",
+    "Implement or repair the slice while preserving others work.",
+    "Run focused meaningful checks and required integration/browser tests; investigate failures.",
+    "Update JSON/evidence/logs and validate planning; preserve independent review boundaries.",
+    "Checkpoint verified changes and push to the existing private repo under standing authorization, excluding unrelated work and secrets; record CI separately.",
+    "Continue the next ready slice without a routine permission prompt; checkpoint genuine external blockers and continue independent work."
+  ],
+  "rules": [
+    "Goal groups overlap intentionally; task dependencies determine execution order.",
+    "No automatic extra agents/tasks or model changes.",
+    "No model promotion from training completion alone; no fabricated time, data, test results, profitability or biological advantage.",
+    "No automatic trading, signing, funding, paid subscriptions or source-access bypass in this version.",
+    "Timed gates require actual evidence and appropriate running infrastructure; software completion is not measured acceptance.",
+    "If usage/session limits interrupt a loop, leave a precise resumable checkpoint; do not imply background continuation has been scheduled."
+  ],
+  "last_verified_state": "Interrupted M1-03 delta independently audited: DS-01 through DS-06 require repair. 128 tests plus separate localhost test pass; whitespace check fails as documented. Luna dispatch pending."
+}

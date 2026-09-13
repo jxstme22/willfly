@@ -1,6 +1,14 @@
-# Next build roadmap — DeepSeek V4.1 Flash continuation
+# Next build roadmap — Luna Extra High continuation
 
 Version 2.0 | 13 September 2026 | Based on the Astra implementation audit
+
+## Post-DeepSeek builder
+
+The user selected **GPT Luna Extra High** (`gpt-5.6-luna`, `xhigh`) to carry the next build loops through the authorized roadmap. Activation requires DeepSeek completion, an independent coordinator audit, Luna repairs and independent repair verification. See the [staged handoff](luna-extra-high-handoff.md) and [G0–G5 execution plan](luna-build-loops.json). The user has now reported DeepSeek stopped at its usage limit; the interrupted M1-03 audit is complete with six findings. Luna takes over repairs before feature loops. B-track goals lead product sequencing; existing M acceptance remains evidence-based.
+
+## Product-priority amendment
+
+After the current DeepSeek batch, follow the [brain/manual-execution product definition](brain-signal-product.md) and [B0–B10 JSON track](brain-product-tasks.json). It brings verified biological-model training forward and adds a signal inbox, public-wallet/position feedback, historical and external-wallet datasets, and controlled retraining on Windows/WSL2. The B track requires continuous observation, outcome maturation, automatic candidate training and evaluation even with zero personal trades; data/resource limits and promotion gates remain explicit. Generic monitoring expansion is secondary. Existing M tasks remain reusable acceptance work; no statuses or timed gates are waived. The phase table below retains the earlier engineering estimates, not a requirement to finish all M2/M3 work before an offline brain experiment.
 
 ## Starting decision
 
@@ -53,7 +61,7 @@ Prefer typed stable interfaces and small integration slices over replacing the r
 
 ## Economic and scientific rules
 
-The ordinary spot laboratory comes before the fly-derived experiment. Define follower outcomes at our received-signal time plus processing/execution delay. Select cohorts only from prior information and model inventory recovered at exit. Validate each quote path against deployed protocol behavior; the current constant-product simulator is a toy comparator, not a V4 execution oracle.
+Actual connectome loading and offline training now proceed in the B track alongside the data work. Validated ordinary comparisons and spot/LP accounting remain prerequisites for claims that the biological model improves financial decisions. Define follower outcomes at our received-signal time plus processing/execution delay. Select cohorts only from prior information and model inventory recovered at exit. Validate each quote path against deployed protocol behavior; the current constant-product simulator is a toy comparator, not a V4 execution oracle.
 
 The original simulation defaults ($100/$500/$1,000, 5% entries, at most three positions, no leverage) are research controls. Freeze or revise them with a calibration sample before holdout use. Measure portfolio net return, drawdown, failed exits, exposure, costs and uncertainty; do not substitute win rate or summed episode returns.
 

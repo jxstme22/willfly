@@ -2,6 +2,10 @@
 
 Updated: 13 September 2026. This document records the user's decisions and research already discussed. No new research was required to make this update.
 
+## Current product priority
+
+The user's confirmed main product is **brain signals → manual execution → automatic observation → verified learning**, covering coin entries, LP proposals and exits, and learning from the user's wallet, other-wallet cohorts and historical trades. See the [product definition](brain-signal-product.md) and [JSON plan](brain-product-tasks.json). The following build track brings a real-connectome laboratory forward after DeepSeek's current batch; the Observatory supplies evidence rather than becoming the main product. The learning service runs 24/7 independently of personal trades, using external-wallet/market outcomes and historical replay with evaluated model promotion. No signing or automated funded execution is in this version. Earlier phase-order statements below are historical where they conflict with this priority.
+
 ## Objective and scope
 
 Build toward an adaptive agent that discovers and evaluates early crypto opportunities. Start with Robinhood Chain, new token launches, new pairs and memecoins. Spot trading is the initial decision task; selective LP is a distinct candidate action whose economics must be evaluated. Waiting and exiting are first-class actions. Later expansion should reuse data contracts and evaluation while adding chain-specific discovery and execution adapters.
