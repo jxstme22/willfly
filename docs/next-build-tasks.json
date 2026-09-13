@@ -450,6 +450,7 @@
       "verification": "Clean-process experiment command, fixture oracle, chronological held-out run and complete cost/latency/sizing report.",
       "status_evidence": [
         "docs/m2-baseline-laboratory.md",
+        "docs/releases/trading-laboratory.md",
         "src/willfly/evaluation/baseline_lab.py",
         "src/willfly/policies/baselines.py",
         "src/willfly/models/conventional.py",
@@ -758,7 +759,7 @@
       "id": "M5-03",
       "phase": "M5",
       "title": "Publish the next research decision",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M3-03",
@@ -774,7 +775,11 @@
       "work": "Summarize operator reliability, baseline/neural comparisons, costs, uncertainty and optional-source limits. Include LP only if M5-02 passes; otherwise state disabled. Recommend further research, revision or separately scoped funded planning.",
       "acceptance": "A reproducible release report records go/revise/inconclusive per capability and names unresolved findings. No automatic funding, scaling or strategy self-modification is enabled.",
       "verification": "Verify release manifest against captured runs and task evidence; publish separate acceptance records for data, inference and economic claims.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/releases/research-decision.md",
+        "docs/releases/trading-laboratory.md",
+        "docs/next-build-tasks.json"
+      ]
     }
   ]
 }

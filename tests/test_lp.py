@@ -1,4 +1,4 @@
-from willfly.evaluation.lp_stress import LPStressScenario, stress_lp_scenarios
+from willfly.evaluation.lp_stress import LPModeCase, LPStressScenario, compare_lp_modes, stress_lp_scenarios
 from willfly.policies.lp_baselines import fixed_wide_range, idle_lp, volatility_range
 from willfly.policies.mode_selection import ModeCandidate, select_mode
 from willfly.replay.lp_execution import LPEvent, replay_lp_lifecycle
@@ -60,6 +60,20 @@ def test_lp_owner_and_position_identity_are_checked():
     )
     assert result.failed_actions == ("bad-owner",)
     assert result.fees_paid_atomic == {"TOKEN0": 2, "TOKEN1": 3}
+
+
+def test_lp_mode_comparison_keeps_unverified_lp_out_of_shared_capital_metrics():
+    cases = tuple(
+        LPModeCase(f"case-{index}", f"block-{index}", f"2026-01-01T00:0{index}:00Z", 100, 200)
+        for index in range(4)
+    )
+    disabled = compare_lp_modes(cases, capital_atomic=100_000, lp_evidence_state="inconclusive")
+    assert disabled.mutually_exclusive is True
+    assert disabled.lp is None
+    assert disabled.reasons == ("lp_disabled_until_verified_evidence",)
+    enabled = compare_lp_modes(cases, capital_atomic=100_000, lp_evidence_state="verified")
+    assert enabled.lp is not None
+    assert enabled.lp.max_drawdown_bps == 0
 
 
 def test_lp_policies_and_mode_selection_never_double_allocate():

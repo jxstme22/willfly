@@ -216,7 +216,7 @@ Compare idle, confirmation, verified flow and causal follower rules under one le
 
 **Done when:** Independent rerun reproduces observations, ledgers and metrics across all declared windows; report no edge or inconclusive honestly. Baseline choice cannot be selected using final neural holdout.
 
-**Evidence:** docs/m2-baseline-laboratory.md; src/willfly/evaluation/baseline_lab.py; src/willfly/policies/baselines.py; src/willfly/models/conventional.py; tests/test_baselines.py
+**Evidence:** docs/m2-baseline-laboratory.md; docs/releases/trading-laboratory.md; src/willfly/evaluation/baseline_lab.py; src/willfly/policies/baselines.py; src/willfly/models/conventional.py; tests/test_baselines.py
 
 **Verification:** Clean-process experiment command, fixture oracle, chronological held-out run and complete cost/latency/sizing report.
 
@@ -366,12 +366,14 @@ Compare spot, idle and restricted LP ranges under the same numeraire, execution 
 
 ### M5-03 - Publish the next research decision
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M3-03, M4-05
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M3-03, M4-05
 
 **Target paths:** `docs/releases/research-decision.md`, `docs/next-build-tasks.json`
 
 Summarize operator reliability, baseline/neural comparisons, costs, uncertainty and optional-source limits. Include LP only if M5-02 passes; otherwise state disabled. Recommend further research, revision or separately scoped funded planning.
 
 **Done when:** A reproducible release report records go/revise/inconclusive per capability and names unresolved findings. No automatic funding, scaling or strategy self-modification is enabled.
+
+**Evidence:** docs/releases/research-decision.md; docs/releases/trading-laboratory.md; docs/next-build-tasks.json
 
 **Verification:** Verify release manifest against captured runs and task evidence; publish separate acceptance records for data, inference and economic claims.

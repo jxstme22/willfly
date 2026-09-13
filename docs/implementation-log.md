@@ -858,6 +858,16 @@ LP stays disabled pending a verified pool family, hook behavior, observed
 position checkpoints and complete receipt/gas evidence.
 
 
+## 2026-09-14 — M5-02/M5-03 LP comparison and research decision
+
+Added a mutually exclusive spot/idle/LP comparison over one ordered case set
+and starting capital. LP reports are omitted unless pool evidence is explicitly
+verified, avoiding a false zero-return or free-capital comparison. Published
+the current research-decision draft: observatory and model mechanics continue
+as research-only, prospective and economic gates remain inconclusive, LP is
+disabled, and execution/funding remains disabled.
+
+
 ## 2026-09-14 — M4-05 hybrid attribution loop
 
 Added dataset/config identity and evidence references to factorial cells, plus a
