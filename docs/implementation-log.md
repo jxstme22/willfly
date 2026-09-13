@@ -755,3 +755,13 @@ window, while ambiguous and missing evidence remain unresolved. The read-only
 `/actions` surface exposes links without execution controls, and actual manual
 outcomes remain distinct from simulated or market outcomes. Focused linkage
 tests pass; live feedback and complete position-update acceptance remain open.
+
+
+## 2026-09-14 — B8 candidate evaluation and registry
+
+Added candidate-versus-active evaluation over paired forward windows and an
+untouched final-test partition. Evaluation hashes dataset/final-test identity,
+requires minimum window/sample evidence and records an inconclusive state when
+gates fail. A persistent model registry records evaluations, consumes a final
+test only once, guards promotion and supports rollback. Focused tests pass;
+live forward evidence, calibration, scheduling and model promotion remain open.

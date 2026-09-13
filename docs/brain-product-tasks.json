@@ -172,7 +172,7 @@
     {
       "id": "B8",
       "title": "Evaluate and promote model versions",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B4",
         "B5",
@@ -185,7 +185,11 @@
       ],
       "work": "Generate reproducible prediction and policy reports, prospective comparisons and held-out candidate-versus-active checks with rollback. Evaluate automatically trained candidates on forward windows while preserving an untouched final test and preventing repeated holdout-selection leakage.",
       "acceptance": "Scheduled retraining is automatic, recorded and independent of user activity; model promotion requires declared evaluation gates and a versioned record; model lineage, uncertainty and separate spot/LP qualification remain visible; existing timed gates remain honest.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/model-evaluation.md",
+        "src/willfly/evaluation/promotion.py",
+        "tests/test_promotion.py"
+      ]
     },
     {
       "id": "B9",

@@ -1,0 +1,70 @@
+import pytest
+
+from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
+
+
+def _points(candidate_error: float = 1.0):
+    points = []
+    for window in ("forward-1", "forward-2"):
+        for index in range(2):
+            points.append(PredictionPoint(f"{window}-{index}-c", "candidate-v2", "spot", window, "forward", f"2026-09-14T00:0{index}:00Z", 10 + candidate_error, 10, (f"market:{window}:{index}",)))
+            points.append(PredictionPoint(f"{window}-{index}-a", "active-v1", "spot", window, "forward", f"2026-09-14T00:0{index}:00Z", 14, 10, (f"market:{window}:{index}",)))
+    for index in range(2):
+        points.append(PredictionPoint(f"final-{index}-c", "candidate-v2", "spot", "final", "final_test", f"2026-09-14T01:0{index}:00Z", 10 + candidate_error, 10, (f"final:{index}",)))
+        points.append(PredictionPoint(f"final-{index}-a", "active-v1", "spot", "final", "final_test", f"2026-09-14T01:0{index}:00Z", 14, 10, (f"final:{index}",)))
+    return tuple(points)
+
+
+def test_candidate_requires_paired_forward_and_untouched_final_test() -> None:
+    report = evaluate_candidate(
+        _points(),
+        candidate_version="candidate-v2",
+        active_version="active-v1",
+        evaluated_at="2026-09-14T02:00:00Z",
+        dataset_hash="dataset-1",
+    )
+    assert report.decision == "qualified"
+    assert len(report.forward_scores) == 2
+    assert len(report.final_test_scores) == 1
+    worse = evaluate_candidate(
+        _points(candidate_error=6.0),
+        candidate_version="candidate-v2",
+        active_version="active-v1",
+        evaluated_at="2026-09-14T02:00:00Z",
+        dataset_hash="dataset-1",
+    )
+    assert worse.decision == "inconclusive"
+    assert "candidate_forward_gate_not_met" in worse.reasons
+
+
+def test_registry_consumes_final_test_and_records_promotion_rollback(tmp_path) -> None:
+    report = evaluate_candidate(
+        _points(),
+        candidate_version="candidate-v2",
+        active_version="active-v1",
+        evaluated_at="2026-09-14T02:00:00Z",
+        dataset_hash="dataset-1",
+    )
+    path = tmp_path / "models.sqlite3"
+    with ModelRegistry(path, initial_active_version="active-v1") as registry:
+        assert registry.promote_and_record(report) == "candidate-v2"
+        assert registry.active_version == "candidate-v2"
+        with pytest.raises(ValueError, match="final test"):
+            registry.record_evaluation(report)
+        assert registry.rollback("active-v1", reason="revert fixture", evaluated_at="2026-09-14T03:00:00Z") == "active-v1"
+    with ModelRegistry(path, initial_active_version="ignored") as restarted:
+        assert restarted.active_version == "active-v1"
+        assert any(item["kind"] == "promotion" for item in restarted.history())
+
+
+def test_inconclusive_report_cannot_promote(tmp_path) -> None:
+    report = evaluate_candidate(
+        _points(candidate_error=6.0),
+        candidate_version="candidate-v2",
+        active_version="active-v1",
+        evaluated_at="2026-09-14T02:00:00Z",
+        dataset_hash="dataset-1",
+    )
+    with ModelRegistry(tmp_path / "models.sqlite3", initial_active_version="active-v1") as registry:
+        with pytest.raises(ValueError, match="qualified"):
+            registry.promote(report)
