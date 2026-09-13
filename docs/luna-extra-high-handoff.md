@@ -6,7 +6,12 @@ User-authorized sequence, 13 September 2026. Use `gpt-5.6-luna` with `xhigh` rea
 
 Wait until DeepSeek finishes and stops writing. The coordinating reviewer then inspects its final commit/diff, reproduces claims and audits relevant code, integration behavior and evidence. Record findings in `docs/reports/deepseek-completion-audit.md` with severity, exact locations, reproduction, impact and required verification. That report is a planned output and must not be created as a fake passing audit now.
 
-The coordinator assigns the concrete repair findings to Luna and independently rechecks their fixes before the feature-build loops proceed. If no blockers are found, record what was examined and the limits of the audit. Existing tests, summaries and DONE labels are inputs to review, not proof that the platform works perfectly.
+The coordinator assigns concrete repair findings to Luna and may record an
+independent recheck checkpoint. Once the reviewed checkpoint is accepted, the
+feature-build loops continue without a routine approval pause between slices.
+The coordinator performs the next broad audit after the long authorized loops;
+existing tests, summaries and DONE labels remain inputs to review, not proof
+that the platform works perfectly.
 
 Use the existing implementation task when it is confirmed idle and accessible; do not create another task automatically. Do not start an overlapping writer while DeepSeek runs. Use the user's final DeepSeek report/checkpoint as the completion signal; this document does not install a background watcher for the external model.
 
@@ -24,12 +29,14 @@ First inspect current Git state. Preserve other work and be the sole
 implementation writer. Repair the coordinator's findings in priority order,
 with concrete regression/integration evidence. Fix root causes; never weaken
 tests or completion gates merely to obtain green output. Record each repair,
-its commit and verification. Return the repair checkpoint to the coordinator
-for independent recheck before starting the feature-build stage. This review
-boundary is internal coordination, not a request for routine user permission.
+its commit and verification. Record a repair checkpoint for the coordinator,
+then continue into the dependency-ready feature-build stage. Do not wait for a
+routine coordinator approval between build slices; preserve the checkpoint and
+its open gates for the later broad audit. This review boundary is internal
+coordination, not a request for routine user permission.
 ```
 
-## Build-stage prompt, after repair review
+## Build-stage prompt
 
 ```text
 Continue the authorized build loops using GPT Luna Extra High.

@@ -1,0 +1,73 @@
+{
+  "schema_version": "connectome-manifest-v0.2.0",
+  "status": "verified",
+  "release_id": "male-cns:v1.0",
+  "dataset_id": "male-cns:v1.0",
+  "official_release_date": "2026-06-08",
+  "source_url": "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/connectome-weights-male-cns-v1.0-minconf-0.5.feather",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "license_name": "CC BY 4.0",
+  "source_sha256": "e35da783d1c686b2b58b3b87cd6a403ae43bfcfba8bff28e08ef752c1a56afc1",
+  "artifact_bytes": 1051241946,
+  "artifact_rows": 151856684,
+  "provider_metadata": {
+    "content_type": "application/octet-stream",
+    "etag": "f30e9dcca25cfd021bf1e7b3d975599e",
+    "md5_base64": "8w6dzKJc/QIb8eez2XVZng==",
+    "crc32c_base64": "dKRPVQ==",
+    "last_modified": "2026-06-03T13:54:47Z",
+    "verified_at": "2026-09-14"
+  },
+  "curated_filter": "minconf-0.5_flat_connectome",
+  "orientation": "presynaptic_to_postsynaptic",
+  "schema_columns": ["body_pre", "body_post", "weight"],
+  "schema": {
+    "body_pre": "int64 segment/body identifier for presynaptic side",
+    "body_post": "int64 segment/body identifier for postsynaptic side",
+    "weight": "int64 aggregate connection strength"
+  },
+  "annotation_companion": {
+    "source_url": "https://storage.googleapis.com/flyem-male-cns/v1.0/connectome-data/flat-connectome/body-annotations-male-cns-v1.0-minconf-0.5.feather",
+    "source_sha256": "2177e246113e4cfbf1e7772ec37c6da1955ff22e8063d0b1f833101f99a9a3b2",
+    "artifact_bytes": 14483314,
+    "rows": 211577,
+    "required_columns": ["bodyId", "type", "status", "somaSide"],
+    "provider_metadata": {
+      "etag": "50a7718770c57220f160ba4f431ab89e",
+      "md5_base64": "UKdxh3DFciDxYLpPQxq4ng==",
+      "crc32c_base64": "vjz9cg==",
+      "last_modified": "2026-06-03T13:54:38Z"
+    }
+  },
+  "selection_policy": {
+    "whole_release_rows": 151856684,
+    "default_smoke_subset": "first_20000_release_order_rows",
+    "weight_transform": "log1p(raw_weight)/log1p(10000)",
+    "sign_policy": "release has no measured sign column; loader uses explicit positive default and reports this assumption",
+    "coverage_label": "bounded subset; not whole-CNS coverage"
+  },
+  "provenance": [
+    {
+      "url": "https://blog.google/innovation-and-ai/technology/research/male-fruit-fly-brain-map/",
+      "kind": "user_selected_official_google_overview",
+      "claim": "Google Research overview dated 2026-09-03 describes the male fruit fly map and collaboration"
+    },
+    {
+      "url": "https://www.janelia.org/project-team/flyem/male-cns-connectome",
+      "kind": "official_dataset_project_page",
+      "claim": "Male CNS covers brain and ventral nerve cord, v1.0 release and CC-BY licensing"
+    },
+    {
+      "url": "https://male-cns.janelia.org/download/",
+      "kind": "official_download_page",
+      "claim": "male-cns:v1.0 bulk files, Feather schema family and full connection graph"
+    },
+    {
+      "url": "https://creativecommons.org/licenses/by/4.0/",
+      "kind": "license_deed",
+      "claim": "Attribution 4.0 terms and canonical license URL"
+    }
+  ],
+  "model_boundary": "This is a measured connectome dataset, not a pretrained executable financial model. Loading it does not establish biological memory, predictive skill, whole-brain model fidelity or financial advantage.",
+  "verification_scope": "Local artifacts were hash-checked and schema-checked on 2026-09-14. The 20000-edge smoke graph is a subset; whole-release import and biological/model acceptance remain open."
+}

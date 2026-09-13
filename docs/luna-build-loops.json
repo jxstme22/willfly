@@ -161,5 +161,5 @@
       ]
     }
   },
-  "last_verified_state": "G0 accepted by coordinator on 2026-09-14 after independent R3-R5 recheck: sandbox full suite 150 passed / 2 socket skips; both loopback tests passed in the permitted local-socket run, so all 152 collected tests were exercised. Planning, compile, reproduction and diff checks pass. Deferred live source, timed, economic and biological/model gates remain explicit. Build stage is open at B0."
+  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0 signal contracts and planning validation pass. B1 MaleCNS v1.0 local artifacts are hash/schema verified and a 20000-edge actual subset drives a reservoir smoke run. B1 whole-CNS execution, resource benchmark and model-comparison gates remain explicit. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
 }

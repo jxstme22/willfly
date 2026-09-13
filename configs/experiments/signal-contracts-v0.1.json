@@ -1,0 +1,19 @@
+{
+  "schema_version": "signal-contract-v0.1.0",
+  "contract_id": "brain-signal-v0.1",
+  "decision_interval_seconds": 15,
+  "proposal_ttl_seconds": 15,
+  "horizons_seconds": [60, 300, 900],
+  "primary_horizon_seconds": 300,
+  "targets": [
+    {"schema_version": "signal-contract-v0.1.0", "target_id": "spot_entry_net_return", "market": "spot", "action": "entry", "metric": "net_return_bps", "horizons_seconds": [60, 300, 900], "qualification_gate": "spot_execution_evidence"},
+    {"schema_version": "signal-contract-v0.1.0", "target_id": "spot_hold_net_return", "market": "spot", "action": "hold", "metric": "net_return_bps", "horizons_seconds": [60, 300, 900], "qualification_gate": "spot_execution_evidence"},
+    {"schema_version": "signal-contract-v0.1.0", "target_id": "spot_exit_net_return", "market": "spot", "action": "exit", "metric": "net_return_bps", "horizons_seconds": [60, 300, 900], "qualification_gate": "spot_execution_evidence"},
+    {"schema_version": "signal-contract-v0.1.0", "target_id": "lp_entry_net_return", "market": "lp", "action": "entry", "metric": "net_return_bps", "horizons_seconds": [60, 300, 900], "qualification_gate": "lp_execution_evidence"},
+    {"schema_version": "signal-contract-v0.1.0", "target_id": "lp_hold_net_return", "market": "lp", "action": "hold", "metric": "net_return_bps", "horizons_seconds": [60, 300, 900], "qualification_gate": "lp_execution_evidence"},
+    {"schema_version": "signal-contract-v0.1.0", "target_id": "lp_exit_net_return", "market": "lp", "action": "exit", "metric": "net_return_bps", "horizons_seconds": [60, 300, 900], "qualification_gate": "lp_execution_evidence"}
+  ],
+  "execution_scope": "manual_only",
+  "signing_enabled": false,
+  "funding_enabled": false
+}

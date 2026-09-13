@@ -653,3 +653,27 @@ checkpoint commit; live canonical-source, timed, economic and biological/model
 gates remain deferred with explicit scope. The build stage is now open at B0,
 with the separate B-task catalogue still authoritative for implementation
 status.
+
+
+## 2026-09-14 — B0 signal contracts and B1 MaleCNS source
+
+Implemented the versioned brain signal boundary for spot/LP entry, hold and
+explicit exit operations. Predictions, research-only or later qualified manual
+proposals, externally reported manual actions and actual/simulated/market
+outcomes are separate records. Expiry, as-of portfolio context, model version,
+evidence references and confidence calibration semantics are required; an
+uncalibrated score cannot become a probability, and signing/funding remain
+disabled.
+
+Added planning validation for the 11-task brain catalogue and loop-plan
+identity/dependency/reference checks. Marked B0 complete with executable
+contract/config/test evidence.
+
+Verified the user-selected official MaleCNS v1.0 release locally. The 1.05 GB
+connectivity Feather and 14 MB annotation Feather match their recorded byte
+counts and SHA-256 values; real Arrow schemas and pre-to-post direction were
+checked. A bounded 20,000-edge subset drives a three-step sparse reservoir
+smoke run, with explicit positive-sign and log1p preprocessing assumptions.
+The subset is not whole-CNS coverage and does not claim a pretrained financial
+model, biological memory or financial advantage. B1 is complete for the
+subset/provenance contract; full-release resource/model gates remain open.

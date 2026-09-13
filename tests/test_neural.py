@@ -2,7 +2,12 @@ import pytest
 
 from willfly.evaluation.neural import AblationResult, review_neural_progression, run_matched_comparisons
 from willfly.models.connectome.graph import Edge, build_graph, graph_hash
-from willfly.models.connectome.ingest import ConnectomeManifest, validate_connectome_records
+from willfly.models.connectome.ingest import (
+    ConnectomeManifest,
+    load_connectome_graph,
+    sha256_file,
+    validate_connectome_records,
+)
 from willfly.models.readout import FrozenReadout, ReadoutRow
 from willfly.models.reservoir import SparseReservoir
 from willfly.models.package import load_neural_package, save_neural_package
@@ -27,6 +32,29 @@ def test_connectome_ids_remain_text_and_unverified_manifest_blocks_ingest():
     records = validate_connectome_records([{"source": "001", "target": "2", "weight": 1, "included": False}], verified)
     assert records[0]["source"] == "001"
     assert records[0]["included"] is False
+    with pytest.raises(ValueError, match="numeric"):
+        validate_connectome_records([{"source": "1", "target": "2", "weight": float("nan")}], verified)
+
+
+def test_verified_feather_loader_preserves_direction_and_reports_subset(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+    feather = pytest.importorskip("pyarrow.feather")
+    path = tmp_path / "edges.feather"
+    feather.write_feather(
+        pa.table({"body_pre": [101, 102, 103], "body_post": [102, 103, 101], "weight": [4, 9, 16]}),
+        path,
+    )
+    manifest = ConnectomeManifest(
+        "male-cns:v1.0", "https://source", "https://license", sha256_file(path),
+        "minconf-0.5", "verified", "male-cns:v1.0", "presynaptic_to_postsynaptic",
+        ("body_pre", "body_post", "weight"), path.stat().st_size, 3,
+    )
+    graph, report = load_connectome_graph(path, manifest, max_edges=2)
+    assert graph.orientation == "source_to_target"
+    assert [(edge.source, edge.target) for edge in graph.edges] == [("101", "102"), ("102", "103")]
+    assert report["source_rows"] == 3
+    assert report["selected_edges"] == 2
+    assert report["coverage"] == "bounded subset; not whole-CNS coverage"
 
 
 def test_frozen_readout_and_neural_gate_are_traceable():

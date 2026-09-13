@@ -5,6 +5,7 @@
   "source_url": null,
   "license_url": null,
   "source_sha256": null,
-  "curated_filter": "not_selected",
-  "note": "No connectome release is claimed or downloaded until release, license and dependency checks are completed in P5-01."
+  "curated_filter": "compatibility_default",
+  "selected_manifest": "configs/connectome/male-cns-v1.0.json",
+  "note": "The selected MaleCNS v1.0 manifest is verified for local artifacts and a bounded subset. This compatibility default remains pending so callers cannot silently claim whole-CNS coverage."
 }

@@ -2,7 +2,7 @@
   "title": "Brain signals and manual execution product",
   "version": "1.1",
   "date": "2026-09-13",
-  "status": "approved_direction_unimplemented_plan",
+  "status": "B0_B1_COMPLETE_BUILD_IN_PROGRESS",
   "product_brief": "docs/brain-signal-product.md",
   "implementation_model_preference": "GPT Luna Extra High",
   "task_count": 11,
@@ -10,7 +10,7 @@
     {
       "id": "B0",
       "title": "Freeze targets and signal contracts",
-      "status": "TODO",
+      "status": "DONE",
       "depends_on": [],
       "existing_task_references": [
         "M1-05",
@@ -18,12 +18,17 @@
       ],
       "work": "Define spot/LP/hold/exit identities, prediction horizons, expiry, portfolio context, confidence semantics and manual execution scope.",
       "acceptance": "Versioned targets and schemas distinguish research predictions, qualified proposals, manual actions and outcomes; no model is claimed trained.",
-      "status_evidence": []
+      "status_evidence": [
+        "configs/experiments/signal-contracts-v0.1.json",
+        "docs/signal-contracts.md",
+        "src/willfly/domain/signal_contracts.py",
+        "tests/test_signal_contracts.py"
+      ]
     },
     {
       "id": "B1",
       "title": "Load and validate actual connectome",
-      "status": "TODO",
+      "status": "DONE",
       "depends_on": [
         "B0"
       ],
@@ -32,7 +37,13 @@
       ],
       "work": "Verify release/license/checksums, preserve neuron/edge metadata and test direction, signs and preprocessing.",
       "acceptance": "Actual dataset drives recurrent computation; provenance and graph oracle reproduce; subset versus whole-brain coverage is explicit.",
-      "status_evidence": []
+      "status_evidence": [
+        "configs/connectome/male-cns-v1.0.json",
+        "docs/reports/malecns-v1.0-verification.md",
+        "scripts/verify_malecns_release.py",
+        "src/willfly/models/connectome/ingest.py",
+        "tests/test_neural.py"
+      ]
     },
     {
       "id": "B2",

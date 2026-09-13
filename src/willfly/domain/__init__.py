@@ -12,6 +12,19 @@ from willfly.domain.contracts import (
     VendorAssessment,
     WalletCohort,
 )
+from willfly.domain.signal_contracts import (
+    Confidence,
+    InstrumentIdentity,
+    ManualAction,
+    OutcomeRecord,
+    PortfolioContext,
+    PredictionRecord,
+    PredictionTarget,
+    SIGNAL_SCHEMA_VERSION,
+    SignalContract,
+    SignalProposal,
+    default_signal_contract,
+)
 
 __all__ = [
     "AmbiguousContractError",
@@ -24,4 +37,15 @@ __all__ = [
     "TradeEvidence",
     "VendorAssessment",
     "WalletCohort",
+    "Confidence",
+    "InstrumentIdentity",
+    "ManualAction",
+    "OutcomeRecord",
+    "PortfolioContext",
+    "PredictionRecord",
+    "PredictionTarget",
+    "SIGNAL_SCHEMA_VERSION",
+    "SignalContract",
+    "SignalProposal",
+    "default_signal_contract",
 ]
