@@ -161,5 +161,5 @@
       ]
     }
   },
-  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0 signal contracts and B1 MaleCNS v1.0 subset/provenance verification pass. B2 public-wallet/position observer and B3 causal feedback/label-maturation fixture checks pass. B4 checkpointable fixed-connectome training with matched controls returns honest waiting states and passes deterministic fixture checks; actual labelled training, resource benchmarks and zero-personal-trade learning remain open. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
+  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0 signal contracts and B1 MaleCNS v1.0 subset/provenance verification pass. B2 public-wallet/position observer, B3 causal feedback/label maturation, and B4 checkpointable fixed-connectome lab checks pass. B5 observed accounting separates canonical verified flow from residuals and LP ownership; validated quote economics and live outcome gates remain open. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
 }

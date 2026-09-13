@@ -109,7 +109,7 @@
     {
       "id": "B5",
       "title": "Validate spot and LP outcome accounting",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B2",
         "B3"
@@ -122,7 +122,11 @@
       ],
       "work": "Reuse exact per-asset ledgers and one supported quote/position family; reconcile costs, failures, residuals, marks and exits.",
       "acceptance": "Separate spot/LP readiness records reconcile independent examples; incomplete LP accounting keeps LP recommendations research-only.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/observed-accounting.md",
+        "src/willfly/replay/accounting.py",
+        "tests/test_accounting.py"
+      ]
     },
     {
       "id": "B6",

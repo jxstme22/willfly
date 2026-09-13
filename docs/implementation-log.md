@@ -723,3 +723,13 @@ reports held-out error and returns `waiting` for insufficient train or
 held-out evidence. Tiny-graph tests and checkpoint identity checks pass;
 actual labelled MaleCNS training, Windows/WSL2 resource measurement, forward
 evaluation and promotion remain open.
+
+
+## 2026-09-14 — B5 observed accounting boundary
+
+Added exact-atomic reconciliation for wallet observations. Canonical confirmed
+verified swaps contribute per-asset deltas; failed, pending, unknown and fork-
+orphaned activity remains visible as unresolved or residual evidence. LP
+ownership stays separate from spot cash flow. Focused accounting tests pass;
+validated quote economics, complete LP accounting and live outcome gates remain
+open.
