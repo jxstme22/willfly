@@ -1,0 +1,11 @@
+{
+  "schema_version": "learning-watcher.v0.1",
+  "observation_interval_seconds": 15,
+  "label_interval_seconds": 60,
+  "training_interval_seconds": 900,
+  "evaluation_interval_seconds": 900,
+  "max_training_seconds": 3600,
+  "max_training_examples": 100000,
+  "personal_trade_trigger_required": false,
+  "execution_scope": "read_only_observation"
+}

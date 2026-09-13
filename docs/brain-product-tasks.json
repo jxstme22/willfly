@@ -194,7 +194,7 @@
     {
       "id": "B9",
       "title": "Package Windows/WSL2 laboratory and watcher",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B2",
         "B4",
@@ -206,7 +206,12 @@
       ],
       "work": "Provide install/run/train/evaluate commands, durable storage, startup/recovery, resource limits and consistent backup/restore. Supervise durable observation, label-maturation, training and evaluation queues continuously with restart catch-up and explicit outage accounting.",
       "acceptance": "Fresh PC setup and interrupted training/collection resume are verified; heavier training does not starve ingestion; no wallet secrets required. Exercise a zero-user-trade period with automatic observation-to-label-to-training-to-evaluation progress; separate scheduling fixtures from real elapsed-time evidence.",
-      "status_evidence": []
+      "status_evidence": [
+        "configs/learning/watcher-v0.1.json",
+        "docs/learning-watcher.md",
+        "src/willfly/learning/watcher.py",
+        "tests/test_watcher.py"
+      ]
     },
     {
       "id": "B10",

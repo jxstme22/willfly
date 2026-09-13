@@ -765,3 +765,14 @@ requires minimum window/sample evidence and records an inconclusive state when
 gates fail. A persistent model registry records evaluations, consumes a final
 test only once, guards promotion and supports rollback. Focused tests pass;
 live forward evidence, calibration, scheduling and model promotion remain open.
+
+
+## 2026-09-14 — B9 durable learning watcher
+
+Added a SQLite-backed watcher state for observation, label maturation, training
+and evaluation stages. Task enqueueing is idempotent, heartbeats persist across
+restart, zero personal trades are recorded explicitly, and heartbeat gaps are
+reported as outage seconds. Feedback queue reconciliation yields waiting,
+degraded or ready label state without inventing data. Scheduler fixture tests
+pass; fresh-PC setup, live continuous operation, resource benchmarks and
+automatic candidate cycles remain open.
