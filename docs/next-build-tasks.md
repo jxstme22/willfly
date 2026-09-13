@@ -36,13 +36,15 @@ Preserve the incoming catalogue as historical evidence; reopen unsupported accep
 
 ### M0-03 - Publish reviewed baseline privately
 
-**Status:** IN_PROGRESS | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M0-02
+**Status:** DONE | **Owner role:** Muse Sparks 1.3 implementation session | **Depends on:** M0-02
 
 **Target paths:** `docs/reports/repository-publication.md`, `.gitignore`
 
 Inspect candidate content for secrets and generated datasets; commit the reviewed tree and create a new private repository under the authenticated account.
 
 **Done when:** Remote privacy and pushed commit are independently read back; no environment files, private keys, raw datasets or temporary renderings are included; report CI outcome separately.
+
+**Evidence:** docs/reports/repository-publication.md
 
 **Verification:** Compare local HEAD with remote branch SHA and query repository visibility; inspect staged file inventory.
 

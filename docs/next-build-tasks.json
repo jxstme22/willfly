@@ -82,7 +82,7 @@
       "id": "M0-03",
       "phase": "M0",
       "title": "Publish reviewed baseline privately",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "owner_role": "Muse Sparks 1.3 implementation session",
       "depends_on": [
         "M0-02"
@@ -95,7 +95,9 @@
       "work": "Inspect candidate content for secrets and generated datasets; commit the reviewed tree and create a new private repository under the authenticated account.",
       "acceptance": "Remote privacy and pushed commit are independently read back; no environment files, private keys, raw datasets or temporary renderings are included; report CI outcome separately.",
       "verification": "Compare local HEAD with remote branch SHA and query repository visibility; inspect staged file inventory.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/reports/repository-publication.md"
+      ]
     },
     {
       "id": "M1-01",

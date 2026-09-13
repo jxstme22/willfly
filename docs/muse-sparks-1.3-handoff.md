@@ -58,3 +58,7 @@ The original 77-task catalogue preserves incoming statuses as `pre_audit_status`
 The read-only observation path must be usable first. A real data collection window and a formal prospective strategy window are different milestones. Do not start the latter until supported replay, ledger, scheduler and frozen-run persistence are validated.
 
 The user chose the label **Muse Sparks 1.3** for the next build session. No API identifier, provider, capabilities, availability or model installation has been inferred. Select it through the user's intended environment; this repository does not depend on that label as a runtime LLM.
+
+## Repository checkpoint
+
+The reviewed baseline is published at [jxstme22/willfly](https://github.com/jxstme22/willfly) as a private repository on `codex/astra-reviewed-baseline`. Baseline CI passed. See [publication evidence](reports/repository-publication.md). M0 is complete; begin M1-01 after inspecting the latest Git state.
