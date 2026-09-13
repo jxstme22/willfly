@@ -21,6 +21,30 @@ def test_lp_positions_round_ticks_accrue_only_when_in_range_and_preserve_residua
     assert result.fees_paid_atomic == {"TOKEN0": 0, "TOKEN1": 0}
     assert result.gas_paid_atomic == 3
     assert result.gas_paid_by_asset == {"unknown:gas": 3}
+    assert result.unreconciled_gas_by_asset == {"unknown:gas": 3}
+
+
+def test_lp_known_gas_asset_debits_balance_and_missing_gas_balance_is_liability():
+    debited = replay_lp_lifecycle(
+        [
+            LPEvent("open", "open", 10, 10, gas_atomic=3, gas_asset="TOKEN0", source_ref="lp:open"),
+            LPEvent("remove", "remove", 4, 6, gas_atomic=2, gas_asset="TOKEN0", source_ref="lp:remove"),
+        ],
+        token0="TOKEN0",
+        token1="TOKEN1",
+        initial_balances={"TOKEN0": 20, "TOKEN1": 20},
+    )
+    assert debited.balances == {"TOKEN0": 9, "TOKEN1": 16}
+    assert debited.gas_paid_by_asset == {"TOKEN0": 5}
+    assert debited.unreconciled_gas_by_asset == {}
+    liability = replay_lp_lifecycle(
+        [LPEvent("open", "open", 10, 0, gas_atomic=3, gas_asset="ETH", source_ref="lp:open")],
+        token0="TOKEN0",
+        token1="TOKEN1",
+        initial_balances={"TOKEN0": 20, "TOKEN1": 20},
+    )
+    assert liability.balances == {"TOKEN0": 10, "TOKEN1": 20}
+    assert liability.unreconciled_gas_by_asset == {"ETH": 3}
 
 
 def test_lp_exact_sqrt_price_amounts_and_modular_fee_growth_are_supported():

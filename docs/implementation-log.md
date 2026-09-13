@@ -925,3 +925,28 @@ nodes and drove a three-step reservoir smoke run with graph hash
 confirms the artifact-to-graph-to-reservoir path only; whole-CNS execution,
 five-seed chronological holdout evidence and any biological or financial edge
 remain open.
+
+
+## 2026-09-14 — M5 gas-denomination accounting loop
+
+Closed the LP replay bookkeeping gap where gas was recorded but never debited.
+Known gas assets now reduce a supplied starting balance before the lifecycle
+action; gas whose denomination is absent from starting balances, including
+`unknown:gas`, remains an explicit unreconciled liability. Duplicate action IDs
+still do not charge gas twice. Focused LP tests cover both the debit and
+liability paths; LP eligibility remains disabled pending observed protocol
+evidence.
+
+
+## 2026-09-14 — M5 gas accounting and dashboard smoke loop
+
+LP lifecycle gas now debits a supplied balance when the denomination is known;
+otherwise the amount is retained as an unreconciled liability. Focused LP tests
+cover known and unknown denominations, and LP remains disabled pending protocol
+evidence.
+
+The local read-only server was started on loopback for an HTTP smoke test:
+`/health` and `/signals` returned JSON, `/dashboard` returned HTTP 200 with the
+Observatory markup, and POST returned 405. The server was stopped after the
+check. This confirms local UI/API wiring only; the default server still loads
+an empty in-memory store unless an immutable projection snapshot is supplied.

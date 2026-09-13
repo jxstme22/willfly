@@ -12,6 +12,10 @@ convert require an active matching position. Replayed action IDs are
 idempotent and do not credit balances twice. Fee totals remain per token rather
 than summing unlike assets as money, and gas is retained in an explicit
 per-asset map (or `unknown:gas` when a fixture does not provide a denomination).
+When a gas denomination is present in the supplied starting balances, the
+amount is debited before the lifecycle action. Otherwise it remains in
+`unreconciled_gas_by_asset` as a liability rather than becoming free balance;
+unknown gas is never silently charged to token0 or token1.
 
 The older `amounts_for_liquidity` linearized tick helper remains available as a
 named counterfactual diagnostic for compatibility. It is not used as proof of
@@ -21,8 +25,9 @@ checkpoints, gas denomination and complete receipts are verified.
 
 Fixture evidence covers in-range/out-of-range behavior, exact sqrt-price
 amounts, uint256 wrap, owner/position mismatch, orphan lifecycle events,
-duplicate delivery, residual inventory and gas recording. No LP action can be
-submitted or funded by this code.
+duplicate delivery, residual inventory, gas denomination debits and
+unreconciled gas liabilities. No LP action can be submitted or funded by this
+code.
 
 Reproduction:
 

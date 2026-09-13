@@ -35,6 +35,7 @@ class LPLifecycleResult:
     fees_paid_atomic: Mapping[str, int]
     gas_paid_atomic: int
     gas_paid_by_asset: Mapping[str, int]
+    unreconciled_gas_by_asset: Mapping[str, int]
     residual_token0_atomic: int
     residual_token1_atomic: int
     failed_actions: tuple[str, ...]
@@ -60,6 +61,7 @@ def replay_lp_lifecycle(
     fees: dict[str, int] = {token0: 0, token1: 0}
     gas = 0
     gas_by_asset: dict[str, int] = {}
+    unreconciled_gas: dict[str, int] = {}
     residual0 = residual1 = 0
     active_position = position
     seen_action_ids: set[str] = set()
@@ -73,6 +75,13 @@ def replay_lp_lifecycle(
         if event.gas_atomic:
             gas_asset = event.gas_asset or "unknown:gas"
             gas_by_asset[gas_asset] = gas_by_asset.get(gas_asset, 0) + event.gas_atomic
+            if gas_asset in balances and balances[gas_asset] >= event.gas_atomic:
+                balances[gas_asset] -= event.gas_atomic
+            else:
+                # A denomination without a supplied starting balance is a
+                # liability, not free performance. Preserve it explicitly
+                # rather than creating a negative or invented balance.
+                unreconciled_gas[gas_asset] = unreconciled_gas.get(gas_asset, 0) + event.gas_atomic
         if event.action == "unsupported":
             unsupported.append(event.action_id)
             continue
@@ -132,4 +141,15 @@ def replay_lp_lifecycle(
         if event.action == "collect":
             fees[token0] += event.token0_atomic
             fees[token1] += event.token1_atomic
-    return LPLifecycleResult(balances, fees, gas, gas_by_asset, residual0, residual1, tuple(failed), tuple(unsupported), tuple(refs))
+    return LPLifecycleResult(
+        balances,
+        fees,
+        gas,
+        gas_by_asset,
+        unreconciled_gas,
+        residual0,
+        residual1,
+        tuple(failed),
+        tuple(unsupported),
+        tuple(refs),
+    )
