@@ -10,6 +10,16 @@ from willfly.evaluation.contamination import ContaminationAudit, audit_claim_tim
 from willfly.evaluation.factorial import FactorialCell, run_factorial
 from willfly.evaluation.lp_stress import LPStressResult, LPStressScenario, stress_lp_scenarios
 from willfly.evaluation.shadow import ShadowReconciliation, ShadowWindowAudit, ShadowWindowRequirements, audit_shadow_window, reconcile_shadow
+from willfly.evaluation.scenario_runner import ScenarioOutcome, run_quote_stress_scenarios
+from willfly.evaluation.baseline_lab import (
+    BaselineCase,
+    BaselineLabConfig,
+    BaselineLabResult,
+    BaselinePolicy,
+    BaselineRun,
+    default_baseline_policies,
+    run_baseline_laboratory,
+)
 
 __all__ = [
     "CoverageAudit",
@@ -83,4 +93,13 @@ __all__ = [
     "PredictionPoint",
     "WindowScore",
     "evaluate_candidate",
+    "ScenarioOutcome",
+    "run_quote_stress_scenarios",
+    "BaselineCase",
+    "BaselineLabConfig",
+    "BaselineLabResult",
+    "BaselinePolicy",
+    "BaselineRun",
+    "default_baseline_policies",
+    "run_baseline_laboratory",
 ]

@@ -25,13 +25,23 @@ class WalkForwardResult:
     state: str
 
 
+ReplayWindow = Callable[[str, tuple[EpisodeResult, ...], WalkForwardWindow], tuple[EpisodeResult, ...]]
+
+
 def evaluate_walk_forward(
     scenarios: Mapping[str, Iterable[EpisodeResult]],
     windows: Iterable[WalkForwardWindow],
     *,
     strongest_practical_baseline: str | None = None,
+    replay_window: ReplayWindow | None = None,
 ) -> WalkForwardResult:
-    """Evaluate every registered scenario/window without selecting favorable periods."""
+    """Evaluate every registered scenario/window without selecting favorable periods.
+
+    ``replay_window`` is the boundary for an execution-aware evaluator. It
+    receives the declared scenario and window and must return the same ordered
+    episodes after applying that window's capital, delay and costs. Without it,
+    this helper remains a metadata-only summary and reports that limitation.
+    """
 
     ordered_windows = tuple(windows)
     if not ordered_windows:
@@ -42,8 +52,10 @@ def evaluate_walk_forward(
     reports: dict[str, MetricReport] = {}
     for window in ordered_windows:
         for name, records in scenario_records.items():
-            reports[f"{window.name}:{name}"] = calculate_metrics(records)
+            replayed = replay_window(name, records, window) if replay_window else records
+            reports[f"{window.name}:{name}"] = calculate_metrics(replayed)
     if strongest_practical_baseline is not None and strongest_practical_baseline not in scenario_records:
         raise KeyError(strongest_practical_baseline)
     # This helper summarizes episodes; it does not rerun fills under window costs.
-    return WalkForwardResult(reports, strongest_practical_baseline, False, "inconclusive")
+    state = "pass" if replay_window else "inconclusive_missing_replay"
+    return WalkForwardResult(reports, strongest_practical_baseline, False, state)

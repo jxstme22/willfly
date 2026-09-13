@@ -194,25 +194,29 @@ Create each 1/5/15-minute label from a specified entry and horizon liquidation a
 
 ### M2-04 - Measure actual portfolio and scenario outcomes
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-03
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-03
 
-**Target paths:** `src/willfly/evaluation/metrics.py`, `src/willfly/evaluation/walk_forward.py`, `src/willfly/evaluation/replay_audit.py`
+**Target paths:** `src/willfly/evaluation/metrics.py`, `src/willfly/evaluation/walk_forward.py`, `src/willfly/evaluation/replay_audit.py`, `src/willfly/evaluation/scenario_runner.py`
 
 Compute net return and percentage drawdown from ordered equity, rerun each cost/capital/delay window through replay, and calculate paired uncertainty over declared independent groups. Derive gates from evidence rather than caller booleans.
 
 **Done when:** Different execution stresses affect outcomes where expected; episode averages are not labeled portfolio returns; interval construction, drawdown, cost allocation and sample sufficiency reconcile.
 
+**Evidence:** docs/m2-scenarios.md; src/willfly/evaluation/metrics.py; src/willfly/evaluation/walk_forward.py; src/willfly/evaluation/replay_audit.py; src/willfly/evaluation/scenario_runner.py; tests/test_baselines.py; tests/test_replay_audit.py; tests/test_scenario_runner.py
+
 **Verification:** Hand-calculated equity curves, changed-cost replay, overlapping episodes, zero/negative equity, missing windows and bootstrap reproducibility tests.
 
 ### M2-05 - Publish a reproducible baseline laboratory
 
-**Status:** TODO | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-04
+**Status:** IN_PROGRESS | **Owner role:** GPT Luna Extra High implementation session | **Depends on:** M2-04
 
-**Target paths:** `src/willfly/policies/`, `src/willfly/models/conventional.py`, `docs/releases/trading-laboratory.md`
+**Target paths:** `src/willfly/policies/`, `src/willfly/models/conventional.py`, `src/willfly/evaluation/baseline_lab.py`, `docs/releases/trading-laboratory.md`
 
 Compare idle, confirmation, verified flow and causal follower rules under one ledger plus credible ordinary predictors. Register dataset/config/code hashes and realistic timing before viewing holdout; make replay/train/evaluate commands reproducible.
 
 **Done when:** Independent rerun reproduces observations, ledgers and metrics across all declared windows; report no edge or inconclusive honestly. Baseline choice cannot be selected using final neural holdout.
+
+**Evidence:** docs/m2-baseline-laboratory.md; src/willfly/evaluation/baseline_lab.py; src/willfly/policies/baselines.py; src/willfly/models/conventional.py; tests/test_baselines.py
 
 **Verification:** Clean-process experiment command, fixture oracle, chronological held-out run and complete cost/latency/sizing report.
 
