@@ -2,7 +2,7 @@
   "title": "Brain signals and manual execution product",
   "version": "1.1",
   "date": "2026-09-14",
-  "status": "B0_B1_COMPLETE_B2_IN_PROGRESS",
+  "status": "B0_B1_COMPLETE_B2_B3_IN_PROGRESS",
   "product_brief": "docs/brain-signal-product.md",
   "implementation_model_preference": "GPT Luna Extra High",
   "task_count": 11,
@@ -69,7 +69,7 @@
     {
       "id": "B3",
       "title": "Create causal historical and feedback datasets",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B2"
       ],
@@ -79,7 +79,12 @@
       ],
       "work": "Combine frozen wallet cohorts and market history, preserve real acquisition times, all outcomes, ignored signals and external cash flows. Maintain a durable horizon-maturation queue for market and external-wallet outcomes even when the user does not trade.",
       "acceptance": "Chronological plus wallet/token leakage checks pass; selected winners and leader prices cannot masquerade as deployable training evidence. Zero-personal-trade intervals still produce qualified examples; delayed, missing and fork-revised labels are reconciled; predictions cannot label themselves.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/feedback-datasets.md",
+        "src/willfly/features/feedback.py",
+        "src/willfly/storage/feedback.py",
+        "tests/test_feedback_store.py"
+      ]
     },
     {
       "id": "B4",

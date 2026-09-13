@@ -700,3 +700,14 @@ identity so a changed lineage enters `needs_repair`. Derived LP positions mark
 unknown/orphaned actions as uncertain rather than inventing ownership. Focused
 observer tests pass; live wallet coverage and prospective learning gates remain
 open.
+
+
+## 2026-09-14 — B3 causal feedback and label maturation
+
+Added durable prediction/outcome storage and a horizon-maturation queue. The
+dataset join waits for label availability, retains observed-market and
+simulated-counterfactual outcomes without requiring a personal trade, and
+keeps actual manual outcomes separate. Self-label references, future labels,
+target mismatches, unresolved/fork-revised outcomes and missing targets remain
+visible but ineligible. Focused B3 tests pass; live zero-personal-trade
+continuous learning and automatic training remain open.

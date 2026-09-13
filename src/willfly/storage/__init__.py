@@ -13,6 +13,7 @@ from willfly.storage.raw import (
 )
 from willfly.storage.export import ExportManifest, ExportUnavailable, export_records, verify_export
 from willfly.storage.wallet import WalletCursor, WalletObservationStore, WalletWriteResult
+from willfly.storage.feedback import FeedbackStore, FeedbackWriteResult, QueueItem
 
 __all__ = [
     "ANCHOR_QUALIFICATIONS",
@@ -31,4 +32,7 @@ __all__ = [
     "WalletCursor",
     "WalletObservationStore",
     "WalletWriteResult",
+    "FeedbackStore",
+    "FeedbackWriteResult",
+    "QueueItem",
 ]
