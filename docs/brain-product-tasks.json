@@ -216,7 +216,7 @@
     {
       "id": "B10",
       "title": "Accept manual-execution brain product",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B8",
         "B9"
@@ -226,7 +226,12 @@
       ],
       "work": "Demonstrate real-connectome signals, user-controlled execution, verified feedback and measured retraining in one reproducible release.",
       "acceptance": "Report research/qualified status independently for spot, LP and feedback; missing live demonstrations or timed evidence remain open; no signing or automatic transactions. Demonstrate the learning cycle continuing without personal trades; failed candidate evaluation preserves the active model.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/brain-release-status.md",
+        "scripts/check_brain_release.py",
+        "src/willfly/release/check.py",
+        "tests/test_brain_release.py"
+      ]
     }
   ],
   "dependency_note": "B dependencies govern this product track. Existing M references identify reusable work and capability acceptance gates, not a requirement to delay offline brain experiments until all M phases finish. No existing task is marked complete by this plan.",

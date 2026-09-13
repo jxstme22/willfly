@@ -776,3 +776,12 @@ reported as outage seconds. Feedback queue reconciliation yields waiting,
 degraded or ready label state without inventing data. Scheduler fixture tests
 pass; fresh-PC setup, live continuous operation, resource benchmarks and
 automatic candidate cycles remain open.
+
+
+## 2026-09-14 — B10 release capability audit
+
+Added an offline capability matrix for the manual-execution brain product. It
+reports implemented mechanics separately from live labelled training,
+forward-evaluation, wallet-coverage, economics, LP, 24/7 and promotion gates.
+The current status is explicitly `research_release_only`; automatic signing,
+funding and execution remain disabled. Focused release checks pass.

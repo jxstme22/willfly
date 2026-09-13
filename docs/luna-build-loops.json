@@ -161,5 +161,5 @@
       ]
     }
   },
-  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0 signal contracts and B1 MaleCNS v1.0 subset/provenance verification pass. B2 public-wallet/position observer, B3 causal feedback/label maturation, B4 checkpointable fixed-connectome lab, and B5 observed accounting checks pass. B6 read-only signal inbox/position/training views and B7 conservative manual-action linkage checks pass. B8 candidate evaluation/guarded registry and B9 durable watcher/restart/outage-state checks pass; actual labelled model quality, live feedback, 24/7 operation, scheduling and promotion gates remain open. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
+  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0-B9 mechanics and fixture checks pass. B10 now has a reproducible research_release_only capability matrix: signal/observer/feedback/training mechanics are available, while live labelled model quality, forward evaluation, live feedback, 24/7 operation, economics and promotion remain open; signing/funding/execution stay disabled. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
 }
