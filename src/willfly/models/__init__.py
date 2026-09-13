@@ -11,3 +11,18 @@ __all__ = [
     "load_neural_package",
     "save_neural_package",
 ]
+from willfly.models.laboratory import ExperimentConfig, ExperimentResult, ModelMetric, TrainingSample, run_connectome_experiment
+
+__all__ = [
+    "FeatureRow",
+    "LinearBaseline",
+    "NeuralPackage",
+    "RecurrentBaseline",
+    "load_neural_package",
+    "save_neural_package",
+    "ExperimentConfig",
+    "ExperimentResult",
+    "ModelMetric",
+    "TrainingSample",
+    "run_connectome_experiment",
+]

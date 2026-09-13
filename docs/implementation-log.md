@@ -711,3 +711,15 @@ keeps actual manual outcomes separate. Self-label references, future labels,
 target mismatches, unresolved/fork-revised outcomes and missing targets remain
 visible but ineligible. Focused B3 tests pass; live zero-personal-trade
 continuous learning and automatic training remain open.
+
+
+## 2026-09-14 — B4 fixed-connectome laboratory
+
+Added a checkpointable local training runner for the verified directed graph.
+The `fly` recurrent path is kept fixed while matched shuffled-wiring,
+random-weight, no-state and ordinary controls use the same partitions. The
+runner hashes graph/config/sample identities, resumes encoded state rows,
+reports held-out error and returns `waiting` for insufficient train or
+held-out evidence. Tiny-graph tests and checkpoint identity checks pass;
+actual labelled MaleCNS training, Windows/WSL2 resource measurement, forward
+evaluation and promotion remain open.

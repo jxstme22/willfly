@@ -1,0 +1,19 @@
+{
+  "schema_version": "connectome-laboratory.v0.1",
+  "graph_manifest": "configs/connectome/male-cns-v1.0.json",
+  "graph_subset_default_edges": 20000,
+  "decay": 0.9,
+  "input_scale": 1.0,
+  "readout_l2": 1.0,
+  "seed": 7,
+  "minimum_qualified_train_examples": 4,
+  "models": [
+    "fly",
+    "shuffled_wiring",
+    "random_weights",
+    "no_state",
+    "ordinary"
+  ],
+  "execution_scope": "local_research_only",
+  "promotion": "disabled_until_forward_evaluation"
+}

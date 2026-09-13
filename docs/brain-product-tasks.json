@@ -89,7 +89,7 @@
     {
       "id": "B4",
       "title": "Train biological model locally with controls",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B1",
         "B3"
@@ -99,7 +99,12 @@
       ],
       "work": "Implement checkpointed fixed-graph training/readout and practical ordinary, shuffled/random and no-state comparisons under matched budgets. Schedule automatic candidate training from sufficient qualified new examples and historical replay under resource budgets; measure forgetting against older data.",
       "acceptance": "A Windows/WSL2 run resumes and reproduces held-out predictions; memory/runtime measured; no whole-brain/GPU or financial edge assumption. Training runs without a user trade or manual trigger; insufficient evidence yields an honest waiting state, not a claimed update.",
-      "status_evidence": []
+      "status_evidence": [
+        "configs/experiments/connectome-laboratory-v0.1.json",
+        "docs/connectome-laboratory.md",
+        "src/willfly/models/laboratory.py",
+        "tests/test_laboratory.py"
+      ]
     },
     {
       "id": "B5",
