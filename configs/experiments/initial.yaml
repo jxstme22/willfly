@@ -1,0 +1,90 @@
+schema_version: "0.1.0"
+status: frozen_before_holdout_access
+frozen_on: "2026-09-13"
+holdout_access: locked
+
+eligibility:
+  network_chain_id: 4663
+  canonical_only: true
+  supported_protocols: [uniswap_v4]
+  required_observation_state: [healthy, stale, degraded, unknown]
+  excluded_from_profit_claims:
+    - unresolved_cash_flow
+    - unsupported_hook
+    - missing_execution_state
+    - incomplete_horizon
+    - non_canonical_event
+  retained_for_audit:
+    - transfer
+    - gift_or_airdrop
+    - ambiguous
+    - failed_action
+
+observations:
+  decision_interval_seconds: 15
+  cutoff: received_time
+  retain_chain_event_time: true
+  feature_version: "observatory.features.v0.1"
+
+labels:
+  horizons_minutes: [1, 5, 15]
+  primary_horizon_minutes: 5
+  target: net_result_of_fixed_size_hypothetical_purchase_then_liquidation
+  diagnostics: [exit_availability, adverse_excursion, residual_inventory, censoring]
+  midpoint_is_not_a_fill: true
+
+simulation:
+  capital_scenarios_usd: [100, 500, 1000]
+  entry_allocation_fraction: 0.05
+  max_simultaneous_positions: 3
+  borrowing: false
+  add_to_positions: false
+  candidate_ranking: deterministic_with_stable_ties
+  include_costs: [gas, protocol_fees, platform_fees, slippage, delay]
+
+splits:
+  construction: chronological_then_grouped
+  pre_holdout_fraction: 0.80
+  pre_holdout_parts:
+    calibration: 0.15
+    train: 0.55
+    validation: 0.15
+    test: 0.15
+  untouched_holdout_fraction: 0.20
+  purge_gap: "max_label_horizon_plus_execution_delay"
+  episode_grouping: correlated_launch_or_wallet_episode
+  normalization_fit: train_only
+  seed: 20260913
+  learned_candidate_seeds: 5
+  holdout_selection_rule: "freeze config and hashes before first holdout read"
+
+metrics:
+  primary: paired_difference_in_net_portfolio_return
+  baselines: [idle, strongest_practical, matched_nonbiological]
+  secondary: [maximum_drawdown, failure_rate, exit_availability, adverse_excursion]
+  bootstrap: paired_block_bootstrap_95_percent_interval
+  bootstrap_blocks: chronological_episode_groups
+  chronological_test_windows: 4
+  drawdown_rejection_threshold_percentage_points: 5
+  fly_advantage_gate:
+    positive_interval_against: [strongest_practical, matched_nonbiological]
+    positive_excess_return_windows_minimum: 3
+  insufficient_sample_result: inconclusive
+
+follower_outcome:
+  research_question: "Does confirmed buying interest remain actionable after signal arrival?"
+  cohort_selection: prior_information_only
+  membership_as_of: signal_window_start
+  signal_time: observable_received_time
+  follower_entry: signal_time_plus_processing_and_submission_delay
+  follower_fill: independently_requoted_executable_fill
+  follower_exit: executable_liquidation_at_horizon
+  include_costs: true
+  compare: [idle, simple_follow, confirmed_net_flow, ordinary_learned, fly_candidate]
+  leader_pnl_is_follower_label: false
+  unknown_membership_or_execution: explicit_inference_limit
+
+change_control:
+  test_results_may_change_specification: false
+  corrections_create_new_version: true
+  final_holdout_reuse: prohibited

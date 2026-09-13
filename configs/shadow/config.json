@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1.0",
+  "status": "pending_observation_window",
+  "model_id": "ordinary-baseline-pending",
+  "feature_version": "observatory.features.v0.1",
+  "source_config": "configs/sources/robinhood-chain-v0.1.json",
+  "capital_scenario_usd": 100,
+  "fixed_entry_fraction": 0.05,
+  "max_simultaneous_positions": 3,
+  "lp_enabled": false,
+  "lp_gate": "disabled_pending_evidence",
+  "decision_interval_seconds": 15,
+  "required_duration_days": 14,
+  "required_eligible_launches": 200,
+  "required_healthy_availability_bps": 9900,
+  "start_time": null,
+  "config_hash": null,
+  "note": "Freeze hash and start time before the first observation. This is hypothetical and read-only."
+}

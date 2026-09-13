@@ -1,0 +1,209 @@
+{
+  "schema_version": "0.1.0",
+  "manifest_version": "1.1",
+  "as_of_date": "2026-09-13",
+  "operating_mode": "read_only",
+  "chain": {
+    "name": "Robinhood Chain",
+    "chain_id": 4663,
+    "rpc_url": "https://rpc.mainnet.chain.robinhood.com",
+    "websocket_url": "wss://feed.mainnet.chain.robinhood.com",
+    "sequencer_url": "https://sequencer.mainnet.chain.robinhood.com",
+    "explorer_url": "https://robinhoodchain.blockscout.com",
+    "native_asset": "native:ETH",
+    "wrapped_native_asset": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+    "evidence": [
+      {
+        "url": "https://docs.robinhood.com/chain/connecting/",
+        "kind": "official_documentation",
+        "claim": "Mainnet chain ID, public RPC, sequencer feed, sequencer URL and ETH gas token"
+      },
+      {
+        "url": "https://docs.robinhood.com/chain/contracts/",
+        "kind": "official_documentation",
+        "claim": "Canonical WETH address"
+      }
+    ]
+  },
+  "protocols": {
+    "uniswap_v4": {
+      "pool_manager": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+      "deployment_transaction": "0x4fb28d4935866f462582c6c931c6f2705e55f5be5eb178c7d8d9329a95c44c41",
+      "deployment_block": 9070,
+      "deployment_block_hex": "0x236e",
+      "deployment_receipt_status": "0x1",
+      "deployment_block_hash": "0x9165e92381503c5e0cd1afc3e3647089d93a301c3e010722dbaf6e605d4ce38c",
+      "runtime_code_bytes": 24009,
+      "runtime_bytecode_sha256": "6eb21c69298b064e37fcf8089a941ae096fe08c0f179b2d399567aef1b10585b",
+      "abi_manifest": "configs/sources/uniswap-v4-events.abi.json",
+      "abi_sha256": "bc1687a0f93e85047e3096030496779de3c868a126185329ebc09d429d28268f",
+      "event_families": ["Initialize", "Swap", "ModifyLiquidity"],
+      "evidence": [
+        {
+          "url": "https://github.com/Uniswap/contracts/blob/main/deployments/4663.md",
+          "kind": "official_protocol_deployment",
+          "claim": "PoolManager address and deployment transaction"
+        },
+        {
+          "url": "https://github.com/Uniswap/v4-core/tree/56928a9",
+          "kind": "official_protocol_source",
+          "claim": "ABI source commit for the event subset"
+        }
+      ]
+    }
+  },
+  "launch_sources": {
+    "pons_v1": {
+      "address": "0xA5aAb3F0c6EeadF30Ef1D3Eb997108E976351feB",
+      "version": "PonsLaunchFactory V1",
+      "role": "fixed_supply_v3_launch",
+      "status": "retired_candidate",
+      "evidence": "https://github.com/ponsdotdev/ponsfamily"
+    },
+    "pons_v2": {
+      "address": "0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e",
+      "version": "PonsV2LaunchFactory",
+      "role": "bonding_curve_then_v4_graduation",
+      "status": "candidate_pending_archive_coverage",
+      "runtime_code_bytes": 24177,
+      "runtime_bytecode_sha256": "226a042e6d68a69a6038d4fda211925b03eb5299399434b87a7877f79f6e3848",
+      "abi_manifest": "configs/sources/pons-v2-events.abi.json",
+      "abi_sha256": "5d4bd5911e07f74fffb48c8856ab599f21be1a3c0be1b9a964c845b725f03223",
+      "source_commit": "33c2281bfcf91f18ddc3e8497894ae764118ce37",
+      "creation_block": 26841846,
+      "creation_block_hex": "0x198bcf6",
+      "creation_block_status": "documented_unverified",
+      "evidence": [
+        {
+          "url": "https://github.com/ponsdotdev/ponsfamily/blob/33c2281bfcf91f18ddc3e8497894ae764118ce37/README.md",
+          "kind": "official_project_source_and_deployment_claim",
+          "claim": "Current V2 address and bonding-curve-to-V4 lifecycle"
+        },
+        {
+          "url": "https://github.com/ponsdotdev/ponsfamily/blob/33c2281bfcf91f18ddc3e8497894ae764118ce37/contractsV2/src/v2/PonsV2LaunchFactory.sol",
+          "kind": "official_protocol_source",
+          "claim": "Factory event declarations and lifecycle source at the pinned commit"
+        },
+        {
+          "url": "https://robinscanner.com/addresses/0x7ed598bcef8bd9edd8c97a195c6d13f40801ec7e?tab=contract",
+          "kind": "third_party_explorer_documentation",
+          "claim": "Reported first-seen block 26841846; not treated as independently verified creation evidence"
+        }
+      ],
+      "open_questions": [
+        "Independently verify the documented creation block with an archive-capable source.",
+        "Sample at least ten creation/lifecycle events from native RPC or a supported archive source.",
+        "Confirm non-graduate coverage from an archive-capable source."
+      ]
+    }
+  },
+  "legacy_candidates": {
+    "pons_v2_previous_address": {
+      "address": "0x7E1EAbd52Ae29598e6483F72dCf1a70b14284dB8",
+      "status": "previous_candidate_not_selected",
+      "runtime_code_bytes": 22757,
+      "runtime_bytecode_sha256": "6796fb0e5c1687698e7f2dcea07d855606396345b14c8dd212eb3ce3544cad63",
+      "evidence": "https://github.com/ponsdotdev/ponsfamily"
+    }
+  },
+  "comparative_candidates": {
+    "pools_trade": {
+      "status": "documented_comparison_only",
+      "contracts": [
+        "0x23f8209572b4a1c2ad88a42749e830791fb027f1",
+        "0xad44d55e7f8337c3ce113fbb591486e85be104b2",
+        "0xce57498d3474dcc244dfb6710ffbe6d4441cd2b2",
+        "0x60d73b21cdf2ea846ab3d58699bbbb8f29d72491"
+      ],
+      "evidence": "https://docs.bitquery.io/docs/blockchain/robinhood/pools-trade-api/",
+      "notes": "Provider documentation is not treated as independent deployment or coverage proof."
+    }
+  },
+  "selection": {
+    "pool_source": "uniswap_v4",
+    "launch_source": "pons_v2",
+    "launch_source_status": "candidate_pending_archive_coverage",
+    "rationale": "Pons V2 is the candidate because its documented lifecycle includes non-graduating bonding-curve launches and later V4 graduation. The current factory source/ABI is pinned and a bounded live creation sample decodes; launch history remains gated until archive and non-graduate coverage are independently verified.",
+    "gate_status": "OPEN",
+    "gate_failures": [
+      "Native archive coverage for the documented Pons V2 creation block is not verified.",
+      "No lifecycle sample beyond current TokenLaunched events yet.",
+      "Archive/history coverage and provider limits remain unmeasured."
+    ]
+  },
+  "last_bounded_probe": {
+    "date": "2026-09-13",
+    "endpoint": "https://rpc.mainnet.chain.robinhood.com",
+    "methods": ["eth_chainId", "eth_blockNumber", "eth_getCode", "eth_getTransactionReceipt", "eth_getTransactionByHash", "eth_getLogs"],
+    "request_count": null,
+    "request_count_note": "This manifest records representative bounded probes rather than a packet-level request count.",
+    "observed_chain_id_hex": "0x1237",
+    "observed_chain_id": 4663,
+    "observed_head_hex": "0x3aa1980",
+    "observed_head": 61479296,
+    "pool_manager_code_present": true,
+    "pons_v2_code_present": true,
+    "pool_manager_log_probe": {
+      "from_block": 9070,
+      "to_block": 9170,
+      "logs": 1,
+      "note": "The bounded early range only returned the deployment ownership log; it is not a trading-activity coverage sample."
+    },
+    "observed_vs_documented": "Chain ID and code fields were observed through public RPC. The current Pons V2 address and ABI source are documented by the official project; creation block, archive depth and launch coverage remain documented or open, not inferred.",
+    "python_adapter_probe": {
+      "date": "2026-09-13",
+      "chain_id": 4663,
+      "head": 61434717,
+      "v4_code_bytes": 24009,
+      "result": "pass",
+      "note": "Bounded read-only client check; no signing or broadcast method is exposed."
+    },
+    "pons_v2_event_probe": {
+      "date": "2026-09-13",
+      "from_block": 61477296,
+      "to_block": 61479296,
+      "raw_logs": 34,
+      "decoded_logs": 34,
+      "event_counts": {
+        "TokenLaunched": 34,
+        "LaunchSwept": 0,
+        "GraduationTokensPermanentlyLocked": 0,
+        "PoolGraduated": 0
+      },
+      "unsupported_logs": 0,
+      "malformed_logs": 0,
+      "zero_block_timestamps": 34,
+      "result": "pass",
+      "note": "Bounded live creation-event sample. The endpoint returned zero blockTimestamp values for these logs, so capture must use arrival-time fallback; no lifecycle-completeness or non-graduate-history claim is made."
+    },
+    "live_v4_capture_probe": {
+      "date": "2026-09-13",
+      "from_block": 61436940,
+      "to_block": 61437618,
+      "raw_pool_manager_logs": 2791,
+      "decoded_supported_logs": 2742,
+      "decoded_event_counts": {
+        "Initialize": 18,
+        "Swap": 2319,
+        "ModifyLiquidity": 405
+      },
+      "unsupported_logs": 49,
+      "malformed_supported_logs": 0,
+      "pool_id_shape": "all decoded IDs are 32-byte values",
+      "timestamps": "all captured records retained event and arrival timestamps",
+      "result": "pass",
+      "note": "Bounded live sample; not a 72-hour completeness or archive-coverage claim."
+    },
+    "receipt_crosscheck": {
+      "date": "2026-09-13",
+      "head": 61437872,
+      "range_blocks": 20,
+      "logs": 73,
+      "supported_swap_found": true,
+      "receipt_status": "0x1",
+      "matching_receipt_logs": 1,
+      "result": "pass",
+      "note": "One bounded live receipt/log consistency check; not a trade attribution coverage claim."
+    }
+  }
+}

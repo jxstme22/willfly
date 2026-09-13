@@ -1,0 +1,25 @@
+{
+  "manifest_version": "0.1.0",
+  "origin": "synthetic",
+  "created_on": "2026-09-13",
+  "cases_path": "cases.json",
+  "files": [
+    {
+      "path": "cases.json",
+      "sha256": "dc24736d4710cb5d7915aa71f7895003d593b5a340a6b66bdcaee8cf4864a4ce"
+    }
+  ],
+  "coverage": [
+    "duplicate chain/vendor observations",
+    "malformed log quarantine",
+    "native ETH sentinel",
+    "fork/orphan evidence",
+    "token receipt without payment",
+    "estimated USD separated from spend",
+    "genuine multi-hop swap",
+    "stale vendor assessment",
+    "unknown cohort history",
+    "scanner outage fallback"
+  ],
+  "notes": "All records are synthetic failure-mode fixtures. They are not claims about any live token or vendor result."
+}

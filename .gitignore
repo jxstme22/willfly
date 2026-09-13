@@ -1,0 +1,51 @@
+# Local environments and caches
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+credentials*
+secrets/
+
+# Raw/derived datasets and run outputs
+data/
+artifacts/*
+*.jsonl
+*.jsonl.gz
+*.parquet
+*.sqlite
+*.sqlite3
+*.db
+*.arrow
+*.feather
+models/
+checkpoints/
+*.egg-info/
+
+# Local probe output
+tmp/
+.DS_Store
+build/
+dist/
+.coverage
+htmlcov/
+
+# Source code and release marker exceptions
+!src/willfly/models/
+!src/willfly/models/**
+src/willfly/models/**/__pycache__/
+
+# Keep only the checked-in shadow bundle marker; generated artifacts stay ignored.
+!artifacts/shadow/
+artifacts/shadow/*
+!artifacts/shadow/README.md

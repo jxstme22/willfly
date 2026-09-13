@@ -1,0 +1,10 @@
+{
+  "schema_version": "0.1.0",
+  "status": "pending_verification",
+  "release_id": null,
+  "source_url": null,
+  "license_url": null,
+  "source_sha256": null,
+  "curated_filter": "not_selected",
+  "note": "No connectome release is claimed or downloaded until release, license and dependency checks are completed in P5-01."
+}

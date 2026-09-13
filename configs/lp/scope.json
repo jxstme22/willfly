@@ -1,0 +1,10 @@
+{
+  "schema_version": "0.1.0",
+  "status": "pending_pool_family_verification",
+  "protocol": "uniswap_v4",
+  "pool_family": null,
+  "supported_actions": ["open", "collect", "resize", "remove", "convert"],
+  "unsupported_hooks_block_execution": true,
+  "small_position_counterfactual": true,
+  "note": "Enable only after observed receipts and hook behavior support the selected family."
+}

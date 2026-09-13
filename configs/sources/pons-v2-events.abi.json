@@ -1,0 +1,39 @@
+{
+  "schema": "willfly.abi-manifest.v1",
+  "protocol": "pons_v2",
+  "contract": "0x7eD598BcEf8bd9Edd8C97A195C6d13f40801EC7e",
+  "source": "https://github.com/ponsdotdev/ponsfamily/blob/33c2281bfcf91f18ddc3e8497894ae764118ce37/contractsV2/src/v2/PonsV2LaunchFactory.sol",
+  "source_commit": "33c2281bfcf91f18ddc3e8497894ae764118ce37",
+  "events": [
+    {
+      "name": "TokenLaunched",
+      "topic0": "0x8d4aad4953d0ca700d468f3753aa14432d1b35b43ec6409f051fb6aa43a89607",
+      "inputs": ["address indexed token", "address indexed curve", "address indexed deployer", "address pairToken", "uint256 launchConfigId", "uint256 graduationThreshold"],
+      "role": "creation"
+    },
+    {
+      "name": "LaunchSwept",
+      "topic0": "0xcdb72f157fd3666758a6ce201387ffb52038c7562e4fff352828da1096c4b6b4",
+      "inputs": ["address indexed token", "uint256 quoteOut", "uint256 tokenOut"],
+      "role": "curve_graduation"
+    },
+    {
+      "name": "GraduationTokensPermanentlyLocked",
+      "topic0": "0xa0a18f5bf205becee8b268d7cf69addab8548ae8ef361791464cf0e0e17c1361",
+      "inputs": ["address indexed token", "uint256 amount"],
+      "role": "graduation_lifecycle"
+    },
+    {
+      "name": "PoolGraduated",
+      "topic0": "0x0a44ef75df69c534f43cd6c1aa3ef8983065fe5fe79ef9e79f6494e6f258c259",
+      "inputs": ["address indexed token", "uint256 positionId", "uint256 tokenAmount", "uint256 pairTokenAmount"],
+      "role": "graduation_lifecycle"
+    }
+  ],
+  "notes": [
+    "This is the minimal lifecycle subset for the read-only launch adapter, not the complete factory ABI.",
+    "The zero address in pairToken is the native ETH sentinel; an ERC-20 pairToken remains an address.",
+    "PoolGraduated does not contain a V4 PoolId. Linking a launch to a pool requires a separate evidence join.",
+    "The source commit is pinned, but native archive coverage and the deployed creation block remain open gates."
+  ]
+}

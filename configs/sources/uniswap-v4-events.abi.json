@@ -1,0 +1,24 @@
+{
+  "schema": "willfly.abi-manifest.v1",
+  "protocol": "uniswap_v4",
+  "source": "https://github.com/Uniswap/v4-core/blob/56928a9/src/interfaces/IPoolManager.sol",
+  "source_commit": "56928a9",
+  "events": [
+    {
+      "name": "Initialize",
+      "inputs": ["bytes32 indexed id", "address indexed currency0", "address indexed currency1", "uint24 fee", "int24 tickSpacing", "address hooks", "uint160 sqrtPriceX96", "int24 tick"]
+    },
+    {
+      "name": "Swap",
+      "inputs": ["bytes32 indexed id", "address indexed sender", "int128 amount0", "int128 amount1", "uint160 sqrtPriceX96", "uint128 liquidity", "int24 tick", "uint24 fee"]
+    },
+    {
+      "name": "ModifyLiquidity",
+      "inputs": ["bytes32 indexed id", "address indexed sender", "int24 tickLower", "int24 tickUpper", "int256 liquidityDelta", "bytes32 salt"]
+    }
+  ],
+  "notes": [
+    "Currency is represented as an address in the manifest; the native currency sentinel is preserved as the zero address.",
+    "This is the event subset planned for the read-only recorder, not a claim that every hook or router is supported."
+  ]
+}

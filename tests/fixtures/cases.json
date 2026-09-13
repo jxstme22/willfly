@@ -1,0 +1,348 @@
+{
+  "fixture_version": "0.1.0",
+  "origin": "synthetic",
+  "purpose": "Exercise contract boundaries without asserting facts about a live token.",
+  "valid": [
+    {
+      "id": "v4-pool-with-native-currency",
+      "type": "pool_identity",
+      "expected": "accepted_and_keeps_manager_plus_pool_id",
+      "record": {
+        "chain_id": 4663,
+        "protocol": "uniswap_v4",
+        "manager_or_factory": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+        "pool_address": null,
+        "pool_id": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0x1111111111111111111111111111111111111111",
+        "fee": 10000,
+        "tick_spacing": 10,
+        "hook": "0x0000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "id": "v3-pool-with-address",
+      "type": "pool_identity",
+      "expected": "accepted_and_keeps_pool_address",
+      "record": {
+        "chain_id": 4663,
+        "protocol": "uniswap_v3",
+        "manager_or_factory": "0x1f7d7550b1b028f7571e69a784071f0205fd2efa",
+        "pool_address": "0x3333333333333333333333333333333333333333",
+        "pool_id": null,
+        "currency0": "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
+        "currency1": "0x1111111111111111111111111111111111111111",
+        "fee": 3000,
+        "tick_spacing": 60,
+        "hook": null
+      }
+    },
+    {
+      "id": "canonical-raw-swap-log",
+      "type": "raw_event",
+      "expected": "canonical_event_with_exact_identity",
+      "record": {
+        "chain_id": 4663,
+        "source": "fixture.rpc",
+        "source_schema_version": "fixture.v0.1",
+        "block_number": 100,
+        "block_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "parent_hash": "0x3333333333333333333333333333333333333333333333333333333333333333",
+        "transaction_hash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "log_index": 2,
+        "event_time": "2026-09-13T00:00:00Z",
+        "received_time": "2026-09-13T00:00:01Z",
+        "payload": {
+          "event": "Swap",
+          "amount0_atomic": "90071992547409930000000000000000000001",
+          "amount1_atomic": "123456789012345678901234567890"
+        },
+        "ingestion_run": "fixture-run-001",
+        "canonical_status": "canonical"
+      }
+    },
+    {
+      "id": "orphaned-fork-log",
+      "type": "raw_event",
+      "expected": "retained_but_not_canonical",
+      "record": {
+        "chain_id": 4663,
+        "source": "fixture.rpc",
+        "source_schema_version": "fixture.v0.1",
+        "block_number": 101,
+        "block_hash": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "parent_hash": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "transaction_hash": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "log_index": 0,
+        "event_time": "2026-09-13T00:00:15Z",
+        "received_time": "2026-09-13T00:00:16Z",
+        "payload": {"event": "Initialize", "pool_id": "0x7777777777777777777777777777777777777777777777777777777777777777"},
+        "ingestion_run": "fixture-run-001",
+        "canonical_status": "orphaned"
+      }
+    },
+    {
+      "id": "non-graduate-with-unknown-creator",
+      "type": "launch",
+      "expected": "retained_without_pool",
+      "record": {
+        "chain_id": 4663,
+        "token": "0x8888888888888888888888888888888888888888",
+        "launch_contract": "0x7E1EAbd52Ae29598e6483F72dCf1a70b14284dB8",
+        "launch_contract_version": "pons-v2-fixture",
+        "creation_evidence": ["raw:fixture-launch-001"],
+        "creator": null,
+        "created_at": null,
+        "first_seen_at": "2026-09-13T00:01:00Z",
+        "origin_confidence": "unknown",
+        "linked_pool_ids": [],
+        "lifecycle_state": "non_graduate"
+      }
+    },
+    {
+      "id": "genuine-multi-hop-swap",
+      "type": "trade_evidence",
+      "expected": "verified_swap_with_single_wallet_purchase",
+      "record": {
+        "transaction_hash": "0x9999999999999999999999999999999999999999999999999999999999999999",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "token": "0x1111111111111111111111111111111111111111",
+        "classification": "genuine_swap",
+        "payment_legs": [
+          {
+            "asset": "native:ETH",
+            "amount_atomic": "1000000000000000001",
+            "direction": "out",
+            "from_address": "0x2222222222222222222222222222222222222222",
+            "to_address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "evidence_ref": "raw:fixture-route-payment"
+          }
+        ],
+        "receipt_legs": [
+          {
+            "asset": "0x1111111111111111111111111111111111111111",
+            "amount_atomic": "123456789012345678901",
+            "direction": "in",
+            "from_address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "to_address": "0x2222222222222222222222222222222222222222",
+            "evidence_ref": "raw:fixture-route-receipt"
+          }
+        ],
+        "quote_asset": "native:ETH",
+        "valuation_method": null,
+        "estimated_usd": false,
+        "estimated_usd_value": null,
+        "reason_flags": ["multi_hop_route_collapsed_to_one_wallet_purchase"],
+        "method_version": "trade-evidence.v0.1",
+        "as_of_time": "2026-09-13T00:02:00Z",
+        "retrieved_time": "2026-09-13T00:02:01Z",
+        "raw_event_refs": ["raw:fixture-route-payment", "raw:fixture-route-receipt"]
+      }
+    },
+    {
+      "id": "plain-transfer",
+      "type": "trade_evidence",
+      "expected": "not_a_purchase",
+      "record": {
+        "transaction_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "token": "0x1111111111111111111111111111111111111111",
+        "classification": "transfer",
+        "payment_legs": [],
+        "receipt_legs": [
+          {
+            "asset": "0x1111111111111111111111111111111111111111",
+            "amount_atomic": "500000000000000000000",
+            "direction": "in",
+            "from_address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "to_address": "0x2222222222222222222222222222222222222222",
+            "evidence_ref": "raw:fixture-transfer"
+          }
+        ],
+        "quote_asset": null,
+        "valuation_method": null,
+        "estimated_usd": false,
+        "estimated_usd_value": null,
+        "reason_flags": ["no_payment_leg"],
+        "method_version": "trade-evidence.v0.1",
+        "as_of_time": "2026-09-13T00:03:00Z",
+        "retrieved_time": "2026-09-13T00:03:01Z",
+        "raw_event_refs": ["raw:fixture-transfer"]
+      }
+    },
+    {
+      "id": "gift-or-airdrop",
+      "type": "trade_evidence",
+      "expected": "not_a_purchase",
+      "record": {
+        "transaction_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "token": "0x1111111111111111111111111111111111111111",
+        "classification": "gift_or_airdrop",
+        "payment_legs": [],
+        "receipt_legs": [
+          {
+            "asset": "0x1111111111111111111111111111111111111111",
+            "amount_atomic": "1000000000000000000",
+            "direction": "in",
+            "from_address": "0x3333333333333333333333333333333333333333",
+            "to_address": "0x2222222222222222222222222222222222222222",
+            "evidence_ref": "raw:fixture-airdrop"
+          }
+        ],
+        "quote_asset": null,
+        "valuation_method": null,
+        "estimated_usd": false,
+        "estimated_usd_value": null,
+        "reason_flags": ["multiple_recipients_same_transaction"],
+        "method_version": "trade-evidence.v0.1",
+        "as_of_time": "2026-09-13T00:04:00Z",
+        "retrieved_time": "2026-09-13T00:04:01Z",
+        "raw_event_refs": ["raw:fixture-airdrop", "raw:fixture-multi-recipient"]
+      }
+    },
+    {
+      "id": "flagged-buy-without-cash-leg",
+      "type": "trade_evidence",
+      "expected": "ambiguous_not_verified_spend",
+      "record": {
+        "transaction_hash": "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "token": "0x1111111111111111111111111111111111111111",
+        "classification": "ambiguous",
+        "payment_legs": [],
+        "receipt_legs": [
+          {
+            "asset": "0x1111111111111111111111111111111111111111",
+            "amount_atomic": "2500000000000000000",
+            "direction": "in",
+            "from_address": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "to_address": "0x2222222222222222222222222222222222222222",
+            "evidence_ref": "raw:fixture-flagged-buy"
+          }
+        ],
+        "quote_asset": null,
+        "valuation_method": "vendor_display_estimate",
+        "estimated_usd": true,
+        "estimated_usd_value": "123456",
+        "reason_flags": ["vendor_buy_label_only", "no_readable_cash_leg", "estimated_value_is_not_spend"],
+        "method_version": "trade-evidence.v0.1",
+        "as_of_time": "2026-09-13T00:05:00Z",
+        "retrieved_time": "2026-09-13T00:05:03Z",
+        "raw_event_refs": ["raw:fixture-flagged-buy", "vendor:fixture-rhtrenches-row"]
+      }
+    },
+    {
+      "id": "stale-vendor-warning",
+      "type": "vendor_assessment",
+      "expected": "stale_claim_kept_with_timestamps",
+      "record": {
+        "vendor": "fixture-scanner",
+        "subject_type": "token",
+        "subject_id": "0x1111111111111111111111111111111111111111",
+        "method_version": "scanner.v0.1",
+        "reason_flags": ["owner_concentration", "unverified_contract"],
+        "source_as_of_time": "2026-09-12T23:00:00Z",
+        "retrieved_time": "2026-09-13T00:06:00Z",
+        "freshness": "stale",
+        "raw_reference": "vendor:fixture-scanner-001",
+        "unavailable": false
+      }
+    },
+    {
+      "id": "unknown-cohort-history",
+      "type": "wallet_cohort",
+      "expected": "unknown_membership_does_not_backfill",
+      "record": {
+        "cohort_id": "fixture-tracked-wallets-2026-09-13",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "membership_state": "unknown",
+        "source": "fixture-vendor",
+        "observed_at": "2026-09-13T00:07:00Z",
+        "relationship_evidence": [],
+        "relationship_uncertainty": "unknown",
+        "raw_references": ["vendor:fixture-cohort-snapshot"]
+      }
+    },
+    {
+      "id": "degraded-observation",
+      "type": "observation",
+      "expected": "missingness_and_lineage_are_explicit",
+      "record": {
+        "subject_type": "token",
+        "subject_id": "0x1111111111111111111111111111111111111111",
+        "as_of_time": "2026-09-13T00:08:00Z",
+        "latest_included_event_time": "2026-09-13T00:07:45Z",
+        "latest_included_arrival_time": "2026-09-13T00:07:50Z",
+        "feature_version": "observatory.features.v0.1",
+        "values": {"verified_net_flow_atomic": null, "estimated_usd_flow": "123456"},
+        "missingness": {"verified_net_flow_atomic": "provider_gap", "estimated_usd_flow": "vendor_estimate"},
+        "quality_state": "degraded",
+        "lineage": ["raw:fixture-flagged-buy", "vendor:fixture-rhtrenches-row"]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "id": "v4-without-pool-id",
+      "type": "pool_identity",
+      "expected_error": "AmbiguousContractError",
+      "record": {
+        "chain_id": 4663,
+        "protocol": "uniswap_v4",
+        "manager_or_factory": "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+        "pool_address": null,
+        "pool_id": null,
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0x1111111111111111111111111111111111111111",
+        "fee": 10000,
+        "tick_spacing": 10,
+        "hook": "0x0000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "id": "genuine-swap-without-payment",
+      "type": "trade_evidence",
+      "expected_error": "AmbiguousContractError",
+      "record": {
+        "transaction_hash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "token": "0x1111111111111111111111111111111111111111",
+        "classification": "genuine_swap",
+        "payment_legs": [],
+        "receipt_legs": [],
+        "quote_asset": null,
+        "valuation_method": null,
+        "estimated_usd": false,
+        "estimated_usd_value": null,
+        "reason_flags": ["dashboard_label_only"],
+        "method_version": "trade-evidence.v0.1",
+        "as_of_time": "2026-09-13T00:09:00Z",
+        "retrieved_time": "2026-09-13T00:09:01Z",
+        "raw_event_refs": ["vendor:fixture-only-label"]
+      }
+    },
+    {
+      "id": "estimated-usd-without-method",
+      "type": "trade_evidence",
+      "expected_error": "SchemaValidationError",
+      "record": {
+        "transaction_hash": "0x1212121212121212121212121212121212121212121212121212121212121212",
+        "wallet": "0x2222222222222222222222222222222222222222",
+        "token": "0x1111111111111111111111111111111111111111",
+        "classification": "ambiguous",
+        "payment_legs": [],
+        "receipt_legs": [],
+        "quote_asset": null,
+        "valuation_method": null,
+        "estimated_usd": true,
+        "estimated_usd_value": "100",
+        "reason_flags": ["unpriced"],
+        "method_version": "trade-evidence.v0.1",
+        "as_of_time": "2026-09-13T00:10:00Z",
+        "retrieved_time": "2026-09-13T00:10:01Z",
+        "raw_event_refs": ["raw:fixture-unpriced"]
+      }
+    }
+  ]
+}

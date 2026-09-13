@@ -1,0 +1,1769 @@
+{
+  "version": "1.2",
+  "date": "2026-09-13",
+  "status": "audit_reconciled_implementation_in_progress",
+  "task_count": 77,
+  "phases": [
+    {
+      "id": "P0",
+      "title": "Specification and access",
+      "scope": "Core"
+    },
+    {
+      "id": "P1",
+      "title": "Recorder and recovery",
+      "scope": "Core"
+    },
+    {
+      "id": "P2",
+      "title": "Observatory v0.1",
+      "scope": "Core"
+    },
+    {
+      "id": "P3",
+      "title": "Replay and labels",
+      "scope": "Core"
+    },
+    {
+      "id": "P4",
+      "title": "Baseline policies",
+      "scope": "Core"
+    },
+    {
+      "id": "P5",
+      "title": "Connectome experiment",
+      "scope": "Core"
+    },
+    {
+      "id": "P6",
+      "title": "LP data and LLM integration",
+      "scope": "Core"
+    },
+    {
+      "id": "P7",
+      "title": "Selective LP laboratory",
+      "scope": "Core"
+    },
+    {
+      "id": "P8",
+      "title": "Prospective shadow agent",
+      "scope": "Core"
+    },
+    {
+      "id": "P9",
+      "title": "Funded pilot",
+      "scope": "Conditional"
+    },
+    {
+      "id": "P10",
+      "title": "Expansion and advanced learning",
+      "scope": "Conditional"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "P0-01",
+      "phase": "P0",
+      "title": "Initialize the research workspace",
+      "status": "DONE",
+      "status_evidence": [
+        "pyproject.toml",
+        "requirements-dev.lock",
+        "src/willfly/cli.py",
+        "tests/test_cli.py"
+      ],
+      "depends_on": [],
+      "owner_role": "Platform",
+      "target_paths": [
+        "pyproject.toml",
+        "src/willfly/",
+        "tests/",
+        ".gitignore"
+      ],
+      "work": "Create the package, local environment, lockfile, formatting and test commands. Ignore datasets, credentials and model artifacts. Add a tiny offline CLI entry point and document the supported Python version.",
+      "acceptance": "A fresh environment runs the CLI and fixture tests; repository scanning finds no credential values or generated datasets.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence"
+    },
+    {
+      "id": "P0-02",
+      "phase": "P0",
+      "title": "Pin network and source deployments",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "configs/sources/robinhood-chain-v0.1.json",
+        "configs/sources/uniswap-v4-events.abi.json",
+        "docs/source-matrix.md",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P0-01"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "configs/sources/",
+        "docs/source-matrix.md"
+      ],
+      "work": "Verify chain identity, V4 deployment, ABI and creation block from official protocol sources plus chain evidence. Compare Pons versions and pools.trade; select one launch contract/version with creation coverage, including non-graduates. Record provider limits, history and licenses.",
+      "acceptance": "Manifest contains evidence URLs, addresses, ABI hashes, deployment blocks and network checks. At least ten raw examples per supported event family decode; unknown deployment means gate remains open.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P0-03",
+      "phase": "P0",
+      "title": "Validate read access and provider budget",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/provider-budget.md",
+        "configs/sources/robinhood-chain-v0.1.json",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P0-02"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/adapters/",
+        "docs/provider-budget.md"
+      ],
+      "work": "Probe read RPC/archive capability and candidate event API with bounded requests. Measure historical depth, pagination, rate limits, delay and error behavior. Specify daily request/storage estimates and chosen plan without purchasing a subscription. Include RHTrenches and Mezzanine in the source matrix: supported API/export, usage terms, cohort coverage, history, timestamps, pricing and failure behavior. Treat RHTrenches UI observations and Mezzanine advertised features separately from tested integration evidence. Do not bypass region restrictions or buy credits; optional scanner access must not block native capture.",
+      "acceptance": "Redacted probe report distinguishes tested endpoints from documented ones; a 24-hour sample budget is estimated; unavailable keys are explicit blockers rather than silently mocked results. Each scanner has a dated tested/documented/unavailable verdict and fallback. No undocumented endpoint, private stream or claimed UI latency is presented as a validated API or measured service guarantee.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P0-04",
+      "phase": "P0",
+      "title": "Define canonical data contracts",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/domain/contracts.py",
+        "docs/data-contracts.md",
+        "tests/fixtures/cases.json",
+        "tests/test_contracts.py"
+      ],
+      "depends_on": [
+        "P0-02"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/domain/",
+        "docs/data-contracts.md"
+      ],
+      "work": "Specify raw events, pool identity, launches, observations and lineage. Preserve exact quantities, ETH/WETH identity, V4 pool IDs, timestamps, canonicality and unknown values. Version schemas and reject ambiguous fields. Specify TradeEvidence, VendorAssessment and WalletCohort records. Separate verified swaps, transfers, gifts/airdrops and ambiguous activity; preserve exact payment legs, quote currency, valuation method, estimated USD status, reason flags, method version, as-of time and retrieval time. Cohort membership and wallet relationships carry observation time and uncertainty.",
+      "acceptance": "Schema fixtures round-trip exact integer quantities and include V3/V4 identity examples, missing metadata and orphaned logs; ambiguous identity fails validation. Fixtures represent a token receipt without payment, an estimated USD amount, a genuine multi-hop swap, stale vendor flags and unknown cohort history. Transfer value cannot validate actual spend; missing vendor history cannot become an earlier observation.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P0-05",
+      "phase": "P0",
+      "title": "Freeze the first experiment proposal",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "configs/experiments/initial.yaml",
+        "docs/evaluation-contract.md"
+      ],
+      "depends_on": [
+        "P0-03",
+        "P0-04"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "configs/experiments/initial.yaml",
+        "docs/evaluation-contract.md"
+      ],
+      "work": "Record eligibility, decision interval, target horizons, capital scenarios, splits, drawdown constraints, inference rules and data-quality exclusions. Reserve a calibration sample and untouched holdout; document changes before holdout access. Predeclare the follower-outcome experiment: select wallet cohorts using only prior information, record observable signal arrival, and evaluate our executable entry and exit after costs. Compare genuine net flow with unverified activity and keep the fly-model comparison independent of added data.",
+      "acceptance": "Versioned specification includes every metric and gate from the roadmap, known feasibility dependencies and a deterministic split construction rule; no test result is used for specification selection. The proposal distinguishes leader PnL from follower outcomes and explicitly treats unobserved cohort history or missing execution state as an inference limit.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P0-06",
+      "phase": "P0",
+      "title": "Create offline fixtures and v0.1 gate",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "tests/fixtures/manifest.json",
+        "tests/fixtures/cases.json",
+        "docs/runbooks/v0.1.md",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P0-04"
+      ],
+      "owner_role": "QA",
+      "target_paths": [
+        "tests/fixtures/",
+        "docs/runbooks/v0.1.md"
+      ],
+      "work": "Prepare provenance-tagged observed fixtures where available and explicitly synthetic failure cases. Encode the seven-step observatory demo and distinguish synthetic verification from live evidence. Add swap-versus-transfer fixtures, including a flagged BUY with no readable cash leg, multiple recipients in one transaction, duplicate vendor/chain observations and scanner outage. Synthetic examples illustrate failure modes without asserting a specific live token is malicious.",
+      "acceptance": "Fixture manifest identifies origin and hashes; v0.1 checklist covers disconnected source, duplicate delivery, malformed log, native asset and fork cases. Fixture provenance and expected classifications are explicit; a dashboard label alone cannot pass payment-evidence checks.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P1-01",
+      "phase": "P1",
+      "title": "Implement raw storage and metadata",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/storage/raw.py",
+        "src/willfly/storage/__init__.py",
+        "tests/test_storage.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P0-01",
+        "P0-04"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/storage/"
+      ],
+      "work": "Write compressed append-only raw batches with hashes and a transactional SQLite checkpoint/manifest store. Define partition naming and atomic batch publication.",
+      "acceptance": "Interruption before and after checkpoint commit does not lose acknowledged events; corrupt/truncated batches are detected and recoverable from the last good checkpoint.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P1-02",
+      "phase": "P1",
+      "title": "Implement Robinhood log capture",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/adapters/robinhood_rpc.py",
+        "src/willfly/ingest/capture.py",
+        "tests/test_rpc_capture.py",
+        "configs/sources/robinhood-chain-v0.1.json",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P0-03",
+        "P0-06",
+        "P1-01"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/adapters/robinhood_rpc.py",
+        "src/willfly/ingest/capture.py"
+      ],
+      "work": "Capture configured contracts through supported subscriptions or bounded polling, recording arrival time and chain context. Keep subscription mechanics distinct from the sequencer feed; enforce read-only operation.",
+      "acceptance": "Recorded event batches match sample RPC receipts; throttling/backoff works; wrong-chain endpoint is rejected; no signing or transaction-send method is exposed.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P1-03",
+      "phase": "P1",
+      "title": "Decode pool and trading events",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/adapters/protocols/v4.py",
+        "src/willfly/adapters/protocols/__init__.py",
+        "tests/test_v4_protocols.py",
+        "configs/sources/robinhood-chain-v0.1.json",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P1-02"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/adapters/protocols/"
+      ],
+      "work": "Decode initialization, swaps and liquidity changes for supported V4 paths. Implement exact currency ordering and pool identity; flag unsupported hooks instead of treating all V4 behavior as standard. Join supported swap logs with transaction receipts and relevant transfer/native-value evidence to classify trade origin. Reconcile multi-hop routes without counting each leg as a separate wallet purchase. Preserve third-party labels as source claims; quarantine or mark unknown when cash-flow attribution cannot be resolved.",
+      "acceptance": "Known receipts decode deterministically with raw lineage; two pools sharing a manager remain separate; malformed and unsupported events enter quarantine. No-payment receipts and airdrops never inflate verified buy counts or spend; duplicate source observations deduplicate while keeping lineage. Valid routed swaps pass; unresolved attribution stays unknown.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P1-04",
+      "phase": "P1",
+      "title": "Decode one launchpad lifecycle",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/adapters/launchpad.py",
+        "configs/sources/pons-v2-events.abi.json",
+        "configs/sources/robinhood-chain-v0.1.json",
+        "tests/test_launchpad.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P0-02",
+        "P1-02"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/adapters/launchpad.py"
+      ],
+      "work": "Implement the selected version's creation and lifecycle events. Link pools only using verifiable evidence; retain launches without pool creation and separate first seen from creation time.",
+      "acceptance": "Fixtures cover trading and non-trading launches, late discovery and version mismatch; origin confidence and unknown history are visible.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P1-05",
+      "phase": "P1",
+      "title": "Implement resumable backfill",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/ingest/backfill.py",
+        "tests/test_backfill.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P1-03",
+        "P1-04"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/ingest/backfill.py"
+      ],
+      "work": "Fetch bounded historical ranges with adaptive page sizes, pagination completeness checks and checkpoints. Merge overlap with live capture without losing provenance.",
+      "acceptance": "Stopping mid-range and resuming yields the same logical records as uninterrupted replay; truncated pages and provider range limits are surfaced.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P1-06",
+      "phase": "P1",
+      "title": "Implement canonicalization and fork recovery",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/ingest/canonicalize.py",
+        "tests/test_canonicalize.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P1-05"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/ingest/canonicalize.py"
+      ],
+      "work": "Track block hashes/parents and provisional versus confirmed projections using the verified network policy. Roll back derived state on fork changes, retaining raw orphan evidence.",
+      "acceptance": "A multi-block fork fixture produces the expected canonical dataset and repaired checkpoints; orphaned events never remain in canonical counts or training snapshots.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P1-07",
+      "phase": "P1",
+      "title": "Add supervision and quality telemetry",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/ingest/quality.py",
+        "src/willfly/ingest/supervisor.py",
+        "tests/test_quality.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P1-02",
+        "P1-06"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/ingest/supervisor.py",
+        "src/willfly/ingest/quality.py"
+      ],
+      "work": "Measure arrival delay, block lag, gap ranges, quarantine counts, retries and storage growth. Add reconnect, bounded retry and disk-space behavior; redact credentials from logs.",
+      "acceptance": "Disconnect/reconnect and storage-failure tests produce explicit degraded states and successful gap recovery; health cannot report green while a gap is unresolved.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P1-08",
+      "phase": "P1",
+      "title": "Run recorder coverage and recovery audit",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/coverage.py",
+        "tests/test_coverage.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P1-03",
+        "P1-04",
+        "P1-05",
+        "P1-06",
+        "P1-07"
+      ],
+      "owner_role": "QA",
+      "target_paths": [
+        "src/willfly/evaluation/coverage.py",
+        "artifacts/coverage/"
+      ],
+      "work": "Compare configured source intervals with separately fetched canonical logs. Run duplicate, crash and fork drills. Record numerator/denominator, provider independence and exclusions.",
+      "acceptance": "v0.1 capture gate is measured over 72 hours: discovery recall target, gap accounting and recovery checks reported. Any unmet condition remains an explicit gate failure.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P2-01",
+      "phase": "P2",
+      "title": "Build discovery and lifecycle projections",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/features/discovery.py",
+        "tests/test_features.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P1-08"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/features/discovery.py"
+      ],
+      "work": "Materialize launches, pools, trading status and evidence-backed lifecycle transitions. Keep inactive launches, pools without known launch origin and late-indexed records.",
+      "acceptance": "Counts reconcile to raw canonical events; launch time, pool time and first-observed time remain separate and queryable.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P2-02",
+      "phase": "P2",
+      "title": "Build causal token timelines",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/features/timelines.py",
+        "tests/test_features.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P2-01"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/features/timelines.py"
+      ],
+      "work": "Calculate trailing trades, flow and liquidity summaries using event and arrival cutoffs. Include available wallet aggregates, missingness and staleness. Do not claim full holder coverage from partial transfer history. Expose verified net flow separately from estimated or ambiguous activity. Version tracked-wallet membership and relationship evidence as of observation. Report cohort coverage; multiple wallets or shared recipients are not proof of independent buyers. Preserve the underlying suspicious events.",
+      "acceptance": "Appending future data cannot change an earlier as-of snapshot except through a new explicitly versioned correction; missing history produces unknown features. Future leaderboard membership cannot change earlier features. A planted receipt cannot raise verified buying pressure; an external cohort is never labeled chainwide demand.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P2-03",
+      "phase": "P2",
+      "title": "Implement portable dataset export",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/storage/export.py",
+        "requirements-export.lock",
+        "tests/test_export.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P2-02"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/storage/export.py"
+      ],
+      "work": "Export canonical Parquet partitions plus schema, source/config hashes, gaps and quality report. Keep API-specific payloads traceable but outside model contracts.",
+      "acceptance": "Re-import reproduces row counts, logical keys and feature hashes; large integer identities and quantities survive round-trip.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P2-04",
+      "phase": "P2",
+      "title": "Expose read-only inspection API and CLI",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/api/server.py",
+        "src/willfly/cli.py",
+        "tests/test_api.py",
+        "tests/test_cli.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P2-03"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/api/",
+        "src/willfly/cli.py"
+      ],
+      "work": "Implement doctor, capture, backfill, audit, export and serve commands. Provide paginated launches, token timeline, pool and health endpoints, bound locally by default.",
+      "acceptance": "CLI commands produce run IDs and useful exit codes; endpoint integration tests cover pagination, invalid identity and degraded data. No trading route exists.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P2-05",
+      "phase": "P2",
+      "title": "Build the observatory interface",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/ui/dashboard.py",
+        "tests/test_ui.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P2-04"
+      ],
+      "owner_role": "Product",
+      "target_paths": [
+        "src/willfly/ui/"
+      ],
+      "work": "Create launch list, token timeline and quality views. Show source time, arrival time, stale/missing fields and explorer evidence links. Add filters for lifecycle and supported protocol. Show trade-origin category, valuation method and vendor reason flags with evidence timestamps. Provide explicit display filters and visible excluded counts without deleting raw rows or changing training eligibility implicitly.",
+      "acceptance": "The demo can inspect one active launch and one non-graduate, trace an event to evidence and identify a data outage without reading logs. A reviewer can distinguish a real swap from a flagged receipt and an estimated value, and can inspect excluded events and stale vendor assessments.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P2-06",
+      "phase": "P2",
+      "title": "Package and accept Observatory v0.1",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/runbooks/observatory.md",
+        "pyproject.toml",
+        "requirements-export.lock",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P2-05",
+        "P1-08"
+      ],
+      "owner_role": "QA",
+      "target_paths": [
+        "docs/runbooks/observatory.md",
+        "artifacts/releases/v0.1/"
+      ],
+      "work": "Document install, source setup, capture/restart, audit/export and recovery. Run the full v0.1 demo from a clean local environment and publish a release evidence bundle.",
+      "acceptance": "Another local process follows the runbook and reproduces the export; phase gates pass or the release is explicitly labeled a partial pool-only prototype.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P3-01",
+      "phase": "P3",
+      "title": "Implement a deterministic replay scheduler",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/replay/scheduler.py",
+        "tests/test_replay_core.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P2-06"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/replay/scheduler.py"
+      ],
+      "work": "Replay by observed availability, with event ordering, strategy ticks and execution delay. Separate historical event timestamps from reconstructed availability when actual arrival data is unavailable.",
+      "acceptance": "Repeated fixture runs produce identical observations and action ordering; the strategy cannot inspect future events or corrected data before availability.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P3-02",
+      "phase": "P3",
+      "title": "Implement the portfolio ledger",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/replay/ledger.py",
+        "tests/test_replay_core.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-01"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/replay/ledger.py"
+      ],
+      "work": "Track exact asset balances, trades, gas, protocol/platform fees, marks and residual inventory. Separate realized cash flows from modeled liquidation value and include failed actions.",
+      "acceptance": "Asset conservation and hand-calculated multi-action fixtures reconcile; deposits cannot be counted as profit and fees are not deducted twice.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P3-03",
+      "phase": "P3",
+      "title": "Implement supported quotes and fill assumptions",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/replay/execution.py",
+        "tests/test_execution.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-02"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/replay/execution.py"
+      ],
+      "work": "Model supported pool mechanics, transaction delay and costs at the chosen capital sizes. Use archive state where available; label approximations. Exclude unsupported hooks from executable claims while retaining their observed episodes. Support follower replay from the signal receipt time plus processing/submission delay. Requote the proposed position at that time and simulate its exit under the same shared ledger. Keep observed leader economics separate from hypothetical follower economics.",
+      "acceptance": "Known transaction examples reconcile within declared tolerances; no route, shallow depth, revert, missing state and price changes generate explicit outcomes. A leader-profitable but follower-unprofitable fixture is handled correctly; missing historical depth cannot be replaced by leader fill prices or current marks.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P3-04",
+      "phase": "P3",
+      "title": "Implement causal training labels",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/features/labels.py",
+        "tests/test_labels.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-03",
+        "P0-05"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/features/labels.py"
+      ],
+      "work": "Generate 1/5/15-minute outcome labels with a primary 5-minute task after calibration. Record entry/exit feasibility, net returns and adverse excursions. Distinguish unresolved observations from actual losses.",
+      "acceptance": "Every label links to its horizon and fill assumptions; failed and unsellable episodes remain represented; incomplete horizons are marked censored.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P3-05",
+      "phase": "P3",
+      "title": "Implement portfolio constraints and candidate allocation",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/policies/constraints.py",
+        "tests/test_constraints.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-02",
+        "P0-05"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/policies/constraints.py"
+      ],
+      "work": "Enforce simulation capital, fixed entry allocation, concurrent-position limit, no leverage and no adding. Resolve simultaneous candidates deterministically against one shared cash ledger.",
+      "acceptance": "Competing opportunities cannot spend the same cash; rejected actions carry reasons; fixtures exercise all caps and ties.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P3-06",
+      "phase": "P3",
+      "title": "Implement leakage-resistant split manifests",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/splits.py",
+        "tests/test_splits.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-04"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/evaluation/splits.py"
+      ],
+      "work": "Create chronological calibration/train/validation/test manifests, purge overlapping label horizons and group related episodes where justified. Fit normalization only on training data. Freeze wallet selection using pre-window information, preserve cohort joins/removals as observed, and retain failed or delisted tokens. Never backfill a current leaderboard into historical membership.",
+      "acceptance": "Automated checks reject overlapping labels and future-derived features; held-out partitions are immutable and their hashes recorded before tuning. A future successful wallet cannot enter an earlier cohort; insufficient historical membership requires prospective evaluation.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P3-07",
+      "phase": "P3",
+      "title": "Audit replay mechanics and cost stress",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/replay_audit.py",
+        "tests/test_replay_audit.py",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-03",
+        "P3-04",
+        "P3-05",
+        "P3-06"
+      ],
+      "owner_role": "QA",
+      "target_paths": [
+        "tests/replay/",
+        "artifacts/replay-audit/"
+      ],
+      "work": "Reconcile at least 20 observed transaction examples spanning supported action paths, plus adverse synthetic fixtures. Evaluate increased delay, fees, slippage and incomplete liquidity. Audit follower timing and liquidation assumptions and compare verified-only flow against contaminated activity fixtures. Record scanner/data charges in full-system economics using an explicit allocation rule.",
+      "acceptance": "An audit lists exact versus approximate paths, tolerances and residual discrepancies; unsupported paths cannot silently pass as validated fills. Leader PnL is never the follower label, suspicious-event exclusions are counted, and shared data fees are neither omitted nor charged twice.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P3-08",
+      "phase": "P3",
+      "title": "Publish the replay dataset and evidence bundle",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/replay_bundle.py",
+        "tests/test_replay_audit.py",
+        "docs/runbooks/replay.md",
+        "docs/implementation-log.md"
+      ],
+      "depends_on": [
+        "P3-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "artifacts/datasets/",
+        "docs/runbooks/replay.md"
+      ],
+      "work": "Package dataset, label/split configs, accounting evidence and reproduction commands. Define a minimum adequate sample after observed episode counts and correlation analysis.",
+      "acceptance": "An independent local rerun reconstructs labels and ledgers; insufficient sample or historical state is explicitly inconclusive and blocks profitability claims.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P4-01",
+      "phase": "P4",
+      "title": "Implement simple baseline strategies",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/policies/baselines.py",
+        "tests/test_baselines.py",
+        "docs/results/baseline-review.md"
+      ],
+      "depends_on": [
+        "P3-08"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/policies/baselines.py"
+      ],
+      "work": "Implement idle cash, fixed-horizon hold, deterministic confirmation/momentum and a simple flow/liquidity filter with predeclared parameters and shared constraints. Add a deterministic tracked-wallet-following baseline when causal cohort evidence is available. Freeze selection and trigger rules before evaluation; account for signal latency, executable depth, fees and exits under the shared ledger.",
+      "acceptance": "Every strategy uses identical information cutoffs and costs; a fixture demonstrates the intended trigger and actual allocation behavior. Report follower returns separately from vendor/leader PnL; unavailable cohort data yields an explicit unavailable benchmark, not fabricated trades.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P4-02",
+      "phase": "P4",
+      "title": "Implement conventional prediction baselines",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/models/conventional.py",
+        "tests/test_baselines.py"
+      ],
+      "depends_on": [
+        "P3-08"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/conventional.py"
+      ],
+      "work": "Train regularized raw-feature models and one compact ordinary recurrent model. Use the same target family and feature information as the proposed neural experiment.",
+      "acceptance": "Training is reproducible from hashes and seeds; recurrent state cannot leak between unrelated token episodes or across split boundaries.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P4-03",
+      "phase": "P4",
+      "title": "Define common prediction-to-action mapping",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/policies/prediction.py",
+        "tests/test_baselines.py"
+      ],
+      "depends_on": [
+        "P4-01",
+        "P4-02"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/policies/prediction.py"
+      ],
+      "work": "Map predictions and uncertainty to enter/hold/exit decisions under shared fixed-size rules. Select thresholds only on validation and retain watch as an action.",
+      "acceptance": "Both learned model families run under the same decision rule; changing model predictions cannot bypass constraints.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P4-04",
+      "phase": "P4",
+      "title": "Implement experiment tracking and budgets",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/runs.py",
+        "tests/test_baselines.py"
+      ],
+      "depends_on": [
+        "P4-02"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/evaluation/runs.py"
+      ],
+      "work": "Record source/code/data/config hashes, seeds, training time, parameter counts, search trials and artifacts. Enforce comparable tuning opportunities and log failed runs.",
+      "acceptance": "A run can be reconstructed without undocumented manual settings; search-budget overrun is detected and failed models remain in the experiment record.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P4-05",
+      "phase": "P4",
+      "title": "Implement metrics and paired uncertainty",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/metrics.py",
+        "tests/test_baselines.py"
+      ],
+      "depends_on": [
+        "P4-03",
+        "P4-04"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/evaluation/metrics.py"
+      ],
+      "work": "Calculate net and excess return, drawdown, tail outcomes, failure rates, turnover, calibration and exposure. Implement paired block-bootstrap with episode grouping and locked resampling rules.",
+      "acceptance": "Hand-calculated fixtures verify metrics; seed repetitions are not treated as independent markets; insufficient independent blocks are flagged.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P4-06",
+      "phase": "P4",
+      "title": "Run walk-forward evaluation and stresses",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/walk_forward.py",
+        "docs/results/baseline-review.md"
+      ],
+      "depends_on": [
+        "P4-05"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "artifacts/baselines/"
+      ],
+      "work": "Tune on permitted windows, freeze candidates, then evaluate locked windows with cost and delay stresses. Record each regime rather than selecting only favorable launches.",
+      "acceptance": "All predeclared periods and capital scenarios appear; the strongest practical baseline is selected before the neural holdout comparison.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P4-07",
+      "phase": "P4",
+      "title": "Accept baseline laboratory v0.2",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/results/baseline-review.md"
+      ],
+      "depends_on": [
+        "P4-06"
+      ],
+      "owner_role": "QA",
+      "target_paths": [
+        "docs/results/baseline-review.md"
+      ],
+      "work": "Review accounting, sample adequacy, inference and reproducibility. Document whether any candidate shows net opportunity and which data limits remain.",
+      "acceptance": "Gate report states pass, revise or inconclusive; no positive narrative substitutes for missing costs, failures or holdout evidence.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P5-01",
+      "phase": "P5",
+      "title": "Pin and validate connectome data",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "configs/connectome/manifest.json",
+        "src/willfly/models/connectome/ingest.py",
+        "docs/results/neural-review.md"
+      ],
+      "depends_on": [
+        "P4-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "configs/connectome/",
+        "src/willfly/models/connectome/ingest.py"
+      ],
+      "work": "Select exact MaleCNS release and review attribution/license terms and dependencies. Download only needed tables; hash and validate IDs, annotations and curated-neuron filters.",
+      "acceptance": "Manifest links every input to its release and license; no floating-point ID conversion; counts and excluded records reconcile.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P5-02",
+      "phase": "P5",
+      "title": "Build the sparse graph and controls",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/models/connectome/graph.py",
+        "tests/test_neural.py"
+      ],
+      "depends_on": [
+        "P5-01"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/connectome/graph.py"
+      ],
+      "work": "Specify subnetwork selection, orientation, aggregation, sign assumptions and weight transforms. Build matched random and shuffled controls retaining declared degree/sign/weight properties where feasible.",
+      "acceptance": "Toy directed graph verifies orientation; graph statistics and matching deviations are reported; controls differ only in documented properties.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P5-03",
+      "phase": "P5",
+      "title": "Implement stateful reservoir dynamics",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/models/reservoir.py",
+        "tests/test_neural.py"
+      ],
+      "depends_on": [
+        "P5-02"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/reservoir.py"
+      ],
+      "work": "Use a compact rate-based recurrent model initially, with explicit decay, input scale and stability controls. Preserve state per episode and specify warm-up/reset behavior. Benchmark sparse memory and runtime.",
+      "acceptance": "Impulse and constant-input tests expose decay and stability; no accidental dense full-brain matrix allocation; model remains finite on training input stress.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P5-04",
+      "phase": "P5",
+      "title": "Train the frozen-reservoir readout",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/models/readout.py",
+        "tests/test_neural.py"
+      ],
+      "depends_on": [
+        "P5-03",
+        "P4-04"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/readout.py"
+      ],
+      "work": "Train a regularized output layer on reservoir activity with identical labels and split rules. Tune only declared readout/reservoir hyperparameters; keep recurrent weights fixed during training.",
+      "acceptance": "Before/after graph hashes match; readout parameters change; held-out prediction generation uses only frozen training artifacts and causal activity.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P5-05",
+      "phase": "P5",
+      "title": "Run matched model comparisons",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/neural.py",
+        "tests/test_neural.py"
+      ],
+      "depends_on": [
+        "P5-04",
+        "P4-06"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "artifacts/neural/comparisons/"
+      ],
+      "work": "Compare fly graph, random reservoir, shuffled graph, raw-feature readout and ordinary recurrent model with at least five seeds and comparable budgets.",
+      "acceptance": "Same dataset, policy and ledger used throughout; performance, compute and uncertainty are reported for every predeclared comparator.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P5-06",
+      "phase": "P5",
+      "title": "Run contribution and state ablations",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/neural.py",
+        "tests/test_neural.py",
+        "docs/results/neural-review.md"
+      ],
+      "depends_on": [
+        "P5-05"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/evaluation/ablations.py"
+      ],
+      "work": "Reset state, remove the reservoir, perturb input mapping and graph organization. Preserve fair retuning rules and report each intervention's scope.",
+      "acceptance": "Results distinguish useful recurrence, feature effects and biological topology; conclusions cannot attribute surviving wrapper performance to the removed component.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P5-07",
+      "phase": "P5",
+      "title": "Apply neural progression gate",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/results/neural-review.md"
+      ],
+      "depends_on": [
+        "P5-06"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "docs/results/neural-review.md"
+      ],
+      "work": "Apply predeclared return, drawdown, multi-window and uncertainty criteria. Assess sensitivity to capital, delay and graph assumptions; report negative and inconclusive results.",
+      "acceptance": "Signed-off research note chooses retain, revise or reject the fly component with traceable evidence; internal fine-tuning is not automatically triggered.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P5-08",
+      "phase": "P5",
+      "title": "Package neural experiment v0.3",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/models/package.py",
+        "tests/test_neural.py",
+        "docs/runbooks/neural.md"
+      ],
+      "depends_on": [
+        "P5-07"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "artifacts/models/",
+        "docs/runbooks/neural.md"
+      ],
+      "work": "Save graph manifest, model/readout state, feature config, model card and inference interface. Document data licenses and limits, including lack of demonstrated biological fidelity in the market task.",
+      "acceptance": "Reloaded model reproduces reference predictions and action ledger within declared numerical tolerance on the same environment.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P6-01",
+      "phase": "P6",
+      "title": "Validate LP Agent read coverage",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/adapters/lpagent.py",
+        "docs/integrations/lpagent.md",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P4-07"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/adapters/lpagent.py",
+        "docs/integrations/lpagent.md"
+      ],
+      "work": "Probe Robinhood V3/V4 read endpoints, authentication, paging, freshness and field meanings. Reconcile native ETH/WETH handling and vendor PnL against raw evidence.",
+      "acceptance": "Endpoint matrix separates tested, missing and unsupported features; Solana-only transaction routes are not presented as Robinhood execution support.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P6-02",
+      "phase": "P6",
+      "title": "Build causal LP, trader and scanner observations",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/features/lp_behavior.py",
+        "src/willfly/adapters/rhtrenches.py",
+        "src/willfly/adapters/mezzanine.py",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P6-01"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/features/lp_behavior.py",
+        "src/willfly/adapters/rhtrenches.py",
+        "src/willfly/adapters/mezzanine.py"
+      ],
+      "work": "Record wallet position changes, range movement and liquidity withdrawal with arrival times. Avoid selecting wallets based on future leaderboard outcomes; express incomplete coverage. Add optional tracked-trader and scanner read adapters only after the source matrix establishes supported access and terms. Normalize RHTrenches observations and Mezzanine assessments independently; preserve raw payloads, timestamps, cohort scope and method versions. Implement bounded polling/caching where supported and an unavailable-source fallback; browser inspection is not a production integration.",
+      "acceptance": "Feature fixtures prevent future ranking leakage; wallet identities are observations rather than unverified claims of skill or common ownership. Adapter conformance fixtures cover absent APIs, stale flags, rate limits, outages and duplicate observations. Test evidence or a documented unavailable outcome exists for each source; no-source operation works and missing integrations are not claimed complete.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P6-03",
+      "phase": "P6",
+      "title": "Define text evidence and LLM extraction",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/adapters/text_sources.py",
+        "src/willfly/features/text_schema.py",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P4-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/adapters/text_sources.py",
+        "src/willfly/features/text_schema.py"
+      ],
+      "work": "Choose accessible public sources and a versioned extraction schema for claims, narrative, contradictions, uncertainty and source spans. Archive only permitted content with publication and retrieval times.",
+      "acceptance": "A labeled calibration set checks extraction accuracy and unsupported claims; missing publication time or evidence is explicit rather than fabricated.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P6-04",
+      "phase": "P6",
+      "title": "Implement bounded LLM enrichment",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/features/llm.py",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P6-03"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/features/llm.py"
+      ],
+      "work": "Use retrieval, schema validation, caching, retries and per-run request/token budgets. Treat external content as untrusted data. Record model/prompt versions; provide a no-LLM fallback.",
+      "acceptance": "Invalid outputs, hostile instructions, timeouts and budget exhaustion cannot change permissions or block the numerical decision path; source-backed output survives schema checks.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P6-05",
+      "phase": "P6",
+      "title": "Audit historical contamination",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/contamination.py",
+        "docs/results/llm-contamination.md",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P6-04",
+        "P3-06"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "docs/results/llm-contamination.md"
+      ],
+      "work": "Evaluate identity masking and time-bounded retrieval. Separate extraction labels from market outcomes; do not use present-day model knowledge as historical evidence.",
+      "acceptance": "Audit identifies usable retrospective features and those requiring prospective evaluation; no LLM-created profit labels enter training.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P6-06",
+      "phase": "P6",
+      "title": "Run feature and architecture factorial tests",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/factorial.py",
+        "docs/results/hybrid-review.md",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P5-08",
+        "P6-02",
+        "P6-05"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "artifacts/hybrid/"
+      ],
+      "work": "Compare market-only, plus LP, plus text, and both feature sets across ordinary and fly-derived candidates. Charge data/LLM costs and measure added delay. Separately ablate tracked-wallet behavior, vendor contract-risk flags and social-graph features before combining them with LP or LLM features. Test whether confirmed demand persists after signal arrival. Avoid conflating external data gains with fly topology, and report unavailable source experiments explicitly.",
+      "acceptance": "Marginal contributions are reported separately; a benefit from additional data is not misattributed to biological wiring; invalid historical LLM tests are marked unresolved. Results include a no-scanner baseline, cost/latency effects and coverage limitations. A vendor safety score is neither a profit target nor ground-truth contract safety.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P6-07",
+      "phase": "P6",
+      "title": "Package evidence-backed decision inspection",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/ui/decisions/inspect.py",
+        "docs/results/hybrid-review.md",
+        "tests/test_hybrid.py"
+      ],
+      "depends_on": [
+        "P6-06",
+        "P2-05"
+      ],
+      "owner_role": "Product",
+      "target_paths": [
+        "src/willfly/ui/decisions/",
+        "docs/results/hybrid-review.md"
+      ],
+      "work": "Show observations, predictions, constraint outcomes and source citations for recorded decisions. Use LLM prose only to summarize recorded evidence, with uncertainty visible.",
+      "acceptance": "A reviewer can reproduce why an action was permitted and inspect evidence; explanations do not claim hidden neural motives or unverified causal intent.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P7-01",
+      "phase": "P7",
+      "title": "Select and verify an LP pool family",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "configs/lp/scope.json",
+        "docs/lp-scope.md"
+      ],
+      "depends_on": [
+        "P3-08",
+        "P4-07"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "configs/lp/",
+        "docs/lp-scope.md"
+      ],
+      "work": "Choose one supported V3 or V4 family from verified deployment and hook behavior. Document position contracts, fee rules, supported actions, required historical state and exit constraints.",
+      "acceptance": "Source/bytecode evidence and observed receipts support the selected mechanics; unknown hooks or unavailable state block that family rather than being approximated as standard.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P7-02",
+      "phase": "P7",
+      "title": "Implement position and fee replay",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/replay/lp_positions.py",
+        "tests/test_lp.py"
+      ],
+      "depends_on": [
+        "P7-01"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/replay/lp_positions.py"
+      ],
+      "work": "Model tick rounding, active liquidity, fee growth, range crossing and token quantities. State the small-position counterfactual assumption and its capacity limits.",
+      "acceptance": "Hand-calculated positions and observed checkpoints reconcile; out-of-range positions accrue only fees justified by the actual supported path.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P7-03",
+      "phase": "P7",
+      "title": "Implement LP lifecycle accounting",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/replay/lp_execution.py",
+        "tests/test_lp.py"
+      ],
+      "depends_on": [
+        "P7-02",
+        "P3-02"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/replay/lp_execution.py"
+      ],
+      "work": "Account for acquisition, opening, fee collection, resizing, removal and final conversion, including gas/platform costs and residual tokens. Model failure and unsupported exit behavior.",
+      "acceptance": "Complete base-asset-to-base-asset cycles reconcile; displayed LP PnL is not substituted for portfolio profit; IL/LVR diagnostics are not double-subtracted.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P7-04",
+      "phase": "P7",
+      "title": "Build restricted LP baseline policies",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/policies/lp_baselines.py",
+        "tests/test_lp.py"
+      ],
+      "depends_on": [
+        "P7-03"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "src/willfly/policies/lp_baselines.py"
+      ],
+      "work": "Compare fixed wide range, a simple volatility-based range and idle/spot alternatives. Initially use fixed allocation and a small discrete range set with minimum dwell time.",
+      "acceptance": "All policies share starting capital and recorded price exposure benchmarks; high nominal APR alone cannot trigger a favorable evaluation.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P7-05",
+      "phase": "P7",
+      "title": "Add LP as a competing policy action",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/policies/mode_selection.py",
+        "tests/test_lp.py"
+      ],
+      "depends_on": [
+        "P7-04",
+        "P6-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/policies/mode_selection.py"
+      ],
+      "work": "Allow spot, selected LP or idle based on the same information cutoff and shared portfolio. Charge mode-switching costs and enforce supported-pool constraints.",
+      "acceptance": "Mode changes preserve inventory and cash; unsupported pools cannot receive LP actions; no double allocation across spot and LP engines.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P7-06",
+      "phase": "P7",
+      "title": "Stress LP economics and counterfactuals",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/lp_stress.py",
+        "docs/results/lp-audit.md",
+        "tests/test_lp.py"
+      ],
+      "depends_on": [
+        "P7-05"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "artifacts/lp/stress/"
+      ],
+      "work": "Evaluate directional moves, depleted liquidity, range churn, higher fees/delay, hook-related exit costs and greater position sizes. Separate observed from modeled behavior.",
+      "acceptance": "Report includes failure and sensitivity cases plus capacity limits; performance that disappears under plausible costs is rejected or labeled inconclusive.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P7-07",
+      "phase": "P7",
+      "title": "Audit LP replay and decisions",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/results/lp-audit.md",
+        "tests/test_lp.py"
+      ],
+      "depends_on": [
+        "P7-06"
+      ],
+      "owner_role": "QA",
+      "target_paths": [
+        "tests/lp/",
+        "docs/results/lp-audit.md"
+      ],
+      "work": "Reconcile sampled historical positions and complete lifecycle fixtures; inspect contract-specific exceptional paths and fee attribution independently of the model.",
+      "acceptance": "No unresolved accounting discrepancy in supported cases; unsupported behavior is documented and excluded from claimed execution coverage.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P7-08",
+      "phase": "P7",
+      "title": "Decide LP eligibility for shadow",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/results/lp-review.md"
+      ],
+      "depends_on": [
+        "P7-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "docs/results/lp-review.md"
+      ],
+      "work": "Compare selective LP with spot and idle under the registered metric, exposure and drawdown rules. Publish the outcome even if LP adds no value.",
+      "acceptance": "Gate explicitly enables named LP families or leaves LP disabled; spot shadow remains independently eligible.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P8-01",
+      "phase": "P8",
+      "title": "Freeze a prospective shadow configuration",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "configs/shadow/config.json",
+        "src/willfly/shadow/config.py",
+        "docs/shadow-protocol.md",
+        "tests/test_shadow.py"
+      ],
+      "depends_on": [
+        "P6-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "configs/shadow/",
+        "docs/shadow-protocol.md"
+      ],
+      "work": "Select the best evidence-supported model, which may be ordinary, and freeze feature/model/source versions and capital rules. Enable LP only after P7-08.",
+      "acceptance": "Config hash and start time are recorded before observation; study requires 14 days and 200 eligible launches, with extensions for inadequate coverage.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P8-02",
+      "phase": "P8",
+      "title": "Implement live hypothetical decision loop",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/shadow/runner.py",
+        "src/willfly/cli.py",
+        "tests/test_shadow.py",
+        "tests/test_cli.py"
+      ],
+      "depends_on": [
+        "P8-01"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/shadow/runner.py"
+      ],
+      "work": "Use actual arrival timestamps, shared portfolio constraints and modeled execution to record proposed actions. Keep signing/broadcast absent; persist decision checkpoints.",
+      "acceptance": "Shadow runs across restarts without duplicate hypothetical orders; each record is labeled hypothetical and traceable to received observations.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Acceptance reopened by Astra audit: fixture coverage is retained, but integration, economic correctness or evidence gates remain incomplete. See docs/reports/astra-deep-audit.md and the mapped next-build tasks."
+    },
+    {
+      "id": "P8-03",
+      "phase": "P8",
+      "title": "Implement degraded-mode behavior",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/shadow/health.py",
+        "tests/test_shadow.py"
+      ],
+      "depends_on": [
+        "P8-02"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "src/willfly/shadow/health.py"
+      ],
+      "work": "On stale or contradictory data, block new hypothetical entries and record the prescribed management behavior for existing simulated positions. Track decision availability and missed deadlines.",
+      "acceptance": "Outage drills show explicit pause/degradation and recovery; unknown execution state is never reported as a successful exit.",
+      "pre_audit_status": "DONE",
+      "implementation_status": "existing_code_and_fixture_evidence",
+      "review_note": "Existing implementation evidence is retained. Full task acceptance awaits incomplete prerequisite evidence; this is not a claim that its code must be rewritten."
+    },
+    {
+      "id": "P8-04",
+      "phase": "P8",
+      "title": "Run the prospective observation window",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/shadow.py",
+        "artifacts/shadow/README.md",
+        "docs/results/shadow-review.md"
+      ],
+      "depends_on": [
+        "P8-03"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "artifacts/shadow/"
+      ],
+      "work": "Collect the frozen study, including adverse episodes and all excluded intervals. Track latency, decision availability, provider costs and modeled performance.",
+      "acceptance": "Minimum duration/episode requirements and 99% healthy-interval decision availability are measured; unmet targets or source gaps remain visible.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P8-05",
+      "phase": "P8",
+      "title": "Reconcile shadow against replay assumptions",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "src/willfly/evaluation/shadow.py",
+        "docs/results/shadow-review.md",
+        "tests/test_shadow.py"
+      ],
+      "depends_on": [
+        "P8-04"
+      ],
+      "owner_role": "Quant",
+      "target_paths": [
+        "docs/results/shadow-review.md"
+      ],
+      "work": "Compare live availability, quotes and hypothetical fills against historical assumptions; quantify drift, missed opportunities and data revisions.",
+      "acceptance": "Evidence explains material differences and applies cost stresses; prospective results are not represented as funded returns.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P8-06",
+      "phase": "P8",
+      "title": "Publish the research go/no-go package",
+      "status": "IN_PROGRESS",
+      "status_evidence": [
+        "docs/releases/v0.6.md",
+        "docs/results/shadow-review.md",
+        "artifacts/shadow/README.md"
+      ],
+      "depends_on": [
+        "P8-05"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "docs/releases/v0.6.md"
+      ],
+      "work": "Summarize all model comparisons, costs, data quality, uncertainty and open execution issues. Recommend continued shadow, revised experiments or a separately scoped pilot.",
+      "acceptance": "Reproducible bundle and decision record exist; no funded deployment is inferred from a positive report.",
+      "pre_audit_status": "IN_PROGRESS"
+    },
+    {
+      "id": "P9-01",
+      "phase": "P9",
+      "title": "Specify authorized pilot boundaries",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P8-06"
+      ],
+      "owner_role": "Product",
+      "target_paths": [
+        "docs/pilot-scope.md",
+        "configs/pilot/"
+      ],
+      "work": "Only after a separate user decision, record chain, allowed assets/protocols, signer/custody, funded capital cap, daily loss limit, position cap and allowed transaction types.",
+      "acceptance": "Exact authorization and config match; no placeholder capital limits or blanket unlimited permissions remain.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P9-02",
+      "phase": "P9",
+      "title": "Implement isolated signer interface",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P9-01"
+      ],
+      "owner_role": "Security",
+      "target_paths": [
+        "src/willfly/execution/signer.py"
+      ],
+      "work": "Select the approved custody mechanism and separate proposal, validation and signing. Keep private keys out of model inputs, logs and repository files.",
+      "acceptance": "Signer contract tests reject unapproved destinations/actions and prevent the LLM or market content from expanding authority.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P9-03",
+      "phase": "P9",
+      "title": "Implement transaction construction and simulation",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P9-02"
+      ],
+      "owner_role": "Execution",
+      "target_paths": [
+        "src/willfly/execution/transactions.py"
+      ],
+      "work": "Build approved swaps and, if enabled, LP calls with exact amounts, slippage/deadlines and bounded allowances. Simulate against current state and inspect calldata.",
+      "acceptance": "Fixtures and fork/test environment runs reconcile decoded intent with proposed action; failed simulation blocks submission and does not count as a fill.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P9-04",
+      "phase": "P9",
+      "title": "Implement submission and receipt reconciliation",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P9-03"
+      ],
+      "owner_role": "Execution",
+      "target_paths": [
+        "src/willfly/execution/submission.py"
+      ],
+      "work": "Handle nonces, idempotency, replacement, timeouts, reverts and confirmed receipts. Track pending transaction exposure and avoid unsafe resubmission after uncertain responses.",
+      "acceptance": "Recovery tests demonstrate no duplicate economic action and correct ledger state for pending, replaced, reverted and finalized transactions.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P9-05",
+      "phase": "P9",
+      "title": "Verify pause, withdrawal and recovery procedures",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P9-04"
+      ],
+      "owner_role": "Security",
+      "target_paths": [
+        "docs/runbooks/pilot-recovery.md",
+        "tests/execution/"
+      ],
+      "work": "Test limit enforcement, emergency pause, approval management, manual inspection and permitted exit procedures. Document dependencies on contract liquidity and token transfer behavior.",
+      "acceptance": "Drills demonstrate signer/ledger consistency and bounded permissions; recovery instructions distinguish a possible action from a guaranteed exit.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P9-06",
+      "phase": "P9",
+      "title": "Run the separately authorized bounded pilot",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P9-05"
+      ],
+      "owner_role": "Execution",
+      "target_paths": [
+        "artifacts/pilot/"
+      ],
+      "work": "Start only inside the agreed limits. Monitor receipts, costs and drawdown; stop according to the frozen pilot rules and record every funded action.",
+      "acceptance": "Actual wallet balances reconcile with the ledger; limit breaches pause the system; no automatic capital increase occurs.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P9-07",
+      "phase": "P9",
+      "title": "Review funded results before scaling",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P9-06"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "docs/results/pilot-review.md"
+      ],
+      "work": "Compare actual execution and returns with shadow, including failed transactions and residual positions. Assess whether any demonstrated edge survives all paid costs.",
+      "acceptance": "Complete cash-flow report supports stop, revise or separately authorized continuation; scaling is not triggered by isolated wins.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P10-01",
+      "phase": "P10",
+      "title": "Implement a second-chain data adapter",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P8-06"
+      ],
+      "owner_role": "Data",
+      "target_paths": [
+        "src/willfly/adapters/second_chain/"
+      ],
+      "work": "After selecting a named market, map its identity, finality, events and pool mechanics into existing contracts. Revalidate provider coverage and source licenses.",
+      "acceptance": "Cross-chain conformance fixtures pass; chain-specific facts are not hidden behind Robinhood assumptions.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P10-02",
+      "phase": "P10",
+      "title": "Rebuild cross-market evaluation",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P10-01"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "configs/experiments/cross_chain/"
+      ],
+      "work": "Measure distribution shift and define fresh chronological holdouts before retraining. Compare pooled and per-chain models with matched costs and budgets.",
+      "acceptance": "Results distinguish transfer from retraining; Robinhood performance is not treated as evidence on the new chain.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P10-03",
+      "phase": "P10",
+      "title": "Test constrained internal fine-tuning",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P5-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/connectome/tuning.py"
+      ],
+      "work": "Only if representation evidence justifies it, tune a limited encoder, gains/time constants or synaptic scales. Document graph/sign constraints and use frozen-reservoir and ordinary trained controls.",
+      "acceptance": "Gradient/parameter-change tests and held-out comparisons show whether extra tuning helps; biological fidelity claims remain distinct from financial usefulness.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P10-04",
+      "phase": "P10",
+      "title": "Test offline policy learning",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P3-08",
+        "P4-07"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/policy_learning.py"
+      ],
+      "work": "If replay supports the required counterfactuals, compare imitation or offline RL with the existing prediction-to-action policy. Account for missing actions and expert-wallet selection bias.",
+      "acceptance": "Evaluation exposes unsupported action regions and reward shortcuts; apparent gain cannot rely on unmodeled fills or privileged demonstrator information.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P10-05",
+      "phase": "P10",
+      "title": "Test online adaptation in simulation or shadow",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P10-03",
+        "P8-06"
+      ],
+      "owner_role": "Research",
+      "target_paths": [
+        "src/willfly/models/plasticity.py"
+      ],
+      "work": "Specify eligibility traces, delayed feedback, update bounds, retention tests and rollback checkpoints. Start with simulated or hypothetical outcomes only.",
+      "acceptance": "Frozen-learning, shuffled-feedback and regime-shift controls show adaptation and retention; no live funded self-modification is enabled.",
+      "pre_audit_status": "CONDITIONAL"
+    },
+    {
+      "id": "P10-06",
+      "phase": "P10",
+      "title": "Review infrastructure and broader product scope",
+      "status": "CONDITIONAL",
+      "depends_on": [
+        "P10-02"
+      ],
+      "owner_role": "Platform",
+      "target_paths": [
+        "docs/scaling-review.md"
+      ],
+      "work": "Use measured storage, latency and compute demands to decide whether hosted services, queues, GPU training or a richer UI are justified. Re-estimate the next roadmap.",
+      "acceptance": "Capacity report and proposed cost budget support each infrastructure change; broader markets and funded authority remain explicitly scoped.",
+      "pre_audit_status": "CONDITIONAL"
+    }
+  ],
+  "next_catalogue": "docs/next-build-tasks.json",
+  "audit_report": "docs/reports/astra-deep-audit.md"
+}
