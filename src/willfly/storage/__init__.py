@@ -9,6 +9,7 @@ from willfly.storage.raw import (
     RawBatchStore,
     StoredBatch,
     StoredSnapshot,
+    anchor_evidence_record,
 )
 from willfly.storage.export import ExportManifest, ExportUnavailable, export_records, verify_export
 
@@ -23,6 +24,7 @@ __all__ = [
     "RawBatchStore",
     "StoredBatch",
     "StoredSnapshot",
+    "anchor_evidence_record",
     "export_records",
     "verify_export",
 ]

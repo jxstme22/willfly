@@ -40,6 +40,63 @@ is published; a provider range error reduces the next request size; malformed
 or out-of-range data fails closed. Run `audit --provider-independent` only when
 the expected interval came from a genuinely separate source.
 
+On a resumed backfill, the runner checks the current target and acknowledged
+cursor-boundary headers before inheriting the checkpoint. A changed lineage
+invalidates the derived projection and replays the bounded requested range
+before acknowledging completion; raw events from both branches remain stored.
+An unavailable probe or failed replay leaves the canonical checkpoint in
+`needs_repair` and does not claim completed coverage. An unchanged completed
+cursor still revalidates the current target tip.
+
+### Bounded ancestry qualification
+
+Capture and backfill never treat an arbitrary oldest header as a trusted root.
+For a bounded window, qualify an anchor by declaring its height/hash and
+providing a second configured RPC endpoint. The CLI reads `eth_chainId` and
+`eth_getBlockByNumber` from both the primary endpoint in the source manifest and
+the independent endpoint, then records the matching headers, endpoint
+identities, read methods and the explicit operator trust assumption. Finality
+is not verified by this command:
+
+```text
+willfly qualify-anchor --config configs/sources/robinhood-chain-v0.1.json \
+  --height BLOCK --block-hash 0x... \
+  --independent-rpc-url https://independent.example/rpc \
+  --store-dir data/observatory --source capture
+```
+
+The command writes only local evidence/header metadata after read-only RPC
+queries; it never signs or broadcasts. `operator_declared_unverified`, old
+offline evidence bundles, malformed responses, mismatched chain/config, false
+genesis and unavailable or identical endpoints fail closed without changing the
+trusted anchor. A successful anchor is then picked up by later capture/backfill
+runs in the same source/config namespace. The resulting run manifest and
+canonical checkpoint expose the anchor state for review. Code hashes and
+deployment receipts alone are not accepted as ancestry/finality evidence.
+
+Exported endpoint provenance is origin-only: userinfo, path tokens, query
+parameters and credentials are omitted. The configured URL is retained only in
+memory for the transport and is never copied into anchor evidence, run
+manifests or CLI error output.
+
+If a later observed fork crosses the bounded anchor, do not overwrite the old
+source. Preserve its raw batches and unresolved/boundary-crossing checkpoint,
+then qualify a new source namespace and link it to the old one:
+
+```text
+willfly qualify-anchor --config configs/sources/robinhood-chain-v0.1.json \
+  --height BLOCK --block-hash 0x... \
+  --independent-rpc-url https://independent.example/rpc \
+  --source capture-requal-v2 \
+  --supersedes-source capture:4663:FILTERHASH \
+  --supersession-reason "observed fork crosses the old bounded anchor boundary" \
+  --store-dir data/observatory
+```
+
+The supersession link is immutable and requires the old anchor to exist. Run
+subsequent capture/backfill operations with the new source namespace; both
+namespaces remain inspectable for audit and recovery.
+
 ## Export and inspect
 
 ```text

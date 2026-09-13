@@ -570,3 +570,86 @@ User authorized continued build loops after DeepSeek finishes, with a coordinato
 User reports DeepSeek exhausted its limit during M1-03 and authorizes Luna Extra High takeover. Independently audited all six changed implementation/test files against f39bf5b. Added docs/reports/deepseek-completion-audit.md, input file hashes and executable diagnostic probes. Reproduced unverified/false-genesis/unreached anchors resolving, outside-window events falsely orphaned, invalid-config persistence blocking corrected retry, capture/backfill genesis inconsistency and coercive anchor import. Operator qualification CLI remains missing. Six repair findings are open.
 
 Verification: 128 passed / one skipped in sandbox; remaining localhost HTTP test passed separately (129 tests total). Planning and compileall pass; diff-check fails on an extra EOF blank line and is explicitly assigned to Luna. Preserved source edits; this is a known-incomplete checkpoint, not accepted M1-03. Updated model ownership to gpt-5.6-luna/xhigh. Existing task Implement Luna build plan is idle and will receive the repair-stage prompt; coordinator recheck gates subsequent feature loops.
+
+
+## 2026-09-14 — Luna repair checkpoint for DS-01 through DS-06
+
+Implemented the audited ancestry repairs in the sole-writer repair stage. Anchor
+qualification now uses structured genesis or independent-header identity checks;
+unverified/runtime/deployment declarations cannot certify history. Canonical
+projections preserve before-anchor and after-tip events as unresolved outside a
+proven interval, while competing blocks inside that interval remain orphaned.
+Capture and backfill preflight anchor binding before durable trust changes and
+share genesis qualification. Added strict anchor import/restoration validation,
+the bounded read-only `qualify-anchor` CLI, runbook recovery instructions and
+regression/subprocess coverage. Fixed the reported extra EOF blank line.
+
+Evidence is recorded in docs/reports/luna-repair-checkpoint.md and the repaired
+diagnostic probe. The repair checkpoint is pending independent coordinator
+recheck; no feature loops, live completeness gate, timed gate, model claim or
+funded execution claim is made here.
+
+
+## 2026-09-14 — Coordinator repair review 01
+
+Rechecked Luna's first repair delta while its task was idle. 141 tests passed / one sandbox HTTP skip; planning, compileall and diff-check pass. Original diagnostic cases improve, but the offline qualification CLI still manufactures independent verification from supplied JSON, and a repeated backfill over a changed quiet tip selects the old stored hash. Recorded R1/R2 plus the missing recovery procedure in docs/reports/luna-repair-review-01.md. Feature loops remain gated; source changes preserved for Luna's next repair round.
+
+
+## 2026-09-14 — Luna repair round 2
+
+Repaired the coordinator's R1/R2 findings. `qualify-anchor` now performs
+read-only chain-ID and exact-header reads against the configured primary RPC and
+a distinct explicitly supplied independent RPC, records both header identities
+and provenance, labels finality as unverified, rejects mismatches and no longer
+accepts offline evidence bundles. Backfill reconciliation now selects exactly
+one current-run tip header, revalidates a completed/no-op resume, and reports an
+unavailable tip instead of selecting a stale stored fork. Added an immutable
+source-namespace supersession link for boundary-crossing recovery while
+preserving the old source.
+
+Added regression coverage for the real two-endpoint CLI flow, mismatched
+independent headers, replacement tips, no-op revalidation, tip outage and
+requalification. Full suite: 143 passed / 2 sandbox skips. Coordinator
+independent recheck remains required; feature loops and live/timed acceptance
+gates remain closed.
+
+
+## 2026-09-14 — Coordinator repair review 02
+
+Completed independent second-round review: 143 passed / two sandbox skips, both localhost cases passed separately (145 verified); planning/compile/diff checks clean. Two-provider verification performs actual calls and fresh-tip selection is repaired. Same-checkpoint fork reproduction still loses replacement logs while acknowledging the range; nested booleans and unknown states remain accepted. Documented R3-R5 (including exportable endpoint credential hygiene) in docs/reports/luna-repair-review-02.md and requested a focused third repair round. No source edits or feature-stage dispatch by coordinator.
+
+
+## 2026-09-14 — Luna repair round 3
+
+Repaired the coordinator's R3-R5 findings. Resumed backfills now probe the
+current target and acknowledged cursor boundary before inheriting a checkpoint;
+changed lineage invalidates the derived projection and replays the bounded
+requested range, preserving raw events from both branches. Partial resumes,
+quiet tips, unchanged no-ops, provider outage and failed replay leave explicit
+`needs_repair` state when coverage cannot be claimed.
+
+Canonical resolution now uses a positive `qualified` plus reached-anchor and
+gap-free invariant, with strict nested evidence types and shapes. Exportable
+endpoint provenance is origin-only and strips userinfo, path/query credentials
+from qualification evidence, run manifests, CLI output and errors while
+transport keeps the configured URL in memory.
+
+Added the coordinator reproduction and regression coverage for replacement-log
+replay, partial cursor repair, replay failure, nested boolean/fractional
+evidence, unknown resolution state and credential canaries. Feature loops and
+live/timed acceptance gates remain closed pending coordinator recheck.
+
+Verification: sandbox full suite `150 passed, 2 skipped`; both skipped loopback
+tests passed separately with permitted local sockets, so all 152 collected tests
+were exercised. The coordinator reproduction, planning, compileall and
+whitespace checks pass.
+
+
+## 2026-09-14 — Coordinator acceptance of G0
+
+The coordinator independently rechecked the Luna repair round 3 checkpoint and
+accepted G0. The reviewed repair and audit files are preserved in the
+checkpoint commit; live canonical-source, timed, economic and biological/model
+gates remain deferred with explicit scope. The build stage is now open at B0,
+with the separate B-task catalogue still authoritative for implementation
+status.

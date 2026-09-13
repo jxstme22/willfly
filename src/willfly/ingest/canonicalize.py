@@ -6,7 +6,11 @@ from dataclasses import dataclass, replace
 from typing import Iterable
 
 from willfly.domain import RawEvent
-from willfly.storage.raw import AncestryAnchor, BlockHeader, UNSATISFIED_ANCHOR_STATES
+from willfly.storage.raw import (
+    AncestryAnchor,
+    BlockHeader,
+    parse_anchor_evidence,
+)
 
 
 class CanonicalizationError(ValueError):
@@ -27,6 +31,7 @@ class CanonicalizationResult:
     unknown_parent_headers: tuple[str, ...]
     anchor_state: str = "unavailable"
     anchor_evidence: tuple[str, ...] = ()
+    proven_height_range: tuple[int, int] | None = None
 
     @property
     def is_resolved(self) -> bool:
@@ -35,7 +40,8 @@ class CanonicalizationResult:
         return (
             not self.missing_parent_hashes
             and not self.unknown_parent_headers
-            and self.anchor_state not in UNSATISFIED_ANCHOR_STATES
+            and self.anchor_state == "qualified"
+            and self.proven_height_range is not None
         )
 
 
@@ -143,11 +149,18 @@ def canonicalize_events(
     resolved = (
         not missing
         and not unknown
-        and anchor_state not in UNSATISFIED_ANCHOR_STATES
+        and anchor_state == "qualified"
+        and reached_anchor
     )
-    canonical_hashes = {header.block_hash for header in chain} if resolved else set()
+    canonical_hashes = {header.block_hash.lower() for header in chain} if resolved else set()
     tip_number = header_map[tip_hash].number
     confirmed_through = tip_number - confirmations
+    proven_height_range = (
+        (anchor.height, tip_number)
+        if resolved and anchor is not None and anchor_state == "qualified" and reached_anchor
+        else None
+    )
+    canonical_headers = {header.block_hash.lower(): header for header in chain}
     canonical: list[RawEvent] = []
     orphaned: list[RawEvent] = []
     confirmed: list[RawEvent] = []
@@ -164,13 +177,25 @@ def canonicalize_events(
             # and expose the gap rather than orphaning unrelated history.
             unresolved.append(replace(event, canonical_status="provisional"))
             continue
-        if event.block_hash in canonical_hashes:
+        event_header = canonical_headers.get(event.block_hash.lower()) if event.block_hash else None
+        if (
+            event_header is not None
+            and event.block_hash.lower() in canonical_hashes
+            and event.block_number == event_header.number
+        ):
             projected = replace(event, canonical_status="canonical")
             canonical.append(projected)
             if event.block_number <= confirmed_through:
                 confirmed.append(projected)
             else:
                 provisional.append(projected)
+        elif proven_height_range is not None and (
+            event.block_number < proven_height_range[0] or event.block_number > proven_height_range[1]
+        ):
+            # The selected tip and anchor prove only this interval. An event
+            # observed before the anchor or after the selected tip is outside
+            # the projection scope, not evidence of a competing branch.
+            unresolved.append(replace(event, canonical_status="provisional"))
         else:
             orphaned.append(replace(event, canonical_status="orphaned"))
     return CanonicalizationResult(
@@ -186,6 +211,7 @@ def canonicalize_events(
         unknown_parent_headers=tuple(dict.fromkeys(unknown)),
         anchor_state=anchor_state,
         anchor_evidence=tuple(dict.fromkeys(anchor_evidence)),
+        proven_height_range=proven_height_range,
     )
 
 
@@ -201,13 +227,22 @@ def _anchor_state(
     if anchor is None:
         evidence.append("no verified ancestry anchor recorded for this source")
         return "unavailable"
+    if anchor.qualification == "operator_declared_unverified":
+        evidence.append("operator-declared unverified anchor cannot certify canonical history")
+        return "unverified"
+    if anchor.qualification not in {"genesis", "independent_header_cross_check"}:
+        evidence.append(f"anchor qualification {anchor.qualification!r} is unsupported")
+        return "unsupported"
     if expected_chain_id is not None and anchor.chain_id != expected_chain_id:
         evidence.append(f"anchor chain {anchor.chain_id} does not match source chain {expected_chain_id}")
         return "config_mismatch"
     if expected_config_identity is not None and anchor.config_identity != expected_config_identity:
         evidence.append("anchor configuration identity does not match the active capture configuration")
         return "config_mismatch"
-    header = header_map.get(anchor.block_hash)
+    header = next(
+        (candidate for key, candidate in header_map.items() if key.lower() == anchor.block_hash.lower()),
+        None,
+    )
     if header is None:
         evidence.append("anchor block is not present in supplied header evidence")
         return "unavailable"
@@ -216,10 +251,115 @@ def _anchor_state(
             f"anchor height {anchor.height} does not match stored height {header.number}"
         )
         return "mismatch"
+    try:
+        records = [parse_anchor_evidence(item) for item in anchor.evidence]
+    except ValueError as exc:
+        evidence.append(str(exc))
+        return "unqualified"
+
+    if anchor.qualification == "genesis":
+        if anchor.height != 0 or header.number != 0 or not header.parent_known or header.parent_hash is not None:
+            evidence.append("genesis anchor must identify block 0 with a known null parent")
+            return "unqualified"
+        matching = next((record for record in records if record.get("kind") == "genesis_header"), None)
+        if matching is None or not _matches_identity(matching, anchor, expected_chain_id):
+            evidence.append("genesis evidence does not match the active chain/header identity")
+            return "unqualified"
+        evidence.append(f"genesis header {anchor.block_hash} at height 0 satisfies the local genesis invariant")
+        return "qualified"
+
+    matching = next(
+        (record for record in records if record.get("kind") == "independent_header_cross_check"), None
+    )
+    if matching is None or not _matches_identity(matching, anchor, expected_chain_id):
+        evidence.append("independent header evidence is missing or does not match the active identity")
+        return "unqualified"
+    primary_endpoint = matching.get("primary_endpoint")
+    independent_endpoint = matching.get("independent_endpoint")
+    read_methods = matching.get("read_methods")
+    external_header = matching.get("external_header")
+    primary_header = matching.get("primary_header")
+    if (
+        not isinstance(primary_endpoint, str)
+        or not primary_endpoint.strip()
+        or not isinstance(independent_endpoint, str)
+        or not independent_endpoint.strip()
+        or primary_endpoint.strip().lower() == independent_endpoint.strip().lower()
+        or not isinstance(read_methods, list)
+        or read_methods != ["eth_chainId", "eth_getBlockByNumber"]
+        or matching.get("verification") != "performed_rpc_cross_check"
+        or matching.get("trust_policy") != "distinct_configured_endpoints_operator_assumption"
+        or matching.get("finality_status") != "not_verified"
+        or not _header_evidence_matches(external_header, anchor=anchor, header=header)
+        or not _header_evidence_matches(primary_header, anchor=anchor, header=header)
+    ):
+        evidence.append("independent RPC evidence lacks two distinct performed identity checks")
+        return "unqualified"
     evidence.append(
-        f"anchor {anchor.block_hash} at height {anchor.height} qualified via {anchor.qualification}"
+        f"anchor {anchor.block_hash} at height {anchor.height} qualified by performed RPC identity checks"
     )
     return "qualified"
+
+
+def assess_ancestry_anchor(
+    anchor: AncestryAnchor | None,
+    headers: Iterable[BlockHeader],
+    *,
+    expected_chain_id: int | None = None,
+    expected_config_identity: str | None = None,
+) -> tuple[str, tuple[str, ...]]:
+    """Return a fail-closed anchor state and its reviewable evidence."""
+
+    header_map: dict[str, BlockHeader] = {}
+    for header in headers:
+        _merge_header(header_map, header)
+    evidence: list[str] = []
+    state = _anchor_state(anchor, header_map, expected_chain_id, expected_config_identity, evidence)
+    return state, tuple(dict.fromkeys(evidence))
+
+
+def _matches_identity(
+    record: dict[str, object], anchor: AncestryAnchor, expected_chain_id: int | None
+) -> bool:
+    return (
+        type(record.get("chain_id")) is int
+        and record.get("chain_id") == anchor.chain_id
+        and (expected_chain_id is None or record.get("chain_id") == expected_chain_id)
+        and type(record.get("config_identity")) is str
+        and record.get("config_identity") == anchor.config_identity
+        and type(record.get("height")) is int
+        and record.get("height") == anchor.height
+        and _same_hash(record.get("block_hash"), anchor.block_hash)
+    )
+
+
+def _same_hash(left: object, right: str) -> bool:
+    return type(left) is str and left.lower() == right.lower()
+
+
+def _same_optional_hash(left: object, right: str | None) -> bool:
+    if left is None or right is None:
+        return left is None and right is None
+    return type(left) is str and left.lower() == right.lower()
+
+
+def _header_evidence_matches(
+    value: object, *, anchor: AncestryAnchor, header: BlockHeader
+) -> bool:
+    """Validate nested header shape before applying Python equality."""
+
+    if not isinstance(value, dict):
+        return False
+    if set(value) - {"number", "hash", "parent_hash"}:
+        return False
+    number = value.get("number")
+    if type(number) is not int or number != anchor.height:
+        return False
+    if not _same_hash(value.get("hash"), anchor.block_hash):
+        return False
+    if "parent_hash" in value and not _same_optional_hash(value.get("parent_hash"), header.parent_hash):
+        return False
+    return True
 
 
 def _merge_header(headers: dict[str, BlockHeader], candidate: BlockHeader) -> None:

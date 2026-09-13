@@ -26,10 +26,11 @@ from typing import Any, Callable, Mapping, Sequence
 
 from willfly.adapters.robinhood_rpc import ReadOnlyRpcClient
 from willfly.domain import RawEvent
-from willfly.ingest.backfill import BackfillCheckpointStore, BackfillError, backfill_range
+from willfly.ingest.backfill import BackfillCheckpoint, BackfillCheckpointStore, BackfillError, backfill_range
 from willfly.ingest.capture import capture_once
-from willfly.ingest.supervisor import redact_error
-from willfly.storage.raw import AncestryAnchor, BlockHeader, RawBatchStore
+from willfly.ingest.canonicalize import assess_ancestry_anchor
+from willfly.ingest.supervisor import redact_endpoint, redact_error
+from willfly.storage.raw import AncestryAnchor, BlockHeader, RawBatchStore, anchor_evidence_record
 
 Clock = Callable[[], str]
 
@@ -114,6 +115,7 @@ class RunManifest:
         data["attempted_range"] = list(self.attempted_range)
         data["acknowledged_range"] = list(self.acknowledged_range) if self.acknowledged_range else None
         data["errors"] = list(self.errors)
+        data["provider_endpoint"] = redact_endpoint(self.provider_endpoint)
         return data
 
 
@@ -188,14 +190,15 @@ def _reconcile_if_tipped(
     store: RawBatchStore,
     *,
     source: str,
-    headers: Sequence[BlockHeader],
+    fresh_headers: Sequence[BlockHeader],
     tip_block: int,
     chain_id: int,
     config_identity: str,
 ) -> tuple[str | None, str]:
-    tip = next((header for header in headers if header.number == tip_block), None)
-    if tip is None:
+    tips = {header.block_hash.lower(): header for header in fresh_headers if header.number == tip_block}
+    if len(tips) != 1:
         return None, "unavailable"
+    tip = next(iter(tips.values()))
     result = store.rebuild_canonical_projection(
         source=source,
         tip_hash=tip.block_hash,
@@ -205,11 +208,105 @@ def _reconcile_if_tipped(
     return tip.block_hash, result.anchor_state
 
 
-def _validate_anchor_source(anchor: AncestryAnchor, source_key: str) -> None:
-    """Refuse to bind an anchor to a different source/config namespace."""
+def _stored_lineage_hash(store: RawBatchStore, source: str, block_number: int) -> str | None:
+    """Find the last accepted hash for one covered block without choosing a fork."""
+
+    canonical = store.get_canonical_checkpoint(source)
+    if (
+        canonical is not None
+        and canonical["state"] == "canonical"
+        and canonical["last_block_number"] == block_number
+        and canonical["last_block_hash"]
+    ):
+        return canonical["last_block_hash"]
+    empty_ack = store.get_empty_range_ack(source)
+    if empty_ack is not None and empty_ack["last_block_number"] == block_number:
+        return empty_ack["last_block_hash"]
+    raw_checkpoint = store.get_checkpoint(source)
+    if raw_checkpoint is not None and raw_checkpoint["last_block_number"] == block_number:
+        return raw_checkpoint["last_block_hash"]
+    for evidence in reversed(store.list_header_ranges(source)):
+        if evidence["range_end"] == block_number and evidence["tip_hash"]:
+            return evidence["tip_hash"]
+    return None
+
+
+def _lineage_probe(
+    client: ReadOnlyRpcClient,
+    store: RawBatchStore,
+    *,
+    source: str,
+    checkpoint: BackfillCheckpoint,
+    start_block: int,
+    target_block: int,
+) -> tuple[tuple[BlockHeader, ...], tuple[int, ...], tuple[str, ...], str | None]:
+    """Read the current tip and cursor boundary before inheriting a cursor."""
+
+    probe_blocks = {target_block}
+    cursor = max(start_block, checkpoint.next_block)
+    if cursor > start_block:
+        probe_blocks.add(cursor - 1)
+    headers: list[BlockHeader] = []
+    missing: list[int] = []
+    errors: list[str] = []
+    for block_number in sorted(probe_blocks):
+        observed, gaps, read_errors = _capture_headers(
+            client, from_block=block_number, to_block=block_number
+        )
+        headers.extend(observed)
+        missing.extend(gaps)
+        errors.extend(read_errors)
+    by_number = {header.number: header for header in headers}
+    if missing or target_block not in by_number:
+        errors.append("lineage probe unavailable; accepted coverage cannot be inherited")
+        return tuple(headers), tuple(sorted(set(missing))), tuple(errors), None
+    divergences: list[str] = []
+    for block_number in sorted(probe_blocks):
+        expected = _stored_lineage_hash(store, source, block_number)
+        observed = by_number.get(block_number)
+        if expected is not None and observed is not None and expected.lower() != observed.block_hash.lower():
+            divergences.append(
+                f"block {block_number} changed from {expected} to {observed.block_hash}"
+            )
+    return tuple(headers), tuple(sorted(set(missing))), tuple(errors), "; ".join(divergences) or None
+
+
+def _validate_anchor_source(
+    anchor: AncestryAnchor, source_key: str, *, chain_id: int, config_identity: str
+) -> None:
+    """Refuse to bind an anchor to another source, chain or config namespace."""
 
     if anchor.source != source_key:
         raise ValueError("anchor source does not match the capture namespace")
+    if anchor.chain_id != chain_id:
+        raise ValueError("anchor chain does not match the active source chain")
+    if anchor.config_identity != config_identity:
+        raise ValueError("anchor configuration identity does not match the active capture configuration")
+    if anchor.qualification == "operator_declared_unverified":
+        raise ValueError("unverified anchor declarations cannot be used for capture")
+
+
+def _validate_anchor_candidate(
+    anchor: AncestryAnchor,
+    *,
+    store: RawBatchStore,
+    source_key: str,
+    chain_id: int,
+    config_identity: str,
+    headers: Sequence[BlockHeader],
+) -> None:
+    """Require a qualified anchor before it can change durable trust state."""
+
+    _validate_anchor_source(anchor, source_key, chain_id=chain_id, config_identity=config_identity)
+    state, evidence = assess_ancestry_anchor(
+        anchor,
+        (*store.list_headers(), *headers),
+        expected_chain_id=chain_id,
+        expected_config_identity=config_identity,
+    )
+    if state != "qualified":
+        detail = "; ".join(evidence) if evidence else "no qualifying evidence"
+        raise ValueError(f"anchor rejected ({state}): {detail}")
 
 
 def _qualify_genesis_anchor(
@@ -233,7 +330,7 @@ def _qualify_genesis_anchor(
     if existing is not None:
         return existing
     genesis = next((header for header in headers if header.number == 0), None)
-    if genesis is None or genesis.parent_hash is not None:
+    if genesis is None or genesis.parent_hash is not None or not genesis.parent_known:
         return None
     now = (clock or (lambda: datetime.now(timezone.utc).isoformat()))()
     anchor = AncestryAnchor(
@@ -241,11 +338,29 @@ def _qualify_genesis_anchor(
         height=0,
         block_hash=genesis.block_hash,
         qualification="genesis",
-        evidence=(f"genesis header captured in run {run_id}",),
+        evidence=(
+            anchor_evidence_record(
+                "genesis_header",
+                chain_id=chain_id,
+                config_identity=config_identity,
+                height=0,
+                block_hash=genesis.block_hash,
+                parent_hash=None,
+                run_id=run_id,
+            ),
+        ),
         config_identity=config_identity,
         source=source,
         recorded_at=now,
     )
+    state, _ = assess_ancestry_anchor(
+        anchor,
+        headers,
+        expected_chain_id=chain_id,
+        expected_config_identity=config_identity,
+    )
+    if state != "qualified":
+        return None
     store.save_ancestry_anchor(anchor)
     return anchor
 
@@ -280,14 +395,38 @@ def capture_to_store(
     )
     source_key = checkpoint_source(base_source, chain_id, filt_hash)
     config_identity = config_hash or filt_hash
+    preflight_headers: tuple[BlockHeader, ...] = ()
     if anchor is not None:
-        _validate_anchor_source(anchor, source_key)
-        store.save_ancestry_anchor(anchor)
+        _validate_anchor_source(anchor, source_key, chain_id=chain_id, config_identity=config_identity)
+        # Validate the candidate against header evidence before capture can
+        # publish a batch or persist an ancestry anchor. A bounded operator
+        # anchor is allowed to come from an earlier store header or this range.
+        preflight_headers, _, _ = _capture_headers(
+            client, from_block=anchor.height, to_block=anchor.height
+        )
+        _validate_anchor_candidate(
+            anchor,
+            store=store,
+            source_key=source_key,
+            chain_id=chain_id,
+            config_identity=config_identity,
+            headers=preflight_headers,
+        )
     result = capture_once(
         client, addresses=addresses, from_block=from_block, to_block=to_block, run_id=run_id, clock=clock
     )
     headers, header_gaps, header_errors = _capture_headers(client, from_block=from_block, to_block=result.to_block)
     store.persist_headers(headers)
+    if anchor is not None:
+        _validate_anchor_candidate(
+            anchor,
+            store=store,
+            source_key=source_key,
+            chain_id=chain_id,
+            config_identity=config_identity,
+            headers=(*preflight_headers, *headers),
+        )
+        store.save_ancestry_anchor(anchor)
     _qualify_genesis_anchor(
         store,
         source=source_key,
@@ -351,7 +490,7 @@ def capture_to_store(
     tip_hash, anchor_state = _reconcile_if_tipped(
         store,
         source=source_key,
-        headers=headers,
+        fresh_headers=headers,
         tip_block=result.to_block,
         chain_id=chain_id,
         config_identity=config_identity,
@@ -374,7 +513,7 @@ def capture_to_store(
         batches=tuple(batches),
         event_count=event_count,
         empty=empty,
-        provider_endpoint=provider_endpoint,
+        provider_endpoint=redact_endpoint(provider_endpoint),
         operator_started_at=started,
         operator_finished_at=finished,
         header_evidence=header_evidence,
@@ -420,13 +559,93 @@ def backfill_to_store(
     )
     source_key = checkpoint_source(base_source, chain_id, filt_hash)
     config_identity = config_hash or filt_hash
+    preflight_headers: tuple[BlockHeader, ...] = ()
     if anchor is not None:
-        _validate_anchor_source(anchor, source_key)
+        _validate_anchor_source(anchor, source_key, chain_id=chain_id, config_identity=config_identity)
+        existing_hashes = {header.block_hash.lower() for header in store.list_headers()}
+        if anchor.block_hash.lower() not in existing_hashes:
+            # Do the bounded header read before backfill publication so a bad
+            # candidate cannot poison the namespace or strand its cursor.
+            preflight_headers, _, _ = _capture_headers(
+                client, from_block=anchor.height, to_block=anchor.height
+            )
+        _validate_anchor_candidate(
+            anchor,
+            store=store,
+            source_key=source_key,
+            chain_id=chain_id,
+            config_identity=config_identity,
+            headers=preflight_headers,
+        )
+        if preflight_headers:
+            store.persist_headers(preflight_headers)
         store.save_ancestry_anchor(anchor)
+    checkpoint = checkpoint_store.get(source_key) if checkpoint_store is not None else None
+    lineage_headers: tuple[BlockHeader, ...] = ()
+    lineage_gaps: tuple[int, ...] = ()
+    lineage_errors: tuple[str, ...] = ()
+    lineage_divergence: str | None = None
+    lineage_repair = False
+    lineage_unavailable = False
+    if checkpoint is not None:
+        lineage_headers, lineage_gaps, lineage_errors, lineage_divergence = _lineage_probe(
+            client,
+            store,
+            source=source_key,
+            checkpoint=checkpoint,
+            start_block=start_block,
+            target_block=target_block,
+        )
+        if lineage_headers:
+            store.persist_headers(lineage_headers)
+            for header in lineage_headers:
+                store.record_header_range(
+                    source=source_key,
+                    range_start=header.number,
+                    range_end=header.number,
+                    run_id=f"{run_id}:lineage:{header.number}",
+                    headers=[header],
+                )
+        if lineage_errors or target_block not in {header.number for header in lineage_headers}:
+            lineage_unavailable = True
+            current_tip = next(
+                (header.block_hash for header in lineage_headers if header.number == target_block),
+                None,
+            )
+            store.mark_canonical_needs_repair(
+                source=source_key,
+                tip_hash=current_tip,
+                reason="current source lineage is unavailable; accepted coverage requires repair",
+            )
+        elif lineage_divergence is not None:
+            lineage_repair = True
+            current_tip = next(
+                header.block_hash for header in lineage_headers if header.number == target_block
+            )
+            store.mark_canonical_needs_repair(
+                source=source_key,
+                tip_hash=current_tip,
+                reason=f"source lineage changed; bounded replay required ({lineage_divergence})",
+            )
+            # Reset only the filter-bound cursor. Raw batches and fork headers
+            # remain append-only, and a crash during replay can resume from the
+            # last page acknowledged after this reset.
+            if checkpoint_store is not None:
+                checkpoint_store.save(
+                    BackfillCheckpoint(
+                        source_key,
+                        start_block,
+                        target_block,
+                        start_block,
+                        min(page_size, 2000),
+                        now(),
+                        filt_hash,
+                    )
+                )
     batch_ids: list[str] = []
     covered: list[tuple[int, int]] = []
     total_events = 0
-    all_headers: list[BlockHeader] = []
+    fresh_headers: list[BlockHeader] = []
     header_gaps: list[int] = []
     header_errors: list[str] = []
 
@@ -443,7 +662,7 @@ def backfill_to_store(
             headers=headers,
             missing_blocks=gaps,
         )
-        all_headers.extend(headers)
+        fresh_headers.extend(headers)
         header_gaps.extend(gaps)
         header_errors.extend(errors)
         if not page_events:
@@ -478,37 +697,96 @@ def backfill_to_store(
     # Use filter-bound checkpoint source so changed filters cannot inherit cursors.
     # BackfillCheckpointStore gains an optional filter_hash binding; fall back to
     # source-key comparison for stores without the new column.
-    result = backfill_range(
-        client,
-        address=address_list if len(address_list) > 1 else address_list[0],
-        start_block=start_block,
-        target_block=target_block,
-        source=source_key,
-        run_id=run_id,
-        page_size=min(page_size, 2000),
-        checkpoint_store=checkpoint_store,
-        on_page=on_page,
-        clock=clock,
-        retain_events=False,
-        expected_filter_hash=filt_hash,
-    )
-    canonical_tip, anchor_state = _reconcile_if_tipped(
+    result = None
+    if not lineage_unavailable:
+        try:
+            result = backfill_range(
+                client,
+                address=address_list if len(address_list) > 1 else address_list[0],
+                start_block=start_block,
+                target_block=target_block,
+                source=source_key,
+                run_id=run_id,
+                page_size=min(page_size, 2000),
+                checkpoint_store=checkpoint_store,
+                on_page=on_page,
+                clock=clock,
+                retain_events=False,
+                expected_filter_hash=filt_hash,
+            )
+        except Exception:
+            if lineage_repair:
+                store.mark_canonical_needs_repair(
+                    source=source_key,
+                    tip_hash=next(
+                        (header.block_hash for header in lineage_headers if header.number == target_block),
+                        None,
+                    ),
+                    reason="bounded lineage replay failed; coverage remains incomplete",
+                )
+            raise
+    if not lineage_unavailable and not any(header.number == target_block for header in fresh_headers):
+        # A completed/no-op resume still revalidates the current tip. Never
+        # select an older stored fork merely because no page was fetched.
+        tip_headers = tuple(header for header in lineage_headers if header.number == target_block)
+        if not tip_headers:
+            tip_headers, tip_gaps, tip_errors = _capture_headers(
+                client, from_block=target_block, to_block=target_block
+            )
+        else:
+            tip_gaps, tip_errors = (), ()
+        fresh_headers.extend(tip_headers)
+        header_gaps.extend(tip_gaps)
+        header_errors.extend(tip_errors)
+        if tip_headers:
+            store.persist_headers(tip_headers)
+            store.record_header_range(
+                source=source_key,
+                range_start=target_block,
+                range_end=target_block,
+                run_id=f"{run_id}:tip",
+                headers=tip_headers,
+                missing_blocks=tip_gaps,
+            )
+    _qualify_genesis_anchor(
         store,
         source=source_key,
-        headers=all_headers,
-        tip_block=target_block,
         chain_id=chain_id,
         config_identity=config_identity,
+        headers=store.list_headers(),
+        run_id=run_id,
+        clock=clock,
     )
+    header_gaps.extend(lineage_gaps)
+    header_errors.extend(lineage_errors)
+    if lineage_unavailable:
+        fresh_headers.extend(lineage_headers)
+        canonical_tip, anchor_state = None, "unavailable"
+        coverage_state = "needs_repair"
+    else:
+        canonical_tip, anchor_state = _reconcile_if_tipped(
+            store,
+            source=source_key,
+            fresh_headers=fresh_headers,
+            tip_block=target_block,
+            chain_id=chain_id,
+            config_identity=config_identity,
+        )
+        coverage_state = "repaired" if lineage_repair else "complete"
     header_evidence = {
         "chain_id": chain_id,
-        "covered_ranges": [list(r) for r in covered or result.ranges],
-        "header_count": len(all_headers),
+        "covered_ranges": [list(r) for r in covered or (result.ranges if result is not None else ())],
+        "header_count": len(fresh_headers),
         "header_gaps": sorted(set(header_gaps)),
         "canonical_tip_hash": canonical_tip,
         "ancestry_anchor_state": anchor_state,
+        "coverage_state": coverage_state,
     }
-    acknowledged = (start_block, result.next_block - 1) if result.next_block > start_block else None
+    acknowledged = (
+        (start_block, result.next_block - 1)
+        if result is not None and result.next_block > start_block and not lineage_unavailable
+        else None
+    )
     empty = total_events == 0
     finished = now()
     manifest = RunManifest(
@@ -526,7 +804,7 @@ def backfill_to_store(
         batches=tuple(batch_ids),
         event_count=total_events,
         empty=empty,
-        provider_endpoint=provider_endpoint,
+        provider_endpoint=redact_endpoint(provider_endpoint),
         operator_started_at=started,
         operator_finished_at=finished,
         header_evidence=header_evidence,

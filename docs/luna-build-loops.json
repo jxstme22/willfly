@@ -1,7 +1,7 @@
 {
   "title": "Post-DeepSeek audit, repair and Luna build loops",
   "version": "1.0",
-  "status": "AUDIT_COMPLETE_READY_FOR_LUNA_REPAIRS",
+  "status": "BUILD_STAGE_IN_PROGRESS",
   "model": {
     "id": "gpt-5.6-luna",
     "reasoning_effort": "xhigh",
@@ -44,8 +44,13 @@
     {
       "id": "G0",
       "goal": "Audit and repair DeepSeek checkpoint",
+      "status": "DONE",
       "tasks": [],
-      "done_when": "Every release-blocking finding is fixed and independently rechecked; any deferred finding has an explicit affected-capability gate. A passing suite alone is insufficient."
+      "done_when": "Every release-blocking finding is fixed and independently rechecked; any deferred finding has an explicit affected-capability gate. A passing suite alone is insufficient.",
+      "status_evidence": [
+        "docs/reports/luna-repair-checkpoint.md",
+        "docs/reports/luna-repair-review-02.md"
+      ]
     },
     {
       "id": "G1",
@@ -113,5 +118,48 @@
     "Timed gates require actual evidence and appropriate running infrastructure; software completion is not measured acceptance.",
     "If usage/session limits interrupt a loop, leave a precise resumable checkpoint; do not imply background continuation has been scheduled."
   ],
-  "last_verified_state": "Interrupted M1-03 delta independently audited: DS-01 through DS-06 require repair. 128 tests plus separate localhost test pass; whitespace check fails as documented. Luna dispatch pending."
+  "repair_stage": {
+    "status": "ACCEPTED_BY_COORDINATOR_BUILD_STAGE_OPEN",
+    "checkpoint": "docs/reports/luna-repair-checkpoint.md",
+    "findings": {
+      "DS-01": "implemented_fail_closed_anchor_policy_and_reached_anchor_invariant",
+      "DS-02": "implemented_proven_height_range_and_out_of_scope_unresolved_classification",
+      "DS-03": "implemented_preflight_binding_before_trusted_persistence_with_corrected_retry",
+      "DS-04": "implemented_shared_capture_backfill_genesis_qualification",
+      "DS-05": "implemented_two_rpc_read_only_qualify_anchor_cli_and_runbook",
+      "DS-06": "implemented_strict_anchor_import_and_restoration",
+      "R1": "implemented_performed_primary_independent_rpc_identity_checks_with_finality_unverified",
+      "R2": "implemented_current_run_tip_selection_noop_revalidation_and_unavailable_tip_state",
+      "RECOVERY": "implemented_versioned_source_namespace_with_immutable_anchor_supersession_link",
+      "R3": "implemented_cursor_lineage_probe_bounded_replay_and_needs_repair_state",
+      "R4": "implemented_positive_resolution_invariant_and_strict_nested_evidence_types",
+      "R5": "implemented_origin_only_endpoint_provenance_and_error_redaction"
+    },
+    "verification": [
+      "tests/test_ancestry_repairs.py",
+      "tests/test_capture_runner.py",
+      "tests/test_canonicalize.py",
+      "tests/test_header_reconciliation.py",
+      "docs/reports/deepseek-anchor-audit-probes.py",
+      "git diff --check",
+      "full pytest: 150 passed / 2 sandbox skips",
+      "real two-endpoint subprocess qualification fixture",
+      "replacement-tip, no-op revalidation, outage and requalification fixtures",
+      "same-checkpoint replacement-log replay, partial cursor and replay-failure fixtures",
+      "strict nested evidence and endpoint credential-canary fixtures"
+    ],
+    "independent_review_required": false,
+    "coordinator_review": "docs/reports/luna-repair-review-02.md",
+    "coordinator_acceptance": {
+      "status": "accepted",
+      "reviewed_on": "2026-09-14",
+      "evidence": "150 sandbox-passing tests plus two permitted loopback integration tests; planning, compile, reproduction and diff checks pass",
+      "deferred_gates": [
+        "live canonical source and archive evidence",
+        "72-hour and 14-day elapsed acceptance windows",
+        "economic and biological/model acceptance"
+      ]
+    }
+  },
+  "last_verified_state": "G0 accepted by coordinator on 2026-09-14 after independent R3-R5 recheck: sandbox full suite 150 passed / 2 socket skips; both loopback tests passed in the permitted local-socket run, so all 152 collected tests were exercised. Planning, compile, reproduction and diff checks pass. Deferred live source, timed, economic and biological/model gates remain explicit. Build stage is open at B0."
 }

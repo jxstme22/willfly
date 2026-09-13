@@ -2,7 +2,7 @@ import pytest
 
 from willfly.domain import RawEvent
 from willfly.ingest.canonicalize import CanonicalizationError, canonicalize_events
-from willfly.storage import AncestryAnchor, BlockHeader
+from willfly.storage import AncestryAnchor, BlockHeader, anchor_evidence_record
 
 
 def _anchor(height: int, block_hash: str, *, chain_id: int = 4663) -> AncestryAnchor:
@@ -11,7 +11,23 @@ def _anchor(height: int, block_hash: str, *, chain_id: int = 4663) -> AncestryAn
         height=height,
         block_hash=block_hash,
         qualification="independent_header_cross_check",
-        evidence=("fixture: cross-checked header",),
+        evidence=(
+            anchor_evidence_record(
+                "independent_header_cross_check",
+                chain_id=chain_id,
+                config_identity="fixture-config",
+                height=height,
+                block_hash=block_hash,
+                primary_endpoint="fixture.primary",
+                independent_endpoint="fixture.secondary",
+                read_methods=["eth_chainId", "eth_getBlockByNumber"],
+                verification="performed_rpc_cross_check",
+                trust_policy="distinct_configured_endpoints_operator_assumption",
+                finality_status="not_verified",
+                primary_header={"number": height, "hash": block_hash},
+                external_header={"number": height, "hash": block_hash},
+            ),
+        ),
         config_identity="fixture-config",
         source="capture:4663:fixture",
         recorded_at="2026-09-13T00:00:00Z",

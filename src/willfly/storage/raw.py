@@ -48,13 +48,12 @@ class BlockHeader:
             raise ValueError("block header parent_known must be boolean")
 
 
-#: Qualifications accepted for a persisted ancestry anchor, ordered from
-#: strongest to weakest. ``operator_declared_unverified`` is deliberately named
-#: so it cannot be mistaken for chain-verified evidence.
+#: Anchor declarations understood by the storage contract. Only ``genesis`` and
+#: ``independent_header_cross_check`` can qualify a projection. The explicit
+#: unverified value is retained so imported operator declarations are visible,
+#: but it can never certify canonical history.
 ANCHOR_QUALIFICATIONS = (
     "genesis",
-    "runtime_code_match",
-    "deployment_receipt_match",
     "independent_header_cross_check",
     "operator_declared_unverified",
 )
@@ -65,7 +64,44 @@ UNSATISFIED_ANCHOR_STATES = (
     "boundary_crossed",
     "nonconsecutive",
     "config_mismatch",
+    "unqualified",
+    "unverified",
+    "unsupported",
+    "unknown",
 )
+
+ANCHOR_EVIDENCE_PREFIX = "willfly.anchor-evidence.v1:"
+
+
+def anchor_evidence_record(kind: str, **fields: object) -> str:
+    """Serialize one reviewable, structured anchor evidence record.
+
+    The record is intentionally an identity/invariant check, not a claim of
+    finality. An independent header record must identify its provider and the
+    matching height/hash; the canonicalizer still verifies it against the
+    locally supplied header and active source configuration.
+    """
+
+    if not isinstance(kind, str) or not kind.strip():
+        raise ValueError("anchor evidence kind must be non-empty text")
+    payload = {"schema_version": "1", "kind": kind, **fields}
+    return ANCHOR_EVIDENCE_PREFIX + json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def parse_anchor_evidence(value: str) -> dict[str, object]:
+    """Parse one structured anchor evidence record without coercion."""
+
+    if not isinstance(value, str) or not value.startswith(ANCHOR_EVIDENCE_PREFIX):
+        raise ValueError("anchor evidence must use the structured v1 format")
+    try:
+        payload = json.loads(value[len(ANCHOR_EVIDENCE_PREFIX) :])
+    except json.JSONDecodeError as exc:
+        raise ValueError("anchor evidence is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("anchor evidence must contain an object")
+    if payload.get("schema_version") != "1" or not isinstance(payload.get("kind"), str):
+        raise ValueError("anchor evidence schema is unsupported")
+    return payload
 
 
 @dataclass(frozen=True)
@@ -95,12 +131,16 @@ class AncestryAnchor:
         _validate_hash(self.block_hash, "anchor block hash")
         if self.qualification not in ANCHOR_QUALIFICATIONS:
             raise ValueError("unsupported anchor qualification")
-        if not self.evidence or not all(isinstance(item, str) and item for item in self.evidence):
+        if not isinstance(self.evidence, tuple) or not self.evidence or not all(
+            isinstance(item, str) and bool(item) for item in self.evidence
+        ):
             raise ValueError("anchor requires non-empty qualification evidence")
         if not isinstance(self.config_identity, str) or not self.config_identity:
             raise ValueError("anchor requires a configuration identity")
         if not isinstance(self.source, str) or not self.source:
             raise ValueError("anchor requires a source identity")
+        if not isinstance(self.recorded_at, str) or not self.recorded_at:
+            raise ValueError("anchor recorded_at must be non-empty text")
         parsed = datetime.fromisoformat(self.recorded_at.replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             raise ValueError("anchor recorded_at must include a timezone")
@@ -119,15 +159,48 @@ class AncestryAnchor:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, object]) -> "AncestryAnchor":
+        if not isinstance(data, Mapping):
+            raise ValueError("anchor must be a JSON object")
+        required = {
+            "chain_id",
+            "height",
+            "block_hash",
+            "qualification",
+            "evidence",
+            "config_identity",
+            "source",
+            "recorded_at",
+        }
+        if set(data) != required:
+            missing = sorted(required - set(data))
+            extra = sorted(set(data) - required)
+            details = []
+            if missing:
+                details.append(f"missing fields: {', '.join(missing)}")
+            if extra:
+                details.append(f"unknown fields: {', '.join(extra)}")
+            raise ValueError("invalid anchor fields (" + "; ".join(details) + ")")
+        chain_id = data["chain_id"]
+        height = data["height"]
+        if not isinstance(chain_id, int) or isinstance(chain_id, bool):
+            raise ValueError("anchor chain_id must be an integer")
+        if not isinstance(height, int) or isinstance(height, bool):
+            raise ValueError("anchor height must be an integer")
+        text_fields = ("block_hash", "qualification", "config_identity", "source", "recorded_at")
+        if any(not isinstance(data[field], str) for field in text_fields):
+            raise ValueError("anchor text fields must remain strings")
+        evidence = data["evidence"]
+        if not isinstance(evidence, list) or not all(isinstance(item, str) for item in evidence):
+            raise ValueError("anchor evidence must be a list of strings")
         return cls(
-            chain_id=int(data["chain_id"]),
-            height=int(data["height"]),
-            block_hash=str(data["block_hash"]),
-            qualification=str(data["qualification"]),
-            evidence=tuple(str(item) for item in data["evidence"]),
-            config_identity=str(data["config_identity"]),
-            source=str(data["source"]),
-            recorded_at=str(data["recorded_at"]),
+            chain_id=chain_id,
+            height=height,
+            block_hash=data["block_hash"],
+            qualification=data["qualification"],
+            evidence=tuple(evidence),
+            config_identity=data["config_identity"],
+            source=data["source"],
+            recorded_at=data["recorded_at"],
         )
 
 
@@ -245,6 +318,7 @@ class RawBatchStore:
                 state TEXT NOT NULL,
                 missing_parent_hashes TEXT NOT NULL,
                 anchor_state TEXT NOT NULL DEFAULT 'unavailable',
+                repair_reason TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS observatory_snapshots (
@@ -268,6 +342,12 @@ class RawBatchStore:
                 config_identity TEXT NOT NULL,
                 recorded_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS ancestry_anchor_supersessions (
+                superseded_source TEXT PRIMARY KEY,
+                successor_source TEXT NOT NULL UNIQUE,
+                reason TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
         )
         header_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(block_headers)").fetchall()}
@@ -277,6 +357,10 @@ class RawBatchStore:
         if "anchor_state" not in checkpoint_columns:
             self._connection.execute(
                 "ALTER TABLE canonical_checkpoints ADD COLUMN anchor_state TEXT NOT NULL DEFAULT 'unavailable'"
+            )
+        if "repair_reason" not in checkpoint_columns:
+            self._connection.execute(
+                "ALTER TABLE canonical_checkpoints ADD COLUMN repair_reason TEXT NOT NULL DEFAULT ''"
             )
         self._connection.commit()
 
@@ -476,6 +560,8 @@ class RawBatchStore:
 
         if not isinstance(anchor, AncestryAnchor):
             raise TypeError("anchor must be an AncestryAnchor")
+        if anchor.qualification == "operator_declared_unverified":
+            raise ValueError("unverified anchor declarations cannot be persisted as trusted state")
         existing = self.get_ancestry_anchor(anchor.source)
         if existing is not None:
             if existing.to_dict() != anchor.to_dict():
@@ -500,19 +586,96 @@ class RawBatchStore:
             )
         return anchor
 
+    def save_requalified_ancestry_anchor(
+        self, anchor: AncestryAnchor, *, supersedes_source: str, reason: str
+    ) -> AncestryAnchor:
+        """Persist a new qualified namespace linked to an older anchor.
+
+        A boundary-crossing fork cannot rewrite the old source. Requalification
+        creates a new source namespace and an immutable supersession link so
+        historical projections remain inspectable and the operator's recovery
+        decision is auditable.
+        """
+
+        if not isinstance(anchor, AncestryAnchor):
+            raise TypeError("anchor must be an AncestryAnchor")
+        if anchor.qualification == "operator_declared_unverified":
+            raise ValueError("unverified anchor declarations cannot be persisted as trusted state")
+        if not isinstance(supersedes_source, str) or not supersedes_source or supersedes_source == anchor.source:
+            raise ValueError("superseded source must differ from successor source")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("supersession reason is required")
+        if self.get_ancestry_anchor(supersedes_source) is None:
+            raise KeyError(f"unknown superseded anchor source: {supersedes_source}")
+        existing = self.get_ancestry_anchor(anchor.source)
+        if existing is not None:
+            link = self.get_anchor_supersession(supersedes_source)
+            if existing.to_dict() == anchor.to_dict() and link is not None and link["successor_source"] == anchor.source:
+                return existing
+            raise ValueError("conflicting ancestry anchor already stored for successor source")
+        existing_link = self.get_anchor_supersession(supersedes_source)
+        if existing_link is not None:
+            raise ValueError("superseded source already has a requalification")
+        successor_link = self._connection.execute(
+            "SELECT superseded_source FROM ancestry_anchor_supersessions WHERE successor_source = ?",
+            (anchor.source,),
+        ).fetchone()
+        if successor_link is not None:
+            raise ValueError("successor source is already a requalified namespace")
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO ancestry_anchors(source, chain_id, height, block_hash, qualification, evidence_json, config_identity, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    anchor.source,
+                    anchor.chain_id,
+                    anchor.height,
+                    anchor.block_hash,
+                    anchor.qualification,
+                    json.dumps(list(anchor.evidence)),
+                    anchor.config_identity,
+                    anchor.recorded_at,
+                ),
+            )
+            self._connection.execute(
+                """
+                INSERT INTO ancestry_anchor_supersessions(superseded_source, successor_source, reason, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (supersedes_source, anchor.source, reason.strip(), now),
+            )
+        return anchor
+
+    def get_anchor_supersession(self, superseded_source: str) -> sqlite3.Row | None:
+        return self._connection.execute(
+            "SELECT * FROM ancestry_anchor_supersessions WHERE superseded_source = ?",
+            (superseded_source,),
+        ).fetchone()
+
+    def list_anchor_supersessions(self) -> list[sqlite3.Row]:
+        return self._connection.execute(
+            "SELECT * FROM ancestry_anchor_supersessions ORDER BY created_at, superseded_source"
+        ).fetchall()
+
     def get_ancestry_anchor(self, source: str) -> AncestryAnchor | None:
         row = self._connection.execute("SELECT * FROM ancestry_anchors WHERE source = ?", (source,)).fetchone()
         if row is None:
             return None
-        return AncestryAnchor(
-            chain_id=row["chain_id"],
-            height=row["height"],
-            block_hash=row["block_hash"],
-            qualification=row["qualification"],
-            evidence=tuple(str(item) for item in json.loads(row["evidence_json"])),
-            config_identity=row["config_identity"],
-            source=row["source"],
-            recorded_at=row["recorded_at"],
+        evidence = json.loads(row["evidence_json"])
+        return AncestryAnchor.from_dict(
+            {
+                "chain_id": row["chain_id"],
+                "height": row["height"],
+                "block_hash": row["block_hash"],
+                "qualification": row["qualification"],
+                "evidence": evidence,
+                "config_identity": row["config_identity"],
+                "source": row["source"],
+                "recorded_at": row["recorded_at"],
+            }
         )
 
     def list_ancestry_anchors(self) -> list[AncestryAnchor]:
@@ -624,8 +787,8 @@ class RawBatchStore:
             resolved = result.is_resolved and tip is not None
             self._connection.execute(
                 """
-                INSERT INTO canonical_checkpoints(source, tip_hash, last_block_number, last_block_hash, state, missing_parent_hashes, anchor_state, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO canonical_checkpoints(source, tip_hash, last_block_number, last_block_hash, state, missing_parent_hashes, anchor_state, repair_reason, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)
                 ON CONFLICT(source) DO UPDATE SET
                     tip_hash = excluded.tip_hash,
                     last_block_number = excluded.last_block_number,
@@ -633,6 +796,7 @@ class RawBatchStore:
                     state = excluded.state,
                     missing_parent_hashes = excluded.missing_parent_hashes,
                     anchor_state = excluded.anchor_state,
+                    repair_reason = excluded.repair_reason,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -650,6 +814,35 @@ class RawBatchStore:
 
     def get_canonical_checkpoint(self, source: str) -> sqlite3.Row | None:
         return self._connection.execute("SELECT * FROM canonical_checkpoints WHERE source = ?", (source,)).fetchone()
+
+    def mark_canonical_needs_repair(self, *, source: str, tip_hash: str | None, reason: str) -> None:
+        """Invalidate the derived projection until bounded lineage replay succeeds."""
+
+        if not source:
+            raise ValueError("canonical repair source is required")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("canonical repair reason is required")
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connection:
+            self._connection.execute("DELETE FROM canonical_event_projections WHERE source = ?", (source,))
+            self._connection.execute(
+                """
+                INSERT INTO canonical_checkpoints(
+                    source, tip_hash, last_block_number, last_block_hash, state,
+                    missing_parent_hashes, anchor_state, repair_reason, updated_at
+                ) VALUES (?, ?, NULL, NULL, 'needs_repair', '[]', 'unavailable', ?, ?)
+                ON CONFLICT(source) DO UPDATE SET
+                    tip_hash = excluded.tip_hash,
+                    last_block_number = NULL,
+                    last_block_hash = NULL,
+                    state = 'needs_repair',
+                    missing_parent_hashes = '[]',
+                    anchor_state = 'unavailable',
+                    repair_reason = excluded.repair_reason,
+                    updated_at = excluded.updated_at
+                """,
+                (source, tip_hash, reason.strip(), now),
+            )
 
     def list_canonical_projection(self, source: str) -> list[sqlite3.Row]:
         return self._connection.execute(

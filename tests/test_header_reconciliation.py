@@ -10,7 +10,7 @@ from willfly.adapters.robinhood_rpc import JsonRpcError, ReadOnlyRpcClient, RpcL
 from willfly.domain import RawEvent
 from willfly.ingest.canonicalize import canonicalize_events
 from willfly.ingest.runner import capture_to_store, checkpoint_source, filter_identity
-from willfly.storage import AncestryAnchor, BlockHeader, RawBatchStore
+from willfly.storage import AncestryAnchor, BlockHeader, RawBatchStore, anchor_evidence_record
 
 
 V4 = "0x8366a39cc670b4001a1121b8f6a443a643e40951"
@@ -42,7 +42,23 @@ def _anchor(
         height=height,
         block_hash=block_hash,
         qualification=qualification,
-        evidence=("fixture: cross-checked header",),
+        evidence=(
+            anchor_evidence_record(
+                "independent_header_cross_check",
+                chain_id=chain_id,
+                config_identity=config_identity or _filter_hash(),
+                height=height,
+                block_hash=block_hash,
+                primary_endpoint="fixture.primary",
+                independent_endpoint="fixture.secondary",
+                read_methods=["eth_chainId", "eth_getBlockByNumber"],
+                verification="performed_rpc_cross_check",
+                trust_policy="distinct_configured_endpoints_operator_assumption",
+                finality_status="not_verified",
+                primary_header={"number": height, "hash": block_hash},
+                external_header={"number": height, "hash": block_hash},
+            ),
+        ),
         config_identity=config_identity or _filter_hash(),
         source=source or _source_key(),
         recorded_at="2026-09-13T00:00:00Z",
@@ -323,9 +339,12 @@ def test_qualified_anchor_resolves_bounded_window(tmp_path: Path):
     )
     assert result.anchor_state == "qualified"
     assert result.is_resolved is True
-    # The anchor is the trusted root; block 610 lies below it and is not promoted.
+    # The anchor is the trusted root; block 610 lies below the proven interval
+    # and remains unresolved rather than being falsely called an orphan.
     assert [event.block_hash for event in result.canonical_events] == [a1, a2]
-    assert [event.block_hash for event in result.orphaned_events] == [root]
+    assert result.orphaned_events == ()
+    assert [event.block_hash for event in result.unresolved_events] == [root]
+    assert result.proven_height_range == (611, 612)
 
 
 def test_anchor_chain_and_config_mismatch_invalidate():
@@ -424,4 +443,3 @@ def test_capture_auto_qualifies_genesis_anchor_and_resolves(tmp_path: Path):
     assert anchored is not None
     assert anchored.qualification == "genesis"
     assert checkpoint["state"] == "canonical"
-

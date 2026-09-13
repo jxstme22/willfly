@@ -23,10 +23,18 @@ from willfly.domain import (
 from willfly.api import ReadOnlyStore, create_server
 from willfly.evaluation.coverage import audit_coverage
 from willfly.storage.export import ExportUnavailable, export_records
-from willfly.storage.raw import RawBatchStore
+from willfly.storage.raw import AncestryAnchor, RawBatchStore, anchor_evidence_record
 from willfly.adapters.robinhood_rpc import ReadOnlyRpcClient
 from willfly.ingest.backfill import BackfillCheckpointStore
-from willfly.ingest.runner import backfill_to_store, capture_to_store
+from willfly.ingest.canonicalize import assess_ancestry_anchor
+from willfly.ingest.supervisor import redact_endpoint, redact_error
+from willfly.ingest.runner import (
+    _header_from_rpc,
+    backfill_to_store,
+    capture_to_store,
+    checkpoint_source,
+    filter_identity,
+)
 from willfly.features.discovery import PoolProjection
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
 
@@ -346,6 +354,143 @@ def _materialize(
     }
 
 
+def _qualify_anchor(
+    *,
+    config_path: Path,
+    store_dir: Path,
+    base_source: str,
+    addresses: list[str],
+    height: int,
+    block_hash: str,
+    independent_rpc_url: str,
+    recorded_at: str | None,
+    supersedes_source: str | None,
+    supersession_reason: str | None,
+) -> dict[str, Any]:
+    """Qualify one bounded anchor using two performed, read-only RPC checks."""
+
+    config = _load_json(config_path)
+    if not isinstance(config, dict):
+        raise ValueError("source config must be an object")
+    context = _capture_context(config, config_path, addresses)
+    chain_id = context["expected_chain"]
+    config_identity = context["config_hash"]
+    primary_endpoint = context["endpoint"]
+    if not isinstance(primary_endpoint, str) or not primary_endpoint.startswith(("http://", "https://")):
+        raise ValueError("source manifest RPC endpoint must be HTTP(S)")
+    if not isinstance(independent_rpc_url, str) or not independent_rpc_url.startswith(("http://", "https://")):
+        raise ValueError("independent RPC endpoint must be HTTP(S)")
+    primary_endpoint_ref = redact_endpoint(primary_endpoint)
+    independent_endpoint_ref = redact_endpoint(independent_rpc_url)
+    if primary_endpoint_ref == independent_endpoint_ref:
+        raise ValueError("primary and independent RPC endpoints must be distinct")
+    if not isinstance(height, int) or isinstance(height, bool) or height < 0:
+        raise ValueError("anchor height must be a non-negative integer")
+    if not isinstance(block_hash, str):
+        raise ValueError("anchor block_hash must be text")
+    primary = ReadOnlyRpcClient(primary_endpoint, expected_chain_id=chain_id)
+    independent = ReadOnlyRpcClient(independent_rpc_url, expected_chain_id=chain_id)
+    primary_chain = primary.check_chain()
+    independent_chain = independent.check_chain()
+    if primary_chain != chain_id or independent_chain != chain_id:
+        raise ValueError("anchor RPC chain identity does not match the active source chain")
+    primary_header = _header_from_rpc(primary.block(height), height)
+    independent_header = _header_from_rpc(independent.block(height), height)
+    if primary_header.block_hash.lower() != block_hash.lower():
+        raise ValueError("primary RPC header does not match the declared anchor identity")
+    if independent_header.block_hash.lower() != primary_header.block_hash.lower():
+        raise ValueError("independent RPC header does not match the primary header identity")
+    if (
+        (independent_header.parent_hash is None) != (primary_header.parent_hash is None)
+        or (
+            independent_header.parent_hash is not None
+            and independent_header.parent_hash.lower() != primary_header.parent_hash.lower()
+        )
+    ):
+        raise ValueError("independent RPC parent hash does not match the primary header")
+    filter_hash = filter_identity(
+        chain_id=chain_id,
+        addresses=context["addresses"],
+        abi_hashes=context["abi_hashes"],
+        event_families=context["event_families"],
+    )
+    source_key = checkpoint_source(base_source, chain_id, filter_hash)
+    evidence_payload = {
+        "chain_id": chain_id,
+        "config_identity": config_identity,
+        "height": height,
+        "block_hash": primary_header.block_hash,
+        "primary_endpoint": primary_endpoint_ref,
+        "independent_endpoint": independent_endpoint_ref,
+        "read_methods": ["eth_chainId", "eth_getBlockByNumber"],
+        "verification": "performed_rpc_cross_check",
+        "trust_policy": "distinct_configured_endpoints_operator_assumption",
+        "finality_status": "not_verified",
+        "primary_header": {
+            "number": primary_header.number,
+            "hash": primary_header.block_hash,
+            "parent_hash": primary_header.parent_hash,
+        },
+        "external_header": {
+            "number": independent_header.number,
+            "hash": independent_header.block_hash,
+            "parent_hash": independent_header.parent_hash,
+        },
+    }
+    evidence = anchor_evidence_record("independent_header_cross_check", **evidence_payload)
+    anchor = AncestryAnchor(
+        chain_id=chain_id,
+        height=height,
+        block_hash=block_hash,
+        qualification="independent_header_cross_check",
+        evidence=(evidence,),
+        config_identity=config_identity,
+        source=source_key,
+        recorded_at=recorded_at or datetime.now(timezone.utc).isoformat(),
+    )
+    state, notes = assess_ancestry_anchor(
+        anchor,
+        [primary_header],
+        expected_chain_id=chain_id,
+        expected_config_identity=config_identity,
+    )
+    if state != "qualified":
+        raise ValueError(f"anchor rejected ({state}): {'; '.join(notes)}")
+    with RawBatchStore(store_dir) as store:
+        existing = store.get_ancestry_anchor(source_key)
+        if existing is not None and existing.to_dict() != anchor.to_dict():
+            raise ValueError("conflicting ancestry anchor already stored for this source")
+        store.persist_headers([primary_header])
+        store.record_header_range(
+            source=source_key,
+            range_start=height,
+            range_end=height,
+            run_id=_run_id("qualify-anchor", evidence_payload),
+            headers=[primary_header],
+        )
+        if supersedes_source is not None:
+            store.save_requalified_ancestry_anchor(
+                anchor,
+                supersedes_source=supersedes_source,
+                reason=supersession_reason or "",
+            )
+        else:
+            store.save_ancestry_anchor(anchor)
+    return {
+        "run_id": _run_id("qualify-anchor", evidence_payload),
+        "status": "qualified",
+        "operating_mode": "read_only",
+        "source": source_key,
+        "anchor_state": state,
+        "anchor": anchor.to_dict(),
+        "evidence": list(notes),
+        "read_methods": ["eth_chainId", "eth_getBlockByNumber"],
+        "primary_endpoint": primary_endpoint_ref,
+        "independent_endpoint": independent_endpoint_ref,
+        "supersedes_source": supersedes_source,
+    }
+
+
 def _shadow_plan(config_path: Path, state_db: Path) -> dict[str, Any]:
     config = _load_json(config_path)
     result = _operation_plan(
@@ -434,6 +579,21 @@ def build_parser() -> argparse.ArgumentParser:
     materialize.add_argument("--source", default="observatory")
     materialize.add_argument("--replaces-snapshot-id", default=None)
 
+    qualify = subparsers.add_parser(
+        "qualify-anchor",
+        help="persist one bounded ancestry anchor after two read-only RPC checks",
+    )
+    qualify.add_argument("--config", type=Path, default=ROOT / "configs/sources/robinhood-chain-v0.1.json")
+    qualify.add_argument("--height", type=int, required=True)
+    qualify.add_argument("--block-hash", required=True)
+    qualify.add_argument("--independent-rpc-url", required=True)
+    qualify.add_argument("--recorded-at", default=None, help="RFC-3339 observation time; defaults to now")
+    qualify.add_argument("--store-dir", type=Path, default=ROOT / "data" / "observatory")
+    qualify.add_argument("--source", default="capture", help="capture/backfill source namespace")
+    qualify.add_argument("--address", action="append", default=[])
+    qualify.add_argument("--supersedes-source", default=None)
+    qualify.add_argument("--supersession-reason", default=None)
+
     serve = subparsers.add_parser("serve", help="serve local read-only inspection endpoints")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -505,6 +665,19 @@ def main(argv: list[str] | None = None) -> int:
                 as_of_time=args.as_of_time,
                 replaces_snapshot_id=args.replaces_snapshot_id,
             )
+        elif args.command == "qualify-anchor":
+            result = _qualify_anchor(
+                config_path=args.config,
+                store_dir=args.store_dir,
+                base_source=args.source,
+                addresses=list(args.address),
+                height=args.height,
+                block_hash=args.block_hash,
+                independent_rpc_url=args.independent_rpc_url,
+                recorded_at=args.recorded_at,
+                supersedes_source=args.supersedes_source,
+                supersession_reason=args.supersession_reason,
+            )
         elif args.command == "shadow":
             result = _shadow_plan(args.config, args.state_db)
         else:
@@ -523,14 +696,14 @@ def main(argv: list[str] | None = None) -> int:
                 server.serve_forever()
             server.server_close()
     except (OSError, KeyError, json.JSONDecodeError, ValueError) as exc:
-        print(json.dumps({"status": "error", "error": str(exc)}, sort_keys=True))
+        print(json.dumps({"status": "error", "error": redact_error(exc)}, sort_keys=True))
         return 2
     except ExportUnavailable as exc:
-        print(json.dumps({"status": "unavailable", "error": str(exc)}, sort_keys=True))
+        print(json.dumps({"status": "unavailable", "error": redact_error(exc)}, sort_keys=True))
         return 3
     except RuntimeError as exc:
         # RPC, backfill and storage failures must return nonzero without a traceback.
-        print(json.dumps({"status": "error", "error": str(exc)}, sort_keys=True))
+        print(json.dumps({"status": "error", "error": redact_error(exc)}, sort_keys=True))
         return 1
     print(json.dumps(result, indent=2, sort_keys=True))
     if args.command == "fixture-check":

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import re
 import time
 from typing import Callable, TypeVar
+from urllib.parse import urlsplit
 
 
 T = TypeVar("T")
@@ -53,10 +54,39 @@ def run_with_retries(
     return SupervisionResult("degraded", attempts, None, redact_error(last_error))
 
 
+def redact_endpoint(endpoint: str) -> str:
+    """Return a stable origin-only endpoint reference safe for persisted output.
+
+    RPC credentials are commonly carried in userinfo, path segments or query
+    strings. The configured endpoint is still used unchanged by the transport;
+    only exported provenance and error text use this origin reference.
+    """
+
+    if not isinstance(endpoint, str) or not endpoint:
+        return endpoint if isinstance(endpoint, str) else ""
+    try:
+        parsed = urlsplit(endpoint)
+        hostname = parsed.hostname
+        if parsed.scheme.lower() not in {"http", "https"} or not hostname:
+            return "[REDACTED_ENDPOINT]"
+        host = hostname.lower()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        port = f":{parsed.port}" if parsed.port is not None else ""
+        return f"{parsed.scheme.lower()}://{host}{port}"
+    except ValueError:
+        return "[REDACTED_ENDPOINT]"
+
+
 def redact_error(error: Exception | None) -> str | None:
     if error is None:
         return None
     message = str(error)
+    message = re.sub(
+        r"(?i)https?://[^\s,;]+",
+        lambda match: redact_endpoint(match.group(0)),
+        message,
+    )
     message = re.sub(
         r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)[^\s,;]+",
         r"\1[REDACTED]",

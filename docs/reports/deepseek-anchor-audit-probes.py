@@ -1,6 +1,5 @@
 import json, runpy, tempfile
 from pathlib import Path
-from dataclasses import replace
 from willfly.ingest.canonicalize import canonicalize_events
 from willfly.ingest.runner import capture_to_store, backfill_to_store
 from willfly.storage import BlockHeader, RawBatchStore
@@ -19,10 +18,12 @@ out['false_genesis_at_100']={'resolved':r.is_resolved,'state':r.anchor_state}
 with tempfile.TemporaryDirectory() as t:
  with RawBatchStore(Path(t)) as s:
   wrong=anchor(100,h(100),config_identity='WRONG')
-  r=capture_to_store(Client({z.number:z for z in headers[1:]},{}),s,addresses=[V4],from_block=100,to_block=101,run_id='wrong-config',anchor=wrong)
-  out['poisoned_anchor']={'first_state':r.header_evidence['ancestry_anchor_state'],'stored_config':s.get_ancestry_anchor(wrong.source).config_identity}
-  try: capture_to_store(Client({z.number:z for z in headers[1:]},{}),s,addresses=[V4],from_block=100,to_block=101,run_id='correct-config',anchor=anchor(100,h(100)))
-  except Exception as e:out['poisoned_anchor']['corrected_retry_error']=str(e)
+  try:
+   capture_to_store(Client({z.number:z for z in headers[1:]},{}),s,addresses=[V4],from_block=100,to_block=101,run_id='wrong-config',anchor=wrong)
+  except ValueError as e:
+   out['rejected_anchor']={'error':str(e),'stored':s.get_ancestry_anchor(wrong.source) is not None}
+  corrected=capture_to_store(Client({z.number:z for z in headers[1:]},{}),s,addresses=[V4],from_block=100,to_block=101,run_id='correct-config',anchor=anchor(100,h(100)))
+  out['corrected_retry']={'state':corrected.header_evidence['ancestry_anchor_state']}
 for kind,run in [('capture',capture_to_store),('backfill',backfill_to_store)]:
  with tempfile.TemporaryDirectory() as t:
   with RawBatchStore(Path(t)) as s:
