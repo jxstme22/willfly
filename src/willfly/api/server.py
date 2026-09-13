@@ -8,13 +8,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 from urllib.parse import parse_qs, unquote, urlparse
 
-from willfly.domain import Launch, Observation, PredictionRecord, SignalProposal, WalletObservation
+from willfly.domain import Launch, ManualAction, Observation, PredictionRecord, SignalProposal, WalletObservation
 from willfly.domain.contracts import ADDRESS_RE, BYTES32_RE
 from willfly.features.discovery import DiscoverySnapshot, PoolProjection
 from willfly.features.projections import ObservatoryProjection
 from willfly.storage.raw import RawBatchStore
 from willfly.ui.dashboard import render_dashboard
 from willfly.ui.signals import build_signal_inbox
+from willfly.features.action_linking import ManualActionLink
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class ReadOnlyStore:
     market_readiness: Mapping[str, str] | None = None
     wallet_observations: tuple[WalletObservation, ...] = ()
     training_state: Mapping[str, object] | None = None
+    manual_actions: tuple[ManualAction, ...] = ()
+    action_links: tuple[ManualActionLink, ...] = ()
 
     @classmethod
     def from_discovery(
@@ -150,6 +153,15 @@ class ReadOnlyStore:
     def training(self) -> dict[str, object]:
         return dict(self.training_state or {"status": "unknown", "reason": "training_state_unavailable"})
 
+    def actions(self) -> dict[str, object]:
+        links = {link.action_id: link.to_dict() for link in self.action_links}
+        return {
+            "items": [
+                {"action": action.to_dict(), "link": links.get(action.action_id, {"status": "pending", "reason_flags": ["link_not_recorded"]})}
+                for action in self.manual_actions
+            ]
+        }
+
     def dashboard(self) -> str:
         snapshot = self.discovery_snapshot or DiscoverySnapshot(
             as_of_time="1970-01-01T00:00:00Z",
@@ -162,7 +174,18 @@ class ReadOnlyStore:
             lineage=("dashboard:empty",),
         )
         as_of = self.signal_as_of_time or snapshot.as_of_time
-        signals = build_signal_inbox(self.predictions, self.proposals, as_of_time=as_of, market_readiness=self.market_readiness)
+        proposal_status = {
+            action.proposal_id: next((link.status for link in self.action_links if link.action_id == action.action_id), "not_recorded")
+            for action in self.manual_actions
+            if action.proposal_id is not None
+        }
+        signals = build_signal_inbox(
+            self.predictions,
+            self.proposals,
+            as_of_time=as_of,
+            market_readiness=self.market_readiness,
+            manual_status_by_proposal=proposal_status,
+        )
         positions = [position.to_dict() | {"wallet": observation.wallet} for observation in self.wallet_observations for position in observation.positions]
         return render_dashboard(snapshot, self.timelines, self.exclusions, signals=signals, positions=tuple(positions), training_state=self.training_state)
 
@@ -234,6 +257,8 @@ def _route(store: ReadOnlyStore, path: str) -> tuple[dict[str, object], int]:
         return store.list_positions(wallet=_single_param(params, "wallet")), 200
     if parts == ["training"]:
         return store.training(), 200
+    if parts == ["actions"]:
+        return store.actions(), 200
     if len(parts) == 2 and parts[0] == "evidence":
         return dict(store.get_evidence(parts[1])), 200
     return {"status": "error", "error": "not found"}, 404

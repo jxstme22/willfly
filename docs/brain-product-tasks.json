@@ -152,7 +152,7 @@
     {
       "id": "B7",
       "title": "Link manual actions and produce feedback",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B2",
         "B6"
@@ -162,7 +162,12 @@
       ],
       "work": "Record pre-action proposals, match external transaction hashes conservatively, preserve human overrides, delays, failed and partial actions.",
       "acceptance": "Supported actions auto-update positions; ambiguous links remain pending; actual and simulated counterfactual outcomes never merge.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/manual-action-feedback.md",
+        "src/willfly/features/action_linking.py",
+        "src/willfly/api/server.py",
+        "tests/test_action_linking.py"
+      ]
     },
     {
       "id": "B8",

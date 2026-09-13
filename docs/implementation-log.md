@@ -744,3 +744,14 @@ readiness are visible; stale, invalidated and unsupported proposals abstain.
 Observed positions and training state are displayed without adding execution
 controls. Focused API/UI checks pass; real labelled model output, economic
 qualification and manual-action linkage remain open.
+
+
+## 2026-09-14 — B7 manual-action linkage
+
+Added conservative linkage from externally reported manual actions to public
+wallet activity. Exact transaction identity is preferred; hashless matching
+requires one compatible wallet/instrument/direction candidate in a bounded time
+window, while ambiguous and missing evidence remain unresolved. The read-only
+`/actions` surface exposes links without execution controls, and actual manual
+outcomes remain distinct from simulated or market outcomes. Focused linkage
+tests pass; live feedback and complete position-update acceptance remain open.

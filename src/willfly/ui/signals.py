@@ -60,6 +60,7 @@ def build_signal_inbox(
     *,
     as_of_time: str,
     market_readiness: Mapping[str, str] | None = None,
+    manual_status_by_proposal: Mapping[str, str] | None = None,
 ) -> tuple[SignalInboxEntry, ...]:
     """Project model outputs into safe display actions without mutating them."""
 
@@ -112,7 +113,7 @@ def build_signal_inbox(
                 expires_at=proposal.expires_at,
                 confidence=proposal.confidence.to_dict(),
                 evidence_refs=proposal.evidence_refs,
-                manual_status="not_recorded",
+                manual_status=(manual_status_by_proposal or {}).get(proposal.proposal_id, "not_recorded"),
                 reason_flags=tuple(dict.fromkeys(reasons)),
             )
         )

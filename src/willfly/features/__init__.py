@@ -5,6 +5,7 @@ from willfly.features.projections import LifecycleRevision, ObservatoryProjectio
 from willfly.features.timelines import build_token_timeline
 from willfly.features.labels import ForwardEpisode, OutcomeLabel, build_forward_labels
 from willfly.features.feedback import FeedbackDataset, FeedbackExample, build_feedback_dataset
+from willfly.features.action_linking import ManualActionLink, link_manual_actions
 
 __all__ = [
     "DiscoverySnapshot",
@@ -20,4 +21,6 @@ __all__ = [
     "FeedbackDataset",
     "FeedbackExample",
     "build_feedback_dataset",
+    "ManualActionLink",
+    "link_manual_actions",
 ]
