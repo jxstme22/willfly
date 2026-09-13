@@ -365,7 +365,7 @@
       "id": "M2-03",
       "phase": "M2",
       "title": "Generate genuine horizon labels and splits",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "owner_role": "GPT Luna Extra High implementation session",
       "depends_on": [
         "M2-02"
@@ -381,7 +381,13 @@
       "work": "Create each 1/5/15-minute label from a specified entry and horizon liquidation attempt; distinguish failure, unsellable residual, missing state and incomplete horizon. Freeze causal cohorts and purge training labels beyond partition boundaries.",
       "acceptance": "Five-minute labels cannot reuse an unrelated earlier sale or leader fill; sample manifest includes failures and censoring; no outcome becomes available before its evidence arrives.",
       "verification": "Known-price paths with different horizon outcomes, late-arriving evidence, unsellable inventory, boundary purge and no-future-cohort tests.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/m2-labels.md",
+        "src/willfly/features/labels.py",
+        "src/willfly/evaluation/splits.py",
+        "tests/test_labels.py",
+        "tests/test_splits.py"
+      ]
     },
     {
       "id": "M2-04",

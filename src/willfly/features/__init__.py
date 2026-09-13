@@ -3,7 +3,7 @@
 from willfly.features.discovery import DiscoverySnapshot, PoolProjection, build_discovery_snapshot
 from willfly.features.projections import LifecycleRevision, ObservatoryProjection, materialize_observatory_projection
 from willfly.features.timelines import build_token_timeline
-from willfly.features.labels import ForwardEpisode, OutcomeLabel, build_forward_labels
+from willfly.features.labels import ForwardEpisode, OutcomeLabel, build_forward_labels, outcome_from_forward_label
 from willfly.features.feedback import FeedbackDataset, FeedbackExample, build_feedback_dataset
 from willfly.features.action_linking import ManualActionLink, link_manual_actions
 
@@ -18,6 +18,7 @@ __all__ = [
     "ForwardEpisode",
     "OutcomeLabel",
     "build_forward_labels",
+    "outcome_from_forward_label",
     "FeedbackDataset",
     "FeedbackExample",
     "build_feedback_dataset",

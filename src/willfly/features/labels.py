@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Iterable
 
+from willfly.domain import OutcomeRecord
+
 
 @dataclass(frozen=True)
 class ForwardEpisode:
@@ -104,6 +106,34 @@ def build_forward_labels(
                 )
             )
     return tuple(labels)
+
+
+def outcome_from_forward_label(
+    label: OutcomeLabel,
+    *,
+    prediction_id: str,
+    target_id: str,
+) -> OutcomeRecord:
+    """Adapt one causal horizon label to the B3 outcome contract."""
+
+    if not prediction_id or not target_id:
+        raise ValueError("prediction_id and target_id are required")
+    if label.status not in {"observed", "censored", "unresolved"}:
+        raise ValueError("unsupported forward label status")
+    if label.status == "observed" and label.label_available_at is None:
+        raise ValueError("observed forward labels require label availability")
+    outcome_id = f"outcome:{prediction_id}:{target_id}:{label.horizon_seconds}:{label.episode_id}"
+    return OutcomeRecord(
+        outcome_id=outcome_id,
+        prediction_id=prediction_id,
+        target_id=target_id,
+        outcome_kind="observed_market",
+        status=label.status,
+        observed_at=label.observation_time,
+        label_available_at=label.label_available_at,
+        net_return_bps=label.net_return_bps,
+        source_refs=label.source_refs,
+    )
 
 
 def _label(

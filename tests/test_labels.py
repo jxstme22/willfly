@@ -1,4 +1,4 @@
-from willfly.features.labels import ForwardEpisode, build_forward_labels
+from willfly.features.labels import ForwardEpisode, build_forward_labels, outcome_from_forward_label
 
 
 def _episode(**overrides):
@@ -37,3 +37,21 @@ def test_forward_labels_are_causal_and_preserve_censored_and_unresolved_states()
     assert by_id["failed"].status == "unresolved"
     assert by_id["failed"].net_return_bps is None
     assert "late" not in by_id
+
+
+def test_forward_label_adapts_to_delayed_market_outcome_contract():
+    label = build_forward_labels(
+        observation_time="2026-01-01T00:00:00Z",
+        observation_available_at="2026-01-01T00:00:02Z",
+        episodes=[
+            ForwardEpisode(
+                "episode-adapt", "token", "2026-01-01T00:00:01Z", "2026-01-01T00:00:03Z",
+                "2026-01-01T00:00:05Z", "2026-01-01T00:00:06Z", 100, 120, None, ("market:1",),
+            )
+        ],
+        horizons_seconds=(60,),
+    )[0]
+    outcome = outcome_from_forward_label(label, prediction_id="prediction-1", target_id="spot_entry_net_return")
+    assert outcome.outcome_kind == "observed_market"
+    assert outcome.net_return_bps == 2000
+    assert outcome.label_available_at == "2026-01-01T00:00:06Z"

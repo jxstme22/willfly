@@ -161,5 +161,5 @@
       ]
     }
   },
-  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0-B9 mechanics and fixture checks pass. B10 now has a reproducible research_release_only capability matrix: signal/observer/feedback/training mechanics are available, while live labelled model quality, forward evaluation, live feedback, 24/7 operation, economics and promotion remain open; signing/funding/execution stay disabled. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
+  "last_verified_state": "G0 accepted by coordinator on 2026-09-14; B0-B10 mechanics and fixture checks pass with research_release_only status. M2-03 forward labels now adapt explicitly into delayed/censored/unresolved OutcomeRecord rows for B3; M2 economic and live-source gates remain open. M1-M5 engineering loops continue in dependency order; no routine coordinator pause is required."
 }

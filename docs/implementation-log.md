@@ -785,3 +785,12 @@ reports implemented mechanics separately from live labelled training,
 forward-evaluation, wallet-coverage, economics, LP, 24/7 and promotion gates.
 The current status is explicitly `research_release_only`; automatic signing,
 funding and execution remain disabled. Focused release checks pass.
+
+
+## 2026-09-14 — M2-03 label-contract bridge
+
+Added an explicit adapter from causal forward horizon labels to B3
+`OutcomeRecord` rows. Observed, censored and unresolved states retain their
+availability and source lineage; actual-manual linkage is never inferred.
+Label and feedback tests pass. M2 economic validation and live-source gates
+remain open.
