@@ -8,12 +8,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Mapping
 from urllib.parse import parse_qs, unquote, urlparse
 
-from willfly.domain import Launch, Observation
+from willfly.domain import Launch, Observation, PredictionRecord, SignalProposal, WalletObservation
 from willfly.domain.contracts import ADDRESS_RE, BYTES32_RE
 from willfly.features.discovery import DiscoverySnapshot, PoolProjection
 from willfly.features.projections import ObservatoryProjection
 from willfly.storage.raw import RawBatchStore
 from willfly.ui.dashboard import render_dashboard
+from willfly.ui.signals import build_signal_inbox
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,12 @@ class ReadOnlyStore:
     discovery_snapshot: DiscoverySnapshot | None = None
     exclusions: tuple[Mapping[str, object], ...] = ()
     evidence: Mapping[str, Mapping[str, object]] | None = None
+    predictions: tuple[PredictionRecord, ...] = ()
+    proposals: tuple[SignalProposal, ...] = ()
+    signal_as_of_time: str | None = None
+    market_readiness: Mapping[str, str] | None = None
+    wallet_observations: tuple[WalletObservation, ...] = ()
+    training_state: Mapping[str, object] | None = None
 
     @classmethod
     def from_discovery(
@@ -112,6 +119,37 @@ class ReadOnlyStore:
             raise KeyError(reference)
         return details
 
+    def list_signals(self, *, cursor: int, limit: int) -> dict[str, object]:
+        if cursor < 0 or limit <= 0 or limit > 100:
+            raise ValueError("cursor must be non-negative and limit must be between 1 and 100")
+        as_of = self.signal_as_of_time or self.quality_details.get("as_of_time", "1970-01-01T00:00:00Z") if self.quality_details else "1970-01-01T00:00:00Z"
+        entries = build_signal_inbox(
+            self.predictions,
+            self.proposals,
+            as_of_time=as_of,
+            market_readiness=self.market_readiness,
+        )
+        page = entries[cursor : cursor + limit]
+        next_cursor = cursor + len(page)
+        return {
+            "items": [entry.to_dict() for entry in page],
+            "next_cursor": None if next_cursor >= len(entries) else str(next_cursor),
+            "total": len(entries),
+            "as_of_time": as_of,
+        }
+
+    def list_positions(self, *, wallet: str | None = None) -> dict[str, object]:
+        observations = self.wallet_observations
+        if wallet is not None:
+            observations = tuple(item for item in observations if item.wallet.lower() == wallet.lower())
+        return {
+            "items": [position.to_dict() | {"wallet": observation.wallet} for observation in observations for position in observation.positions],
+            "observation_count": len(observations),
+        }
+
+    def training(self) -> dict[str, object]:
+        return dict(self.training_state or {"status": "unknown", "reason": "training_state_unavailable"})
+
     def dashboard(self) -> str:
         snapshot = self.discovery_snapshot or DiscoverySnapshot(
             as_of_time="1970-01-01T00:00:00Z",
@@ -123,7 +161,10 @@ class ReadOnlyStore:
             quality_state=self.quality_state,
             lineage=("dashboard:empty",),
         )
-        return render_dashboard(snapshot, self.timelines, self.exclusions)
+        as_of = self.signal_as_of_time or snapshot.as_of_time
+        signals = build_signal_inbox(self.predictions, self.proposals, as_of_time=as_of, market_readiness=self.market_readiness)
+        positions = [position.to_dict() | {"wallet": observation.wallet} for observation in self.wallet_observations for position in observation.positions]
+        return render_dashboard(snapshot, self.timelines, self.exclusions, signals=signals, positions=tuple(positions), training_state=self.training_state)
 
 
 def create_server(*, store: ReadOnlyStore, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
@@ -187,6 +228,12 @@ def _route(store: ReadOnlyStore, path: str) -> tuple[dict[str, object], int]:
         }, 200
     if parts == ["exclusions"]:
         return store.list_exclusions(cursor=_int_param(params, "cursor", 0), limit=_int_param(params, "limit", 25)), 200
+    if parts == ["signals"]:
+        return store.list_signals(cursor=_int_param(params, "cursor", 0), limit=_int_param(params, "limit", 25)), 200
+    if parts == ["positions"]:
+        return store.list_positions(wallet=_single_param(params, "wallet")), 200
+    if parts == ["training"]:
+        return store.training(), 200
     if len(parts) == 2 and parts[0] == "evidence":
         return dict(store.get_evidence(parts[1])), 200
     return {"status": "error", "error": "not found"}, 404

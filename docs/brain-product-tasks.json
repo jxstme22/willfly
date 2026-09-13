@@ -131,7 +131,7 @@
     {
       "id": "B6",
       "title": "Build brain signal inbox and position views",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B0",
         "B4"
@@ -141,7 +141,13 @@
       ],
       "work": "Expose versioned predictions and constrained entry/hold/exit proposals with expiry, evidence and manual-action status in the terminal UI. Display observation/label freshness, training state, candidate evaluation and active-model/promotion history.",
       "acceptance": "Real model outputs drive displayed signals; stale or unsupported outputs abstain; economic readiness is enforced per capability; all controls work.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/signal-inbox.md",
+        "src/willfly/api/server.py",
+        "src/willfly/ui/dashboard.py",
+        "src/willfly/ui/signals.py",
+        "tests/test_signal_inbox.py"
+      ]
     },
     {
       "id": "B7",

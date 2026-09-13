@@ -1,0 +1,51 @@
+from willfly.api.server import ReadOnlyStore, _route
+from willfly.domain.signal_contracts import Confidence, InstrumentIdentity, PortfolioContext, PredictionRecord, SignalProposal
+from willfly.ui.signals import build_signal_inbox
+
+
+TOKEN = InstrumentIdentity(4663, "token", "0x" + "1" * 40, "native:ETH")
+CONTEXT = PortfolioContext("2026-09-14T00:00:00Z", "flat", "public_only", "healthy", "100", (), ("obs:1",))
+
+
+def _prediction() -> PredictionRecord:
+    return PredictionRecord(
+        "prediction-1", "signal-contract-v0.1.0", "spot_entry_net_return", 300, TOKEN,
+        "2026-09-14T00:00:00Z", "2026-09-13T23:59:59Z", "2026-09-14T00:00:15Z",
+        "male-cns-readout", "candidate-1", 100, 200, Confidence("uncalibrated_score", score=5),
+        CONTEXT, ("feature:1",),
+    )
+
+
+def _proposal() -> SignalProposal:
+    return SignalProposal(
+        "proposal-1", "prediction-1", "spot_entry_net_return", 300, "spot", "enter", None, TOKEN,
+        "2026-09-14T00:00:00Z", "2026-09-14T00:00:15Z", "candidate-1",
+        Confidence("uncalibrated_score", score=5), CONTEXT, ("prediction:1",),
+    )
+
+
+def test_inbox_abstains_research_only_and_expires_stale_proposals() -> None:
+    research = build_signal_inbox([_prediction()], [_proposal()], as_of_time="2026-09-14T00:00:10Z")
+    assert research[0].proposed_action == "enter"
+    assert research[0].displayed_action == "abstain"
+    assert research[0].display_state == "research_only"
+    assert "spot_economic_readiness_gate_open" in research[0].reason_flags
+    expired = build_signal_inbox([_prediction()], [_proposal()], as_of_time="2026-09-14T00:00:20Z", market_readiness={"spot": "qualified"})
+    assert expired[0].displayed_action == "abstain"
+    assert expired[0].display_state == "expired"
+
+
+def test_read_only_api_exposes_signals_positions_and_training_state() -> None:
+    store = ReadOnlyStore(
+        predictions=(_prediction(),),
+        proposals=(_proposal(),),
+        signal_as_of_time="2026-09-14T00:00:10Z",
+        training_state={"status": "waiting", "reason": "insufficient_qualified_train_examples"},
+    )
+    signals, status = _route(store, "/signals")
+    assert status == 200 and signals["total"] == 1
+    assert signals["items"][0]["displayed_action"] == "abstain"
+    positions, status = _route(store, "/positions")
+    assert status == 200 and positions["items"] == []
+    training, status = _route(store, "/training")
+    assert status == 200 and training["status"] == "waiting"

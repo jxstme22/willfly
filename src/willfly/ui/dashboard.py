@@ -7,12 +7,17 @@ from typing import Mapping
 
 from willfly.domain import Observation
 from willfly.features.discovery import DiscoverySnapshot
+from willfly.ui.signals import SignalInboxEntry
 
 
 def render_dashboard(
     snapshot: DiscoverySnapshot,
     timelines: tuple[Observation, ...] = (),
     exclusions: tuple[Mapping[str, object], ...] = (),
+    *,
+    signals: tuple[SignalInboxEntry, ...] = (),
+    positions: tuple[Mapping[str, object], ...] = (),
+    training_state: Mapping[str, object] | None = None,
 ) -> str:
     """Render evidence and exclusions without changing the underlying dataset."""
 
@@ -36,6 +41,28 @@ def render_dashboard(
         "</tr>"
         for item in exclusions
     ) or '<tr><td colspan="3">No excluded rows in this projection.</td></tr>'
+    signal_rows = "".join(
+        "<tr>"
+        f"<td>{escape(entry.market)}</td>"
+        f"<td>{escape(entry.proposed_action)}</td>"
+        f"<td>{escape(entry.displayed_action)}</td>"
+        f"<td>{escape(entry.display_state)}</td>"
+        f"<td>{escape(entry.model_version)}</td>"
+        f"<td>{escape(', '.join(entry.reason_flags) or 'none')}</td>"
+        "</tr>"
+        for entry in signals
+    ) or '<tr><td colspan="6">No signals available.</td></tr>'
+    position_rows = "".join(
+        "<tr>"
+        f"<td>{escape(str(position.get('wallet', 'unknown')))}</td>"
+        f"<td>{escape(str(position.get('pool_id', 'unknown')))}</td>"
+        f"<td>{escape(str(position.get('position_id', 'unknown')))}</td>"
+        f"<td>{escape(str(position.get('liquidity', 'unknown')))}</td>"
+        f"<td>{escape(str(position.get('lifecycle_state', 'unknown')))}</td>"
+        "</tr>"
+        for position in positions
+    ) or '<tr><td colspan="5">No observed positions.</td></tr>'
+    training = training_state or {"status": "unknown", "reason": "training_state_unavailable"}
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Willfly Observatory</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}}
@@ -50,6 +77,11 @@ small{{color:#666}}</style></head><body>
 <h2>Launches</h2><table><thead><tr><th>Token</th><th>Lifecycle</th><th>Creation time</th>
 <th>First observed</th><th>Evidence</th></tr></thead><tbody>{launch_rows}</tbody></table>
 <h2>Token timelines</h2>{timeline_sections or '<p>No timeline available.</p>'}
+<h2>Signal inbox</h2><table><thead><tr><th>Market</th><th>Proposed</th><th>Displayed</th><th>State</th><th>Model</th><th>Reasons</th></tr></thead>
+<tbody>{signal_rows}</tbody></table>
+<h2>Observed positions</h2><table><thead><tr><th>Wallet</th><th>Pool</th><th>Position</th><th>Liquidity</th><th>State</th></tr></thead>
+<tbody>{position_rows}</tbody></table>
+<h2>Training</h2><p class="quality">Status: {escape(str(training.get('status', 'unknown')))} &middot; {escape(str(training.get('reason', 'none')))}</p>
 <h2>Excluded evidence</h2><table><thead><tr><th>Kind</th><th>Reason</th><th>Reference</th></tr></thead>
 <tbody>{exclusion_rows}</tbody></table>
 <p><small>Raw rows and source claims remain available through their lineage references and the read-only evidence endpoint.</small></p>

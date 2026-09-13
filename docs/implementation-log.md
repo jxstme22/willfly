@@ -733,3 +733,14 @@ orphaned activity remains visible as unresolved or residual evidence. LP
 ownership stays separate from spot cash flow. Focused accounting tests pass;
 validated quote economics, complete LP accounting and live outcome gates remain
 open.
+
+
+## 2026-09-14 — B6 signal inbox and position views
+
+Added the read-only signal inbox projection and exposed `/signals`, `/positions`
+and `/training` alongside the existing dashboard. Versioned prediction/model
+identity, expiry, confidence, evidence, manual-only scope and spot/LP economic
+readiness are visible; stale, invalidated and unsupported proposals abstain.
+Observed positions and training state are displayed without adding execution
+controls. Focused API/UI checks pass; real labelled model output, economic
+qualification and manual-action linkage remain open.
