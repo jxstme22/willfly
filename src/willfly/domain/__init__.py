@@ -25,6 +25,7 @@ from willfly.domain.signal_contracts import (
     SignalProposal,
     default_signal_contract,
 )
+from willfly.domain.wallets import WalletActivity, WalletObservation, WalletPosition
 
 __all__ = [
     "AmbiguousContractError",
@@ -48,4 +49,7 @@ __all__ = [
     "SignalContract",
     "SignalProposal",
     "default_signal_contract",
+    "WalletActivity",
+    "WalletObservation",
+    "WalletPosition",
 ]

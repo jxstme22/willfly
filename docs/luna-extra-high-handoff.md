@@ -4,7 +4,10 @@ User-authorized sequence, 13 September 2026. Use `gpt-5.6-luna` with `xhigh` rea
 
 ## Activation gate
 
-Wait until DeepSeek finishes and stops writing. The coordinating reviewer then inspects its final commit/diff, reproduces claims and audits relevant code, integration behavior and evidence. Record findings in `docs/reports/deepseek-completion-audit.md` with severity, exact locations, reproduction, impact and required verification. That report is a planned output and must not be created as a fake passing audit now.
+The DeepSeek completion checkpoint is historical: it finished and the
+coordinating reviewer inspected its final commit/diff, reproduced claims and
+recorded findings in `docs/reports/deepseek-completion-audit.md`. Do not wait on
+that completed handoff again or treat the report as a fake passing audit.
 
 The coordinator assigns concrete repair findings to Luna and may record an
 independent recheck checkpoint. Once the reviewed checkpoint is accepted, the

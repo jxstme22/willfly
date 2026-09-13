@@ -1,8 +1,8 @@
 {
   "title": "Brain signals and manual execution product",
   "version": "1.1",
-  "date": "2026-09-13",
-  "status": "B0_B1_COMPLETE_BUILD_IN_PROGRESS",
+  "date": "2026-09-14",
+  "status": "B0_B1_COMPLETE_B2_IN_PROGRESS",
   "product_brief": "docs/brain-signal-product.md",
   "implementation_model_preference": "GPT Luna Extra High",
   "task_count": 11,
@@ -48,7 +48,7 @@
     {
       "id": "B2",
       "title": "Build public-wallet and position observer",
-      "status": "TODO",
+      "status": "IN_PROGRESS",
       "depends_on": [
         "B0"
       ],
@@ -59,7 +59,12 @@
       ],
       "work": "Track user/external-wallet activity with receipt/state evidence, failed transactions, position ownership, backfill and fork reconciliation.",
       "acceptance": "Supported manual swaps and LP lifecycle changes survive restart without duplicates; unknown routes remain unresolved; no keys required.",
-      "status_evidence": []
+      "status_evidence": [
+        "docs/wallet-observer.md",
+        "src/willfly/domain/wallets.py",
+        "src/willfly/storage/wallet.py",
+        "tests/test_wallet_observer.py"
+      ]
     },
     {
       "id": "B3",

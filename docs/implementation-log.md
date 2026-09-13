@@ -688,3 +688,15 @@ recorded bounded probe and its open gates. The validator and focused tests pass;
 M1-01 remains IN_PROGRESS because historical code, non-graduate coverage,
 provider limits and the M1-07 elapsed-time completeness gate are still real
 external acceptance requirements.
+
+
+## 2026-09-14 — B2 public-wallet and position observer
+
+Added the read-only B2 observer layer. Route-aware trades and causal LP records
+become exact signed atomic wallet activities with explicit confirmed, failed,
+pending and unknown states. SQLite storage is idempotent across restart, keeps
+payload revisions for fork/canonicality changes, and binds cursors to filter
+identity so a changed lineage enters `needs_repair`. Derived LP positions mark
+unknown/orphaned actions as uncertain rather than inventing ownership. Focused
+observer tests pass; live wallet coverage and prospective learning gates remain
+open.

@@ -12,6 +12,7 @@ from willfly.storage.raw import (
     anchor_evidence_record,
 )
 from willfly.storage.export import ExportManifest, ExportUnavailable, export_records, verify_export
+from willfly.storage.wallet import WalletCursor, WalletObservationStore, WalletWriteResult
 
 __all__ = [
     "ANCHOR_QUALIFICATIONS",
@@ -27,4 +28,7 @@ __all__ = [
     "anchor_evidence_record",
     "export_records",
     "verify_export",
+    "WalletCursor",
+    "WalletObservationStore",
+    "WalletWriteResult",
 ]
