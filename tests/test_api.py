@@ -69,6 +69,9 @@ def test_signal_as_of_time_is_used_when_projection_is_empty():
     payload, status = _route(store, "/signals")
     assert status == 200
     assert payload["as_of_time"] == "2026-09-14T06:10:00Z"
+    health, status = _route(store, "/health")
+    assert status == 200
+    assert health["details"]["signal_monitor_state"] == "waiting_no_published_signal"
 
 
 def test_http_surface_rejects_post_as_read_only():

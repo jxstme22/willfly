@@ -49,6 +49,7 @@ def test_coverage_compare_checks_event_sets_beyond_anchor_identity(monkeypatch, 
         to_block=10,
         independent_rpc_url="https://independent.example",
         addresses=[],
+        progress_db=tmp_path / "coverage.sqlite3",
     )
     assert result["status"] == "pass"
     assert result["range_complete"] is True
@@ -80,7 +81,83 @@ def test_coverage_compare_reports_provider_timeout_as_degraded(monkeypatch, tmp_
         rpc_timeout_seconds=1,
         max_rpc_retries=0,
         max_runtime_seconds=1,
+        progress_db=tmp_path / "coverage.sqlite3",
     )
     assert result["status"] == "degraded"
     assert "comparison" in result["provider_errors"]
     assert result["range_complete"] is False
+
+
+def test_coverage_compare_persists_completed_chunks_for_resume(monkeypatch, tmp_path):
+    event = _event()
+    (tmp_path / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "_capture_context",
+        lambda *_args: {
+            "endpoint": "https://primary.example",
+            "expected_chain": 4663,
+            "addresses": ("0x" + "3" * 40,),
+            "config_hash": "config-hash",
+        },
+    )
+    monkeypatch.setattr(cli, "ReadOnlyRpcClient", lambda endpoint, expected_chain_id, **_kwargs: endpoint)
+    calls = 0
+
+    def partial_capture(_client, **kwargs):
+        nonlocal calls
+        calls += 1
+        if kwargs["from_block"] == 11 and calls == 3:
+            raise TimeoutError("header budget")
+        chunk_event = RawEvent.from_dict(
+            {
+                **event.to_dict(),
+                "block_number": kwargs["from_block"],
+                "block_hash": "0x" + f"{kwargs['from_block']:064x}",
+            }
+        )
+        return SimpleNamespace(to_block=kwargs["to_block"], events=(chunk_event,))
+
+    monkeypatch.setattr(cli, "capture_once", partial_capture)
+    progress = tmp_path / "coverage.sqlite3"
+    first = cli._coverage_compare(
+        config_path=tmp_path / "config.json",
+        from_block=10,
+        to_block=11,
+        independent_rpc_url="https://independent.example",
+        addresses=[],
+        chunk_size=1,
+        max_runtime_seconds=10,
+        progress_db=progress,
+    )
+    assert first["status"] == "degraded"
+    assert first["completed_chunks"] == 1
+
+    monkeypatch.setattr(
+        cli,
+        "capture_once",
+        lambda _client, **kwargs: SimpleNamespace(
+            to_block=kwargs["to_block"],
+            events=(
+                RawEvent.from_dict(
+                    {
+                        **event.to_dict(),
+                        "block_number": kwargs["from_block"],
+                        "block_hash": "0x" + f"{kwargs['from_block']:064x}",
+                    }
+                ),
+            ),
+        ),
+    )
+    second = cli._coverage_compare(
+        config_path=tmp_path / "config.json",
+        from_block=10,
+        to_block=11,
+        independent_rpc_url="https://independent.example",
+        addresses=[],
+        chunk_size=1,
+        max_runtime_seconds=10,
+        progress_db=progress,
+    )
+    assert second["status"] == "pass"
+    assert second["completed_chunks"] == 2

@@ -88,6 +88,21 @@ def test_proposal_ttl_is_capped_for_long_horizon_prediction_templates():
     assert built.proposals[0].expires_at == "2026-09-14T00:00:15+00:00"
 
 
+def test_signal_build_rebases_created_and_expiry_times_to_current_as_of():
+    built = build_research_signals(
+        [_template()],
+        [("prediction-1", 50.0)],
+        model_id="male-cns-readout",
+        model_version="candidate-v2",
+        run_ref="run:candidate-v2",
+        actions_by_prediction={"prediction-1": "enter"},
+        as_of_time="2026-09-14T06:10:00Z",
+    )
+    assert built.predictions[0].created_at == "2026-09-14T06:10:00+00:00"
+    assert built.proposals[0].created_at == "2026-09-14T06:10:00+00:00"
+    assert built.proposals[0].expires_at == "2026-09-14T06:10:15+00:00"
+
+
 def test_signal_build_cli_writes_bundle_consumable_by_server_loader(tmp_path, capsys):
     input_path = tmp_path / "model-output.json"
     output_path = tmp_path / "signals.json"

@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import signal
+import sqlite3
 import sys
 from typing import Any
 
@@ -480,6 +481,7 @@ def _signal_build(*, input_path: Path, output_path: Path | None) -> dict[str, An
         run_ref=payload["run_ref"],
         actions_by_prediction=payload["actions"],
         exit_kinds_by_prediction=payload["exit_kinds"],
+        as_of_time=payload["as_of_time"],
     )
     bundle = result.to_bundle(
         as_of_time=payload["as_of_time"],
@@ -943,6 +945,130 @@ def _execute_backfill(
     return result
 
 
+def _execute_rolling_backfill(
+    *,
+    config_path: Path,
+    bootstrap_from_block: int | None,
+    max_blocks: int,
+    confirmation_lag_blocks: int,
+    addresses: list[str],
+    store_dir: Path,
+    run_id: str | None,
+    base_source: str,
+    page_size: int,
+) -> dict[str, Any]:
+    """Advance a durable backfill toward a confirmation-lagged provider tip."""
+
+    if max_blocks <= 0 or max_blocks > 2000:
+        raise ValueError("max_blocks must be between 1 and 2000")
+    if confirmation_lag_blocks < 0:
+        raise ValueError("confirmation_lag_blocks must be non-negative")
+    if page_size <= 0 or page_size > 2000:
+        raise ValueError("page_size must be between 1 and 2000")
+    config = _load_json(config_path)
+    context = _capture_context(config, config_path, addresses)
+    client = ReadOnlyRpcClient(context["endpoint"], expected_chain_id=context["expected_chain"])
+    store = RawBatchStore(store_dir)
+    checkpoints = BackfillCheckpointStore(Path(store_dir) / "backfill_checkpoints.sqlite3")
+    try:
+        chain_id = int(context["expected_chain"])
+        filter_hash = filter_identity(
+            chain_id=chain_id,
+            addresses=list(context["addresses"]),
+            abi_hashes=context["abi_hashes"],
+            event_families=context["event_families"],
+        )
+        source_key = checkpoint_source(base_source, chain_id, filter_hash)
+        checkpoint = checkpoints.get(source_key)
+        if checkpoint is not None:
+            if bootstrap_from_block is not None and checkpoint.start_block != bootstrap_from_block:
+                raise ValueError("bootstrap_from_block does not match the durable rolling checkpoint")
+            start_block = checkpoint.start_block
+            resume_from = checkpoint.next_block
+        else:
+            if bootstrap_from_block is None or bootstrap_from_block < 0:
+                return {
+                    "status": "waiting",
+                    "executed": False,
+                    "reason": "rolling_bootstrap_from_block_not_configured",
+                    "checkpoint_source": source_key,
+                    "confirmation_lag_blocks": confirmation_lag_blocks,
+                    "operating_mode": "read_only",
+                    "execution_scope": "read_only_observation",
+                    "signing": False,
+                    "broadcast": False,
+                }
+            start_block = bootstrap_from_block
+            resume_from = bootstrap_from_block
+        if client.check_chain() != chain_id:
+            raise RuntimeError("rolling backfill provider chain identity changed")
+        provider_head = client.block_number()
+        safe_target = provider_head - confirmation_lag_blocks
+        if safe_target < resume_from:
+            return {
+                "status": "waiting",
+                "executed": False,
+                "reason": "confirmation_lag_exceeds_available_range",
+                "checkpoint_source": source_key,
+                "provider_head": provider_head,
+                "confirmation_lag_blocks": confirmation_lag_blocks,
+                "safe_target_block": safe_target,
+                "resume_from_block": resume_from,
+                "operating_mode": "read_only",
+                "execution_scope": "read_only_observation",
+                "signing": False,
+                "broadcast": False,
+            }
+        target_block = min(safe_target, resume_from + max_blocks - 1)
+        payload = {
+            "config": str(config_path),
+            "bootstrap_from_block": start_block,
+            "resume_from_block": resume_from,
+            "target_block": target_block,
+            "provider_head": provider_head,
+            "confirmation_lag_blocks": confirmation_lag_blocks,
+            "max_blocks": max_blocks,
+            "addresses": context["addresses"],
+            "config_hash": context["config_hash"],
+        }
+        manifest = backfill_to_store(
+            client,
+            store,
+            addresses=list(context["addresses"]),
+            start_block=start_block,
+            target_block=target_block,
+            run_id=run_id or _run_id("rolling-backfill", payload),
+            base_source=base_source,
+            config_path=str(config_path),
+            config_hash=context["config_hash"],
+            abi_hashes=context["abi_hashes"],
+            event_families=context["event_families"],
+            provider_endpoint=context["endpoint"],
+            page_size=page_size,
+            checkpoint_store=checkpoints,
+        )
+        result = manifest.to_dict()
+        result.update(
+            {
+                "status": "executed",
+                "executed": True,
+                "operating_mode": "read_only",
+                "execution_scope": "read_only_observation",
+                "provider_head": provider_head,
+                "confirmation_lag_blocks": confirmation_lag_blocks,
+                "safe_target_block": safe_target,
+                "resume_from_block": resume_from,
+                "rolling_window": [resume_from, target_block],
+                "signing": False,
+                "broadcast": False,
+            }
+        )
+        return result
+    finally:
+        checkpoints.close()
+        store.close()
+
+
 def _audit(expected_path: Path, observed_path: Path, provider_independent: bool) -> dict[str, Any]:
     expected = [RawEvent.from_dict(item) for item in _load_json(expected_path)]
     observed = [RawEvent.from_dict(item) for item in _load_json(observed_path)]
@@ -960,6 +1086,8 @@ def _coverage_compare(
     rpc_timeout_seconds: float = 10.0,
     max_rpc_retries: int = 0,
     max_runtime_seconds: int = 120,
+    chunk_size: int = 250,
+    progress_db: Path | None = None,
 ) -> dict[str, Any]:
     """Compare the same bounded event range across two read-only providers."""
 
@@ -967,6 +1095,8 @@ def _coverage_compare(
         raise ValueError("coverage comparison range must be a bounded non-negative interval of at most 2000 blocks")
     if rpc_timeout_seconds <= 0 or max_rpc_retries < 0 or max_runtime_seconds <= 0:
         raise ValueError("coverage comparison budgets must be positive, with non-negative retries")
+    if chunk_size <= 0 or chunk_size > 1999:
+        raise ValueError("chunk_size must be between 1 and 1999")
     config = _load_json(config_path)
     context = _capture_context(config, config_path, addresses)
     if redact_endpoint(context["endpoint"]) == redact_endpoint(independent_rpc_url):
@@ -983,62 +1113,141 @@ def _coverage_compare(
         timeout_seconds=rpc_timeout_seconds,
         max_retries=max_rpc_retries,
     )
-    primary_capture = None
-    independent_capture = None
+    progress_path = Path(progress_db or "data/coverage/coverage.sqlite3")
+    progress_path.parent.mkdir(parents=True, exist_ok=True)
+    comparison_id = _json_hash(
+        {
+            "config_hash": context["config_hash"],
+            "from_block": from_block,
+            "to_block": to_block,
+            "addresses": context["addresses"],
+            "independent_endpoint": redact_endpoint(independent_rpc_url),
+            "chunk_size": chunk_size,
+        }
+    )
+    connection = sqlite3.connect(progress_path)
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS coverage_chunks (
+            comparison_id TEXT NOT NULL,
+            chunk_start INTEGER NOT NULL,
+            chunk_end INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            primary_events_json TEXT NOT NULL,
+            independent_events_json TEXT NOT NULL,
+            errors_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (comparison_id, chunk_start, chunk_end)
+        )"""
+    )
+    connection.commit()
+    chunks = [(start, min(start + chunk_size - 1, to_block)) for start in range(from_block, to_block + 1, chunk_size)]
     provider_errors: dict[str, str] = {}
     old_handler = None
     old_timer = None
+    timed_out = False
     try:
         if hasattr(signal, "SIGALRM"):
             old_handler = signal.getsignal(signal.SIGALRM)
-            old_timer = signal.setitimer(signal.ITIMER_REAL, max_runtime_seconds)
 
             def deadline(_signum: int, _frame: object) -> None:
                 raise TimeoutError(f"coverage comparison exceeded {max_runtime_seconds}s runtime budget")
 
             signal.signal(signal.SIGALRM, deadline)
-        try:
-            primary_capture = capture_once(
-                primary,
-                addresses=list(context["addresses"]),
-                from_block=from_block,
-                to_block=to_block,
-                run_id="coverage-primary",
-            )
-        except TimeoutError as exc:
-            provider_errors["comparison"] = str(exc)
-        except Exception as exc:
-            provider_errors["primary"] = redact_error(exc)
-        if not provider_errors:
+            old_timer = signal.setitimer(signal.ITIMER_REAL, max_runtime_seconds)
+        for chunk_start, chunk_end in chunks:
+            existing = connection.execute(
+                "SELECT status, primary_events_json, independent_events_json, errors_json FROM coverage_chunks WHERE comparison_id = ? AND chunk_start = ? AND chunk_end = ?",
+                (comparison_id, chunk_start, chunk_end),
+            ).fetchone()
+            if existing is not None and existing[0] == "completed":
+                continue
+            chunk_primary = None
+            chunk_independent = None
+            chunk_errors: dict[str, str] = {}
             try:
-                independent_capture = capture_once(
-                    independent,
+                chunk_primary = capture_once(
+                    primary,
                     addresses=list(context["addresses"]),
-                    from_block=from_block,
-                    to_block=to_block,
-                    run_id="coverage-independent",
+                    from_block=chunk_start,
+                    to_block=chunk_end,
+                    run_id=f"coverage-primary-{chunk_start}-{chunk_end}",
                 )
             except TimeoutError as exc:
-                provider_errors["comparison"] = str(exc)
+                chunk_errors["primary"] = str(exc)
+                provider_errors.setdefault("comparison", str(exc))
+                timed_out = True
             except Exception as exc:
-                provider_errors["independent"] = redact_error(exc)
+                chunk_errors["primary"] = redact_error(exc)
+            if not timed_out:
+                try:
+                    chunk_independent = capture_once(
+                        independent,
+                        addresses=list(context["addresses"]),
+                        from_block=chunk_start,
+                        to_block=chunk_end,
+                        run_id=f"coverage-independent-{chunk_start}-{chunk_end}",
+                    )
+                except TimeoutError as exc:
+                    chunk_errors["independent"] = str(exc)
+                    provider_errors.setdefault("comparison", str(exc))
+                    timed_out = True
+                except Exception as exc:
+                    chunk_errors["independent"] = redact_error(exc)
+            status = "completed" if (
+                chunk_primary is not None
+                and chunk_independent is not None
+                and chunk_primary.to_block == chunk_end
+                and chunk_independent.to_block == chunk_end
+                and not chunk_errors
+            ) else "degraded"
+            connection.execute(
+                """INSERT INTO coverage_chunks(comparison_id, chunk_start, chunk_end, status, primary_events_json, independent_events_json, errors_json, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(comparison_id, chunk_start, chunk_end) DO UPDATE SET
+                    status = excluded.status,
+                    primary_events_json = excluded.primary_events_json,
+                    independent_events_json = excluded.independent_events_json,
+                    errors_json = excluded.errors_json,
+                    updated_at = excluded.updated_at""",
+                (
+                    comparison_id,
+                    chunk_start,
+                    chunk_end,
+                    status,
+                    json.dumps([] if chunk_primary is None else [event.to_dict() for event in chunk_primary.events]),
+                    json.dumps([] if chunk_independent is None else [event.to_dict() for event in chunk_independent.events]),
+                    json.dumps(chunk_errors, sort_keys=True),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            connection.commit()
+            for provider, error in chunk_errors.items():
+                provider_errors[f"{provider}:{chunk_start}-{chunk_end}"] = error
+            if status != "completed":
+                break
     except TimeoutError as exc:
         provider_errors.setdefault("comparison", str(exc))
+        timed_out = True
     finally:
         if hasattr(signal, "SIGALRM") and old_handler is not None:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, old_handler)
             if old_timer is not None and old_timer[0] > 0:
                 signal.setitimer(signal.ITIMER_REAL, old_timer[0], old_timer[1])
-    primary_events = () if primary_capture is None else primary_capture.events
-    independent_events = () if independent_capture is None else independent_capture.events
+        connection.close()
+    completed_rows = sqlite3.connect(progress_path)
+    try:
+        rows = completed_rows.execute(
+            "SELECT primary_events_json, independent_events_json FROM coverage_chunks WHERE comparison_id = ? AND status = 'completed' ORDER BY chunk_start",
+            (comparison_id,),
+        ).fetchall()
+    finally:
+        completed_rows.close()
+    primary_events = tuple(RawEvent.from_dict(item) for row in rows for item in json.loads(row[0]))
+    independent_events = tuple(RawEvent.from_dict(item) for row in rows for item in json.loads(row[1]))
+    completed_chunks = len(rows)
     report = audit_coverage(primary_events, independent_events, provider_independent=True)
-    range_complete = (
-        primary_capture is not None
-        and independent_capture is not None
-        and primary_capture.to_block == to_block
-        and independent_capture.to_block == to_block
-    )
+    range_complete = completed_chunks == len(chunks) and not timed_out and not provider_errors
     notes = list(report.notes)
     if not range_complete:
         notes.append("provider_head_did_not_cover_requested_end")
@@ -1076,6 +1285,11 @@ def _coverage_compare(
             "max_runtime_seconds": max_runtime_seconds,
         },
         "provider_errors": provider_errors,
+        "progress_db": str(progress_path),
+        "comparison_id": comparison_id,
+        "chunk_size": chunk_size,
+        "completed_chunks": completed_chunks,
+        "total_chunks": len(chunks),
         "report": {
             **report.__dict__,
             "missing_keys": [list(key) for key in report.missing_keys],
@@ -1623,6 +1837,19 @@ def build_parser() -> argparse.ArgumentParser:
             help="print a read-only plan without performing RPC reads or writes (exits 3)",
         )
 
+    rolling_backfill = subparsers.add_parser(
+        "rolling-backfill", help="advance a durable backfill toward a confirmation-lagged provider tip"
+    )
+    rolling_backfill.add_argument("--config", type=Path, default=ROOT / "configs/sources/robinhood-chain-v0.1.json")
+    rolling_backfill.add_argument("--bootstrap-from-block", type=int, default=None)
+    rolling_backfill.add_argument("--max-blocks", type=int, default=500)
+    rolling_backfill.add_argument("--confirmation-lag-blocks", type=int, default=12)
+    rolling_backfill.add_argument("--address", action="append", default=[])
+    rolling_backfill.add_argument("--store-dir", type=Path, default=ROOT / "data" / "observatory")
+    rolling_backfill.add_argument("--source", default="rolling-backfill")
+    rolling_backfill.add_argument("--run-id", default=None)
+    rolling_backfill.add_argument("--page-size", type=int, default=250)
+
     audit = subparsers.add_parser("audit", help="audit two raw-event JSON arrays")
     audit.add_argument("--expected", type=Path, required=True)
     audit.add_argument("--observed", type=Path, required=True)
@@ -1639,6 +1866,8 @@ def build_parser() -> argparse.ArgumentParser:
     coverage_compare.add_argument("--rpc-timeout-seconds", type=float, default=10.0)
     coverage_compare.add_argument("--max-rpc-retries", type=int, default=0)
     coverage_compare.add_argument("--max-runtime-seconds", type=int, default=120)
+    coverage_compare.add_argument("--chunk-size", type=int, default=250)
+    coverage_compare.add_argument("--progress-db", type=Path, default=Path("data/coverage/coverage.sqlite3"))
 
     export = subparsers.add_parser("export", help="export JSON records to Parquet")
     export.add_argument("--records", type=Path, required=True)
@@ -1901,6 +2130,18 @@ def main(argv: list[str] | None = None) -> int:
                     base_source=args.source or "backfill",
                     page_size=args.page_size,
                 )
+        elif args.command == "rolling-backfill":
+            result = _execute_rolling_backfill(
+                config_path=args.config,
+                bootstrap_from_block=args.bootstrap_from_block,
+                max_blocks=args.max_blocks,
+                confirmation_lag_blocks=args.confirmation_lag_blocks,
+                addresses=list(args.address),
+                store_dir=args.store_dir,
+                run_id=args.run_id,
+                base_source=args.source,
+                page_size=args.page_size,
+            )
         elif args.command == "audit":
             result = _audit(args.expected, args.observed, args.provider_independent)
         elif args.command == "coverage-compare":
@@ -1913,6 +2154,8 @@ def main(argv: list[str] | None = None) -> int:
                 rpc_timeout_seconds=args.rpc_timeout_seconds,
                 max_rpc_retries=args.max_rpc_retries,
                 max_runtime_seconds=args.max_runtime_seconds,
+                chunk_size=args.chunk_size,
+                progress_db=args.progress_db,
             )
         elif args.command == "export":
             result = _export(args.records, args.output_dir, args.dataset_name)
@@ -2138,10 +2381,10 @@ def main(argv: list[str] | None = None) -> int:
         "signal-build",
     }:
         return 0
-    if args.command in {"capture", "backfill"}:
+    if args.command in {"capture", "backfill", "rolling-backfill"}:
         if result.get("status") == "plan_only":
             return 3  # A non-executed plan cannot be mistaken for successful capture.
-        return 0 if result.get("status") == "executed" else 1
+        return 0 if result.get("status") in {"executed", "waiting"} else 1
     return 0
 
 

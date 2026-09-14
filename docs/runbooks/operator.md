@@ -184,14 +184,36 @@ retain the JSON result with the capture manifest:
   --independent-rpc-url https://robinhood-rpc.publicnode.com \
   --rpc-timeout-seconds 5 \
   --max-rpc-retries 0 \
-  --max-runtime-seconds 90
+  --max-runtime-seconds 90 \
+  --chunk-size 250 \
+  --progress-db /path/to/coverage.sqlite3
 ```
 
 This compares event logical keys and requested-range completion across both
 providers. It is stronger than an anchor-header identity check, but remains a
 bounded coverage sample and does not establish finality or archive
-completeness. The RPC, retry and whole-run budgets are explicit; a timeout is
-reported as `degraded` and must not be summarized as a coverage pass.
+completeness. The RPC, retry and whole-run budgets are explicit. Completed
+chunks are committed to the progress database as they finish, so a later run
+resumes only the incomplete chunks. A timeout is retained as `degraded` and
+must not be summarized as a coverage pass.
+
+For the normal rolling observation loop, use the durable checkpoint and an
+explicit confirmation lag:
+
+```text
+.venv/bin/willfly rolling-backfill \
+  --config configs/sources/robinhood-chain-v0.1.json \
+  --bootstrap-from-block BLOCK \
+  --max-blocks 500 \
+  --confirmation-lag-blocks 12 \
+  --page-size 250 \
+  --store-dir /path/to/observatory
+```
+
+After the first pass, omit `--bootstrap-from-block`; the checkpoint supplies
+the next block. If no bootstrap is configured, the command returns `waiting`
+without reading the RPC. The target is always bounded by the provider head
+minus the confirmation lag.
 
 ## Safety boundary
 

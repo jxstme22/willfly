@@ -10,6 +10,13 @@ from typing import Any, Iterable, Mapping
 from willfly.domain import Confidence, PredictionRecord, SignalProposal, default_signal_contract
 
 
+def _instant(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("signal timestamps must include a timezone")
+    return parsed
+
+
 @dataclass(frozen=True)
 class SignalBuildResult:
     predictions: tuple[PredictionRecord, ...]
@@ -43,6 +50,7 @@ def build_research_signals(
     run_ref: str,
     actions_by_prediction: Mapping[str, str] | None = None,
     exit_kinds_by_prediction: Mapping[str, str] | None = None,
+    as_of_time: str | None = None,
 ) -> SignalBuildResult:
     """Build uncalibrated versioned predictions and manually gated proposals.
 
@@ -54,6 +62,9 @@ def build_research_signals(
 
     if not model_id or not model_version or not run_ref:
         raise ValueError("model_id, model_version and run_ref are required")
+    signal_created_at = None
+    if as_of_time is not None:
+        signal_created_at = _instant(as_of_time).isoformat()
     contract = default_signal_contract()
     template_records = tuple(templates)
     template_by_id = {prediction.prediction_id: prediction for prediction in template_records}
@@ -86,15 +97,25 @@ def build_research_signals(
             continue
         prediction_id = f"{model_version}:{template.prediction_id}"
         evidence_refs = tuple(dict.fromkeys((*template.source_refs, run_ref)))
+        created_at = signal_created_at or template.created_at
+        created_instant = _instant(created_at)
+        evidence_cutoff = template.evidence_cutoff
+        if signal_created_at is not None and _instant(evidence_cutoff) > created_instant:
+            evidence_cutoff = created_at
+        prediction_expires_at = (
+            (created_instant + timedelta(seconds=template.horizon_seconds)).isoformat()
+            if signal_created_at is not None
+            else template.expires_at
+        )
         prediction = PredictionRecord(
             prediction_id=prediction_id,
             contract_version=template.contract_version,
             target_id=template.target_id,
             horizon_seconds=template.horizon_seconds,
             instrument=template.instrument,
-            created_at=template.created_at,
-            evidence_cutoff=template.evidence_cutoff,
-            expires_at=template.expires_at,
+            created_at=created_at,
+            evidence_cutoff=evidence_cutoff,
+            expires_at=prediction_expires_at,
             model_id=model_id,
             model_version=model_version,
             expected_value_bps=int(round(float(predicted_bps))),
@@ -112,9 +133,10 @@ def build_research_signals(
         exit_kind = exit_kinds.get(template_id)
         market = "spot" if template.instrument.kind == "token" else "lp"
         try:
+            proposal_created_at = created_at
             proposal_expires_at = min(
-                datetime.fromisoformat(template.expires_at.replace("Z", "+00:00")),
-                datetime.fromisoformat(template.created_at.replace("Z", "+00:00"))
+                datetime.fromisoformat(prediction_expires_at.replace("Z", "+00:00")),
+                datetime.fromisoformat(proposal_created_at.replace("Z", "+00:00"))
                 + timedelta(seconds=contract.proposal_ttl_seconds),
             ).isoformat()
             proposal = SignalProposal(
@@ -126,7 +148,7 @@ def build_research_signals(
                 action=action,
                 exit_kind=exit_kind,
                 instrument=template.instrument,
-                created_at=template.created_at,
+                created_at=proposal_created_at,
                 expires_at=proposal_expires_at,
                 model_version=model_version,
                 confidence=confidence,

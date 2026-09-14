@@ -46,6 +46,20 @@ def test_read_only_api_exposes_signals_positions_and_training_state() -> None:
     signals, status = _route(store, "/signals")
     assert status == 200 and signals["total"] == 1
     assert signals["items"][0]["displayed_action"] == "abstain"
+    health, status = _route(store, "/health")
+    assert status == 200
+    assert health["details"]["signal_monitor_state"] == "current_research_only"
+    assert health["details"]["current_signal_count"] == 1
+    expired_store = ReadOnlyStore(
+        predictions=(_prediction(),),
+        proposals=(_proposal(),),
+        signal_as_of_time="2026-09-14T00:00:20Z",
+        market_readiness={"spot": "qualified"},
+    )
+    expired_health, status = _route(expired_store, "/health")
+    assert status == 200
+    assert expired_health["details"]["signal_monitor_state"] == "historical_expired"
+    assert expired_health["details"]["expired_signal_count"] == 1
     positions, status = _route(store, "/positions")
     assert status == 200 and positions["items"] == []
     training, status = _route(store, "/training")

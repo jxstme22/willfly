@@ -1445,3 +1445,41 @@ attempted over 61692800-61694600 with explicit 5-second RPC, zero-retry and
 headers, so status is degraded and no coverage claim is made. The 72-hour
 capture and 14-day shadow window are prepared but not claimed as elapsed
 evidence; economic, causal-generalization and biological gates remain open.
+
+
+## 2026-09-14 — operator-readiness and resumable evidence loop
+
+Replaced the pipeline’s fixed observation range with a bounded
+`rolling-backfill` mode. The first pass requires an explicit bootstrap block;
+later passes resume from the filter-bound durable checkpoint and advance only
+to the provider head minus the configured confirmation lag. Missing bootstrap
+returns an honest `waiting` result without an RPC read, while each executed
+manifest records the provider head, safe target, resume block, lag and
+read-only scope. The pipeline config and WSL example now use 250-block pages
+and a 12-block confirmation lag by default.
+
+Made `coverage-compare` chunked and resumable. Each completed primary/
+independent chunk is committed to a SQLite progress database immediately, and
+later runs retry only incomplete chunks. Timeout, provider error, incomplete
+range and partial counts remain in the structured result; a degraded attempt
+never becomes a coverage pass. Added a fixture that interrupts the second
+chunk and verifies a subsequent run completes the audit from the persisted
+first chunk.
+
+Signal publication now rebases prediction/proposal creation and expiry to the
+current model-output observation time, preventing a newly published snapshot
+from presenting stale historical proposals as current. The dashboard health
+surface distinguishes `waiting_no_published_signal`, `historical_expired` and
+`current_research_only` states.
+
+The WSL operator path now documents the exact `willflyctl start|status|stop
+pipeline` flow and rolling capture settings. Focused tests pass after adding
+the rolling wait, resumable coverage and current-signal regressions. Remaining
+acceptance is intentionally open: a real 72-hour observation window, a real
+14-day shadow window, live provider coverage/finality, economic acceptance,
+causal generalization and biological validity. No signing, funding, paid
+access or broadcast path was added.
+
+Final verification for this loop: 285 tests collected, 281 passed and 4
+sandbox loopback skips; WSL2 offline smoke passed all 16 fixture checks;
+planning render/check and shell, JSON, compile and diff checks passed.

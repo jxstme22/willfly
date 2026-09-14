@@ -23,11 +23,11 @@
     "evaluation_points": null
   },
   "observation": {
-    "mode": "backfill",
-    "from_block": null,
-    "to_block": null,
+    "mode": "rolling_backfill",
+    "bootstrap_from_block": null,
+    "confirmation_lag_blocks": 12,
     "max_blocks": 500,
-    "page_size": 2000,
+    "page_size": 250,
     "source": "pipeline-live-readonly"
   },
   "training": {

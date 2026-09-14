@@ -37,6 +37,24 @@ def test_capture_and_backfill_dry_run_return_read_only_plans(capsys):
     assert backfill["run_id"].startswith("backfill-")
 
 
+def test_rolling_backfill_waits_without_bootstrap_without_rpc_reads(tmp_path, capsys):
+    config = tmp_path / "source.json"
+    config.write_text(
+        json.dumps(
+            {
+                "chain": {"rpc_url": "https://primary.example", "chain_id": 4663},
+                "protocols": {"uniswap_v4": {"pool_manager": "0x" + "1" * 40, "event_families": []}},
+                "launch_sources": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert main(["rolling-backfill", "--config", str(config), "--store-dir", str(tmp_path / "store")]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "waiting"
+    assert result["reason"] == "rolling_bootstrap_from_block_not_configured"
+
+
 def test_shadow_command_stops_at_unfrozen_config(capsys):
     assert main(["shadow"]) == 1
     result = json.loads(capsys.readouterr().out)

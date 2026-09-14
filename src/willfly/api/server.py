@@ -395,7 +395,17 @@ class ReadOnlyStore:
         elif self.pools:
             details.setdefault("chain_id", self.pools[0].identity.chain_id)
         details.setdefault("launch_count", len(self.launches)); details.setdefault("pool_count", len(self.pools)); details.setdefault("timeline_count", len(self.timelines))
-        details.setdefault("exclusion_count", len(self.exclusions)); details.setdefault("signal_count", len(self._signal_entries()))
+        signal_entries = self._signal_entries()
+        details.setdefault("exclusion_count", len(self.exclusions)); details["signal_count"] = len(signal_entries)
+        details["current_signal_count"] = sum(entry.display_state != "expired" for entry in signal_entries)
+        details["expired_signal_count"] = sum(entry.display_state == "expired" for entry in signal_entries)
+        details["signal_monitor_state"] = (
+            "waiting_no_published_signal"
+            if not signal_entries
+            else "historical_expired"
+            if all(entry.display_state == "expired" for entry in signal_entries)
+            else "current_research_only"
+        )
         if self.signal_file is not None:
             details.setdefault("published_signal_file", self.signal_file)
         if self.signal_file_hash is not None:

@@ -84,12 +84,14 @@ or binding a socket.
 
 Edit `~/.config/willfly/willfly.env` and keep all paths absolute.
 
-Capture defaults to a checkpointed `backfill` pass. Set a recent explicit
-`WILLFLY_CAPTURE_START_BLOCK` and keep `WILLFLY_CAPTURE_MAX_BLOCKS` bounded
-(the example is 500 blocks). Each pass reads the current provider head, refuses
-to scan beyond the bound, and lets the durable backfill checkpoint continue on
-the next pass. A blank start block produces a `waiting` log line and no RPC
-read. Set `WILLFLY_CAPTURE_MODE=capture` only for a fixed range, and set
+Capture defaults to a checkpointed `rolling_backfill` pass. Set a recent
+explicit `WILLFLY_CAPTURE_START_BLOCK` and keep `WILLFLY_CAPTURE_MAX_BLOCKS`
+bounded (the example is 500 blocks). The default `rolling_backfill` mode reads
+the current provider head, subtracts the explicit
+`WILLFLY_CAPTURE_CONFIRMATION_LAG`, advances only to that safe target, and lets
+the durable checkpoint continue on the next pass. A blank start block
+produces a `waiting` log line and no RPC read. Set
+`WILLFLY_CAPTURE_MODE=capture` only for a fixed range, and set
 `WILLFLY_CAPTURE_TO_BLOCK` as well.
 
 The watcher records a timezone-aware heartbeat and schedules durable slots for
@@ -97,9 +99,10 @@ observation, labels, training and evaluation. Set
 `WILLFLY_PIPELINE_CONFIG` to the reviewed
 `configs/learning/pipeline-v0.1.json` copy to enable the concrete chain; its
 separate `WILLFLY_PIPELINE_STATE_DB` stores stage runs and immutable artifact
-identities. Leave `observation.from_block` and `to_block` unset until the
-operator chooses a bounded range. Its default states are `waiting`; that is
-deliberate when no stage callback has supplied current evidence. Personal
+identities. Leave `observation.bootstrap_from_block` unset until the operator
+chooses the first bounded range; later passes roll from the durable checkpoint
+to the confirmation-lagged provider tip. Its default states are `waiting`; that
+is deliberate when no stage callback has supplied current evidence. Personal
 trades remain at zero and are not a trigger.
 
 The pipeline callbacks run bounded subprocesses in dependency order:
@@ -149,6 +152,8 @@ pipeline; use it after reviewing the pipeline range and paths:
 ```text
 ~/.local/share/willfly/bin/willflyctl start
 ~/.local/share/willfly/bin/willflyctl start pipeline
+~/.local/share/willfly/bin/willflyctl status pipeline
+~/.local/share/willfly/bin/willflyctl stop pipeline
 ~/.local/share/willfly/bin/willflyctl start train evaluate shadow
 ~/.local/share/willfly/bin/willflyctl status all
 ```

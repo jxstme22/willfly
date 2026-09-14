@@ -129,7 +129,7 @@ PY
 
 capture() {
     require_value WILLFLY_SOURCE_CONFIG
-    local mode="${WILLFLY_CAPTURE_MODE:-backfill}"
+    local mode="${WILLFLY_CAPTURE_MODE:-rolling_backfill}"
     local start="${WILLFLY_CAPTURE_START_BLOCK:-}"
     local max_blocks="${WILLFLY_CAPTURE_MAX_BLOCKS:-500}"
     valid_integer "$max_blocks" || die "WILLFLY_CAPTURE_MAX_BLOCKS must be a non-negative integer"
@@ -141,7 +141,16 @@ capture() {
     }
     prepare_parent "${WILLFLY_OBSERVATORY_DIR:-$STATE_DIR/observatory}"
     local head
-    if [[ "$mode" == "backfill" ]]; then
+    if [[ "$mode" == "rolling_backfill" ]]; then
+        run_cmd "${WILLFLY_COMMAND[@]}" rolling-backfill \
+            --config "$WILLFLY_SOURCE_CONFIG" \
+            --bootstrap-from-block "$start" \
+            --max-blocks "$max_blocks" \
+            --confirmation-lag-blocks "${WILLFLY_CAPTURE_CONFIRMATION_LAG:-12}" \
+            --store-dir "${WILLFLY_OBSERVATORY_DIR:-$STATE_DIR/observatory}" \
+            --source "${WILLFLY_CAPTURE_SOURCE:-live-readonly}" \
+            --page-size "${WILLFLY_CAPTURE_PAGE_SIZE:-250}"
+    elif [[ "$mode" == "backfill" ]]; then
         if (( DRY_RUN )); then
             head='${RPC_HEAD}'
         else
@@ -178,7 +187,7 @@ capture() {
             run_cmd "${WILLFLY_COMMAND[@]}" capture --config "$WILLFLY_SOURCE_CONFIG" --from-block "$start" --to-block "$finish" --store-dir "${WILLFLY_OBSERVATORY_DIR:-$STATE_DIR/observatory}" --source "${WILLFLY_CAPTURE_SOURCE:-live-readonly}"
         fi
     else
-        die "WILLFLY_CAPTURE_MODE must be backfill or capture"
+        die "WILLFLY_CAPTURE_MODE must be rolling_backfill, backfill or capture"
     fi
 }
 

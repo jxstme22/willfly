@@ -5,7 +5,7 @@ import subprocess
 from willfly.learning.pipeline import PipelineRunner
 
 
-def _config(tmp_path: Path) -> Path:
+def _config(tmp_path: Path, *, observation: dict | None = None) -> Path:
     paths = {
         "source_config": str(tmp_path / "source.json"),
         "store_dir": str(tmp_path / "observatory"),
@@ -31,7 +31,7 @@ def _config(tmp_path: Path) -> Path:
         "signing": False,
         "broadcast": False,
         "paths": paths,
-        "observation": {"mode": "backfill", "from_block": 10, "to_block": 10, "max_blocks": 10, "page_size": 10, "source": "fixture"},
+        "observation": observation or {"mode": "backfill", "from_block": 10, "to_block": 10, "max_blocks": 10, "page_size": 10, "source": "fixture"},
         "training": {"max_edges": 10, "partition_index": 0, "partition_count": 1, "seeds": "7", "max_examples": 10},
         "model": {"model_id": "fixture", "model_version": "fixture-v1", "run_ref": "fixture"},
         "evaluation": {"candidate_version": "", "active_version": "", "dataset_hash": "", "minimum_forward_windows": 1, "minimum_points_per_window": 1},
@@ -43,6 +43,35 @@ def _config(tmp_path: Path) -> Path:
     path = tmp_path / "pipeline.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
+
+
+def test_pipeline_rolling_observation_command_is_bounded_and_checkpointed(tmp_path):
+    config = _config(
+        tmp_path,
+        observation={
+            "mode": "rolling_backfill",
+            "bootstrap_from_block": None,
+            "confirmation_lag_blocks": 12,
+            "max_blocks": 500,
+            "page_size": 250,
+            "source": "fixture",
+        },
+    )
+    commands = []
+
+    def command_runner(command, _budget, _cwd):
+        commands.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0, '{"status":"waiting","reason":"bootstrap_required"}', "")
+
+    with PipelineRunner(config, tmp_path / "pipeline.sqlite3", command_runner=command_runner) as runner:
+        payload, command = runner._observation("2026-09-14T06:00:00Z")
+    assert payload["status"] == "waiting"
+    assert tuple(command) == commands[0]
+    assert command[3] == "rolling-backfill"
+    assert "--confirmation-lag-blocks" in command and command[command.index("--confirmation-lag-blocks") + 1] == "12"
+    assert "--max-blocks" in command and command[command.index("--max-blocks") + 1] == "500"
+    assert "--page-size" in command and command[command.index("--page-size") + 1] == "250"
+    assert "--bootstrap-from-block" not in command
 
 
 def test_pipeline_runs_bounded_chain_and_reuses_completed_artifacts(tmp_path):

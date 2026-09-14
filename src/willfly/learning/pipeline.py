@@ -419,6 +419,35 @@ class PipelineRunner:
                 "input": str(input_path),
                 "manifest": payload,
             }, ("reuse", str(input_path))
+        if mode == "rolling_backfill":
+            bootstrap = self.config.value("observation", "bootstrap_from_block")
+            if bootstrap is not None and (isinstance(bootstrap, bool) or not isinstance(bootstrap, int) or bootstrap < 0):
+                return None, ("rolling-backfill", "waiting:rolling_bootstrap_from_block_invalid")
+            config_path = self.config.path_value("source_config")
+            store_dir = self.config.path_value("store_dir")
+            assert config_path is not None and store_dir is not None
+            command = [
+                sys.executable,
+                "-m",
+                "willfly",
+                "rolling-backfill",
+                "--config",
+                str(config_path),
+                "--max-blocks",
+                str(int(self.config.value("observation", "max_blocks", 500))),
+                "--confirmation-lag-blocks",
+                str(int(self.config.value("observation", "confirmation_lag_blocks", 12))),
+                "--store-dir",
+                str(store_dir),
+                "--source",
+                str(self.config.value("observation", "source", "pipeline-live-readonly")),
+                "--page-size",
+                str(int(self.config.value("observation", "page_size", 250))),
+            ]
+            if bootstrap is not None:
+                command.extend(["--bootstrap-from-block", str(bootstrap)])
+            result = self._run_json(command, "observation")
+            return result, command
         start = self.config.value("observation", "from_block")
         finish = self.config.value("observation", "to_block")
         if isinstance(start, bool) or not isinstance(start, int) or start < 0:
