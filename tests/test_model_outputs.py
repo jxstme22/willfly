@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 from willfly.cli import main
 from willfly.domain import Confidence, InstrumentIdentity, PortfolioContext, PredictionRecord
@@ -121,3 +123,63 @@ def test_model_output_cli_selects_one_seed_and_writes_typed_bundle(tmp_path: Pat
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "ready"
     assert json.loads(output.read_text(encoding="utf-8"))["schema_version"] == "willfly.model-output-bundle.v0.1"
+
+
+def test_fresh_process_model_output_to_signal_build_to_signal_loader(tmp_path: Path):
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({"experiment_results": [_experiment()]}), encoding="utf-8")
+    templates = tmp_path / "templates.json"
+    templates.write_text(
+        json.dumps({"schema_version": "willfly.prediction-template-bundle.v0.1", "predictions": [_template().to_dict()]}),
+        encoding="utf-8",
+    )
+    actions = tmp_path / "actions.json"
+    actions.write_text(json.dumps({"prediction-1": "enter"}), encoding="utf-8")
+    model_output = tmp_path / "model-output.json"
+    signals = tmp_path / "signals.json"
+    root = Path(__file__).parents[1]
+    model_command = [
+        sys.executable,
+        "-m",
+        "willfly",
+        "model-output",
+        "--experiment-report",
+        str(report),
+        "--templates",
+        str(templates),
+        "--output",
+        str(model_output),
+        "--model-id",
+        "male-cns-readout",
+        "--model-version",
+        "candidate-v2",
+        "--run-ref",
+        "run:seed-7",
+        "--as-of-time",
+        "2026-09-14T00:01:00Z",
+        "--actions",
+        str(actions),
+    ]
+    first = subprocess.run(model_command, cwd=root, check=True, capture_output=True, text=True)
+    assert json.loads(first.stdout)["output_count"] == 1
+    second = subprocess.run(
+        [sys.executable, "-m", "willfly", "signal-build", "--input", str(model_output), "--output", str(signals)],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert json.loads(second.stdout)["proposal_count"] == 1
+    third = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; import sys; from willfly.cli import _load_signal_store; print(len(_load_signal_store(Path(sys.argv[1]))['proposals']))",
+            str(signals),
+        ],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert third.stdout.strip() == "1"

@@ -27,6 +27,10 @@
 ```text
 .venv/bin/python -m pytest -q tests/test_feedback_store.py tests/test_laboratory.py tests/test_model_outputs.py tests/test_cli.py -k 'feedback or model_output or watcher'
   passed (12 tests)
+.venv/bin/python -m pytest -q tests/test_model_outputs.py
+  passed (4 tests, including fresh-process model-output -> signal-build -> typed signal-loader)
+.venv/bin/python -m pytest
+  passed (225 tests, 2 sandbox loopback skips)
 ```
 
 The tests prove distinct manual/market outcomes, conservative ambiguous-label
