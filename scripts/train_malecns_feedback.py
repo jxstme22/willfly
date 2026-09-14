@@ -48,10 +48,13 @@ def train_feedback(
     partition_count: int,
     seeds: tuple[int, ...],
     checkpoint_dir: Path | None = None,
+    max_training_examples: int = 100_000,
 ) -> dict[str, object]:
     started = time.perf_counter()
     if not seeds or len(set(seeds)) != len(seeds):
         raise ValueError("seeds must be a non-empty unique list")
+    if not isinstance(max_training_examples, int) or isinstance(max_training_examples, bool) or max_training_examples <= 0:
+        raise ValueError("max_training_examples must be a positive integer")
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest = ConnectomeManifest.from_dict(manifest_payload)
     with FeedbackStore(feedback_dir) as store:
@@ -60,7 +63,7 @@ def train_feedback(
     partition_values = _load_mapping(partitions_path, "partitions")
     if any(not isinstance(value, dict) for value in feature_values.values()):
         raise ValueError("features values must be prediction-to-node maps")
-    if any(not isinstance(value, str) for value in partition_values.values()):
+    if any(value not in {"train", "validation", "test"} for value in partition_values.values()):
         raise ValueError("partitions values must be train, validation or test strings")
     build = build_training_samples_from_feedback(
         dataset,
@@ -93,11 +96,24 @@ def train_feedback(
             "l2": 1.0,
             "minimum_train_examples": minimum_train_examples,
         },
+        "training_budget": {"max_training_examples": max_training_examples},
         "operating_mode": "local_research_only",
         "execution_scope": "manual_only",
         "signing": False,
         "broadcast": False,
     }
+    if len(build.samples) > max_training_examples:
+        report.update(
+            {
+                "status": "waiting",
+                "reasons": ["training_example_budget_exceeded"],
+                "experiment_results": [],
+                "boundary": "training-example budget exceeded; no graph load or training occurred",
+            }
+        )
+        report["wall_seconds"] = time.perf_counter() - started
+        report["process_peak_rss_bytes"] = _peak_rss_bytes()
+        return report
     if len(build.samples) < minimum_train_examples or not any(sample.partition != "train" for sample in build.samples):
         reasons = []
         if len(build.samples) < minimum_train_examples:
@@ -177,6 +193,7 @@ def main() -> None:
     parser.add_argument("--partition-count", type=int, default=4)
     parser.add_argument("--seeds", default="7,17,27")
     parser.add_argument("--checkpoint-dir", type=Path, default=None)
+    parser.add_argument("--max-training-examples", type=int, default=100_000)
     args = parser.parse_args()
     seeds = tuple(int(value.strip()) for value in args.seeds.split(",") if value.strip())
     print(
@@ -193,6 +210,7 @@ def main() -> None:
                 partition_count=args.partition_count,
                 seeds=seeds,
                 checkpoint_dir=args.checkpoint_dir,
+                max_training_examples=args.max_training_examples,
             ),
             indent=2,
             sort_keys=True,

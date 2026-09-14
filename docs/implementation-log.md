@@ -54,6 +54,13 @@ manifest, feature map and explicit partition map, plus the fixed experiment
 configuration used by the runner. An insufficient-label run still returns
 waiting before graph loading.
 
+The runner also rejects partition values outside `train`/`validation`/`test`
+and returns waiting before graph loading when its explicit maximum training
+example budget is exceeded.
+
+Final verification for this guard: the full suite passed 230 tests with two
+sandbox loopback skips; planning and whitespace checks remained clean.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status
