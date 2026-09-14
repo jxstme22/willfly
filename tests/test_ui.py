@@ -1,6 +1,7 @@
 from willfly.domain import Launch, Observation
 from willfly.features.discovery import DiscoverySnapshot
 from willfly.ui.dashboard import render_dashboard
+from willfly.ui.signals import SignalInboxEntry
 
 
 def test_dashboard_shows_cutoffs_lifecycle_quality_and_excluded_counts():
@@ -23,3 +24,27 @@ def test_dashboard_shows_cutoffs_lifecycle_quality_and_excluded_counts():
     assert "unknown" in page
     assert "excluded activity 2" in page
     assert "https://example.test/event/1" in page
+
+
+def test_dashboard_renders_manual_action_status_on_signal_row():
+    snapshot = DiscoverySnapshot("2026-01-01T00:05:00Z", (), (), 0, 0, (), "healthy", ("fixture:dashboard",))
+    signal = SignalInboxEntry(
+        "proposal-1",
+        "prediction-1",
+        "model-1",
+        "model-v1",
+        "spot",
+        "enter",
+        "abstain",
+        "research_only",
+        {},
+        "2026-01-01T00:00:00Z",
+        "2026-01-01T01:00:00Z",
+        {},
+        (),
+        "matched",
+        ("spot_economic_readiness_gate_open",),
+    )
+    page = render_dashboard(snapshot, signals=(signal,))
+    assert "Manual status" in page
+    assert "matched" in page

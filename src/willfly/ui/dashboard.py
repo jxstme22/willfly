@@ -48,10 +48,11 @@ def render_dashboard(
         f"<td>{escape(entry.displayed_action)}</td>"
         f"<td>{escape(entry.display_state)}</td>"
         f"<td>{escape(entry.model_version)}</td>"
+        f"<td>{escape(entry.manual_status)}</td>"
         f"<td>{escape(', '.join(entry.reason_flags) or 'none')}</td>"
         "</tr>"
         for entry in signals
-    ) or '<tr><td colspan="6">No signals available.</td></tr>'
+    ) or '<tr><td colspan="7">No signals available.</td></tr>'
     position_rows = "".join(
         "<tr>"
         f"<td>{escape(str(position.get('wallet', 'unknown')))}</td>"
@@ -77,7 +78,7 @@ small{{color:#666}}</style></head><body>
 <h2>Launches</h2><table><thead><tr><th>Token</th><th>Lifecycle</th><th>Creation time</th>
 <th>First observed</th><th>Evidence</th></tr></thead><tbody>{launch_rows}</tbody></table>
 <h2>Token timelines</h2>{timeline_sections or '<p>No timeline available.</p>'}
-<h2>Signal inbox</h2><table><thead><tr><th>Market</th><th>Proposed</th><th>Displayed</th><th>State</th><th>Model</th><th>Reasons</th></tr></thead>
+<h2>Signal inbox</h2><table><thead><tr><th>Market</th><th>Proposed</th><th>Displayed</th><th>State</th><th>Model</th><th>Manual status</th><th>Reasons</th></tr></thead>
 <tbody>{signal_rows}</tbody></table>
 <h2>Observed positions</h2><table><thead><tr><th>Wallet</th><th>Pool</th><th>Position</th><th>Liquidity</th><th>State</th></tr></thead>
 <tbody>{position_rows}</tbody></table>

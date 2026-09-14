@@ -14,7 +14,9 @@ from typing import Any
 from willfly import __version__
 from willfly.domain import (
     Launch,
+    ManualAction,
     Observation,
+    OutcomeRecord,
     PoolIdentity,
     PredictionRecord,
     RawEvent,
@@ -22,6 +24,7 @@ from willfly.domain import (
     TradeEvidence,
     VendorAssessment,
     WalletCohort,
+    WalletActivity,
 )
 from willfly.api import ReadOnlyStore, create_server
 from willfly.evaluation.coverage import audit_coverage
@@ -39,6 +42,7 @@ from willfly.ingest.runner import (
     filter_identity,
 )
 from willfly.features.discovery import PoolProjection
+from willfly.features.action_linking import link_manual_actions
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
@@ -169,12 +173,27 @@ def _load_signal_store(path: Path) -> dict[str, Any]:
     as_of_time = payload.get("as_of_time")
     if not isinstance(as_of_time, str) or not as_of_time:
         raise ValueError("signal snapshot as_of_time is required")
+    raw_actions = payload.get("manual_actions", [])
+    raw_activities = payload.get("wallet_activities", [])
+    if not isinstance(raw_actions, list) or not isinstance(raw_activities, list):
+        raise ValueError("signal snapshot manual_actions and wallet_activities must be arrays")
+    if any(not isinstance(item, dict) for item in (*raw_actions, *raw_activities)):
+        raise ValueError("signal snapshot action records must be objects")
+    manual_actions = tuple(ManualAction.from_dict(item) for item in raw_actions)
+    wallet_activities = tuple(WalletActivity.from_dict(item) for item in raw_activities)
+    time_window_seconds = payload.get("action_link_time_window_seconds", 120)
+    if isinstance(time_window_seconds, bool) or not isinstance(time_window_seconds, int) or time_window_seconds < 0:
+        raise ValueError("signal snapshot action link time window must be non-negative")
     return {
         "predictions": predictions,
         "proposals": proposals,
         "signal_as_of_time": as_of_time,
         "market_readiness": readiness,
         "training_state": training_state,
+        "manual_actions": manual_actions,
+        "action_links": link_manual_actions(
+            manual_actions, wallet_activities, time_window_seconds=time_window_seconds
+        ),
     }
 
 
@@ -186,6 +205,77 @@ def _load_prediction_points(path: Path) -> tuple[PredictionPoint, ...]:
     if not isinstance(raw_points, list):
         raise ValueError("prediction points must be an array")
     return tuple(PredictionPoint.from_dict(item) for item in raw_points)
+
+
+def _load_feedback_bundle(path: Path) -> tuple[tuple[PredictionRecord, ...], tuple[OutcomeRecord, ...]]:
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.feedback-bundle.v0.1":
+        raise ValueError("feedback bundle schema version is unsupported")
+    raw_predictions = payload.get("predictions")
+    raw_outcomes = payload.get("outcomes")
+    if not isinstance(raw_predictions, list) or not isinstance(raw_outcomes, list):
+        raise ValueError("feedback bundle predictions and outcomes must be arrays")
+    if any(not isinstance(item, dict) for item in (*raw_predictions, *raw_outcomes)):
+        raise ValueError("feedback bundle records must be objects")
+    return (
+        tuple(PredictionRecord.from_dict(item) for item in raw_predictions),
+        tuple(OutcomeRecord.from_dict(item) for item in raw_outcomes),
+    )
+
+
+def _feedback_import(*, bundle_path: Path, feedback_dir: Path, as_of_time: str) -> dict[str, Any]:
+    predictions, outcomes = _load_feedback_bundle(bundle_path)
+    with FeedbackStore(feedback_dir) as store:
+        prediction_write = store.record_predictions(predictions)
+        outcome_write = store.record_outcomes(outcomes)
+        queue = store.mature(as_of_time=as_of_time)
+        dataset = store.dataset(as_of_time=as_of_time)
+    state = "ready" if dataset.eligible_examples else "waiting"
+    return {
+        "status": state,
+        "bundle": str(bundle_path),
+        "bundle_hash": _config_hash(bundle_path),
+        "feedback_dir": str(feedback_dir),
+        "predictions": {
+            "inserted": prediction_write.inserted,
+            "duplicates": prediction_write.duplicates,
+            "revised": prediction_write.revised,
+        },
+        "outcomes": {
+            "inserted": outcome_write.inserted,
+            "duplicates": outcome_write.duplicates,
+            "revised": outcome_write.revised,
+        },
+        "as_of_time": as_of_time,
+        "queue": [item.__dict__.copy() for item in queue],
+        "dataset": dataset.to_dict(),
+        "operating_mode": "read_only_observation_import",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _feedback_status(*, feedback_dir: Path, as_of_time: str) -> dict[str, Any]:
+    with FeedbackStore(feedback_dir) as store:
+        predictions = store.list_predictions()
+        outcomes = store.list_outcomes()
+        queue = store.mature(as_of_time=as_of_time)
+        dataset = store.dataset(as_of_time=as_of_time)
+    states: dict[str, int] = {}
+    for item in queue:
+        states[item.state] = states.get(item.state, 0) + 1
+    return {
+        "status": "ready" if dataset.eligible_examples else "waiting",
+        "feedback_dir": str(feedback_dir),
+        "as_of_time": as_of_time,
+        "prediction_count": len(predictions),
+        "outcome_count": len(outcomes),
+        "queue_state_counts": states,
+        "dataset": dataset.to_dict(),
+        "operating_mode": "read_only",
+        "signing": False,
+        "broadcast": False,
+    }
 
 
 def _evaluate_model(
@@ -997,6 +1087,17 @@ def build_parser() -> argparse.ArgumentParser:
     model_status = subparsers.add_parser("model-status", help="inspect the durable model registry")
     model_status.add_argument("--registry", type=Path, required=True)
     model_status.add_argument("--initial-active-version", required=True)
+
+    feedback_import = subparsers.add_parser(
+        "feedback-import", help="import typed read-only predictions and outcomes into the causal feedback store"
+    )
+    feedback_import.add_argument("--bundle", type=Path, required=True)
+    feedback_import.add_argument("--feedback-dir", type=Path, required=True)
+    feedback_import.add_argument("--as-of-time", required=True, help="timezone-aware RFC-3339 dataset cutoff")
+
+    feedback_status = subparsers.add_parser("feedback-status", help="inspect the causal feedback store")
+    feedback_status.add_argument("--feedback-dir", type=Path, required=True)
+    feedback_status.add_argument("--as-of-time", required=True, help="timezone-aware RFC-3339 dataset cutoff")
     return parser
 
 
@@ -1113,6 +1214,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "model-status":
             result = _model_status(registry_path=args.registry, initial_active_version=args.initial_active_version)
+        elif args.command == "feedback-import":
+            result = _feedback_import(
+                bundle_path=args.bundle,
+                feedback_dir=args.feedback_dir,
+                as_of_time=args.as_of_time,
+            )
+        elif args.command == "feedback-status":
+            result = _feedback_status(feedback_dir=args.feedback_dir, as_of_time=args.as_of_time)
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:
@@ -1165,7 +1274,14 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["status"] == "completed" else 1
     if args.command == "operator-check":
         return 0 if result["status"] == "ready" else 1
-    if args.command in {"watcher-tick", "watcher-status", "model-evaluate", "model-status"}:
+    if args.command in {
+        "watcher-tick",
+        "watcher-status",
+        "model-evaluate",
+        "model-status",
+        "feedback-import",
+        "feedback-status",
+    }:
         return 0
     if args.command in {"capture", "backfill"}:
         if result.get("status") == "plan_only":

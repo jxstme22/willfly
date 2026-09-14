@@ -17,6 +17,23 @@ This is a causal fixture-backed implementation. It does not claim a live
 zero-personal-trade interval, model quality, or automatic retraining. Those
 remain B4/B9 and operational acceptance gates.
 
+Typed bundles can be imported into the durable store without credentials:
+
+```text
+.venv/bin/willfly feedback-import \
+  --bundle /path/to/feedback.json \
+  --feedback-dir /path/to/feedback-store \
+  --as-of-time 2026-09-14T00:06:00Z
+.venv/bin/willfly feedback-status \
+  --feedback-dir /path/to/feedback-store \
+  --as-of-time 2026-09-14T00:06:00Z
+```
+
+The importer is idempotent, records outcome revisions, re-matures the queue
+at the explicit cutoff and reports `ready` only when an eligible numeric label
+exists. An empty, delayed or unresolved bundle remains visible as waiting or
+unresolved.
+
 Reproduction:
 
 ```text

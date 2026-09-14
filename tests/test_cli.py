@@ -274,6 +274,8 @@ def test_signal_snapshot_loader_accepts_typed_empty_read_only_bundle(tmp_path):
     assert loaded["predictions"] == ()
     assert loaded["proposals"] == ()
     assert loaded["training_state"]["status"] == "waiting"
+    assert loaded["manual_actions"] == ()
+    assert loaded["action_links"] == ()
 
 
 def test_model_evaluate_records_comparison_without_promoting(tmp_path, capsys):
@@ -341,3 +343,47 @@ def test_model_evaluate_records_comparison_without_promoting(tmp_path, capsys):
     status = json.loads(capsys.readouterr().out)
     assert status["state"]["active_version"] == "active-v1"
     assert status["state"]["consumed_final_test_count"] == 1
+
+
+def test_feedback_cli_imports_empty_bundle_and_reports_waiting(tmp_path, capsys):
+    bundle = tmp_path / "feedback.json"
+    bundle.write_text(
+        json.dumps(
+            {
+                "schema_version": "willfly.feedback-bundle.v0.1",
+                "predictions": [],
+                "outcomes": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    feedback_dir = tmp_path / "feedback-store"
+    assert main(
+        [
+            "feedback-import",
+            "--bundle",
+            str(bundle),
+            "--feedback-dir",
+            str(feedback_dir),
+            "--as-of-time",
+            "2026-01-01T00:00:00Z",
+        ]
+    ) == 0
+    imported = json.loads(capsys.readouterr().out)
+    assert imported["status"] == "waiting"
+    assert imported["predictions"]["inserted"] == 0
+    assert imported["dataset"]["eligible_count"] == 0
+    assert imported["signing"] is False and imported["broadcast"] is False
+
+    assert main(
+        [
+            "feedback-status",
+            "--feedback-dir",
+            str(feedback_dir),
+            "--as-of-time",
+            "2026-01-01T00:00:00Z",
+        ]
+    ) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["prediction_count"] == 0
+    assert status["queue_state_counts"] == {}

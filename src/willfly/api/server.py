@@ -126,11 +126,20 @@ class ReadOnlyStore:
         if cursor < 0 or limit <= 0 or limit > 100:
             raise ValueError("cursor must be non-negative and limit must be between 1 and 100")
         as_of = self.signal_as_of_time or self.quality_details.get("as_of_time", "1970-01-01T00:00:00Z") if self.quality_details else "1970-01-01T00:00:00Z"
+        proposal_status = {
+            action.proposal_id: next(
+                (link.status for link in self.action_links if link.action_id == action.action_id),
+                "not_recorded",
+            )
+            for action in self.manual_actions
+            if action.proposal_id is not None
+        }
         entries = build_signal_inbox(
             self.predictions,
             self.proposals,
             as_of_time=as_of,
             market_readiness=self.market_readiness,
+            manual_status_by_proposal=proposal_status,
         )
         page = entries[cursor : cursor + limit]
         next_cursor = cursor + len(page)

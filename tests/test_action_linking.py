@@ -1,8 +1,11 @@
+import json
+
 from willfly.domain import ManualAction, PaymentLeg, TradeEvidence
 from willfly.domain.signal_contracts import InstrumentIdentity
 from willfly.domain.wallets import activity_from_trade
 from willfly.features.action_linking import link_manual_actions
 from willfly.api.server import ReadOnlyStore, _route
+from willfly.cli import _load_signal_store
 
 
 TOKEN = "0x1111111111111111111111111111111111111111"
@@ -58,3 +61,23 @@ def test_missing_hash_is_ambiguous_or_pending_and_never_matches_amount_only() ->
         action_late.transaction_hash, action_late.wallet_ref, action_late.user_override, action_late.source_refs,
     )
     assert link_manual_actions([action_late], [unrelated])[0].status == "pending"
+
+
+def test_signal_bundle_loader_links_manual_action_to_wallet_activity(tmp_path) -> None:
+    path = tmp_path / "signals.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "willfly.signal-snapshot.v0.1",
+                "as_of_time": "2026-09-14T00:00:10Z",
+                "predictions": [],
+                "proposals": [],
+                "manual_actions": [_action().to_dict()],
+                "wallet_activities": [_activity().to_dict()],
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = _load_signal_store(path)
+    assert loaded["manual_actions"][0].action_id == "action-1"
+    assert loaded["action_links"][0].status == "matched"

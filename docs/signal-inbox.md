@@ -10,14 +10,16 @@ proposal is not mutated.
 The API exposes `GET /signals` for paginated inbox entries, `GET /positions`
 for observed LP ownership states, and `GET /training` for the current
 training/waiting summary. The existing `GET /dashboard` includes signal,
-position and training sections.
+position, manual-link status and training sections; `/signals` exposes the
+same manual-link status in its JSON rows.
 
 For a local controlled run, `willfly serve --signals-file PATH` loads a typed
 `willfly.signal-snapshot.v0.1` JSON bundle containing predictions, proposals,
-readiness gates and training state. The file is validated through the domain
-contracts and is display-only; it cannot enable signing or broadcast. Without
-the file (or a populated application store), the inbox truthfully shows no
-signals.
+readiness gates, training state, optional manual actions and optional
+public-wallet activities. The file is validated through the domain contracts;
+manual links are recomputed conservatively at load time. It is display-only
+and cannot enable signing or broadcast. Without the file (or a populated
+application store), the inbox truthfully shows no signals.
 
 It remains a local read-only surface: there is no signer, broadcast, funding
 control, or automatic execution. B6 fixture checks prove rendering and gates;

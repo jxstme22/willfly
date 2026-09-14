@@ -36,6 +36,8 @@ To inspect controlled signal output, pass a validated
 
 The bundle is display-only. Research-only or unsupported readiness remains an
 abstain state in the inbox, and no signal file can enable signing or broadcast.
+Include optional `manual_actions` and `wallet_activities` arrays to inspect
+conservative action links in the same fresh-process dashboard/API run.
 
 ## Run the durable learning watcher tick
 

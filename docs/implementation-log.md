@@ -813,6 +813,28 @@ an explicit train/validation/test partition, and reports missing inputs or
 partitions as exclusions. It does not derive features from outcomes or assign
 holdouts automatically.
 
+Extended the typed signal snapshot loader with optional manual actions and
+public-wallet activities. It parses both contracts and recomputes conservative
+links for `/actions` and signal manual status in a fresh server process;
+ambiguous/pending evidence remains unresolved.
+
+Fixed the JSON signal projection and dashboard table to expose the same manual
+link status as `/actions`. A fresh-process smoke with one typed proposal,
+manual action and wallet activity now returns `matched` on `/actions` and
+`/signals` and renders the manual-status column.
+
+Added typed `feedback-import` and `feedback-status` commands around the durable
+B3 store. A controlled observed-market bundle inserted one prediction and one
+outcome, matured to `ready` with one eligible example at the declared cutoff,
+and retained read-only/no-signing output. This does not substitute for live
+market collection or a real zero-personal-trade interval.
+
+Added `scripts/train_malecns_feedback.py` as the bounded B3-to-B4 runtime
+entrypoint. It reads a causal cutoff, requires explicit feature and partition
+maps, supports multiple seeds with the five matched controls, and returns a
+truthful waiting report without graph load when qualified labels or held-out
+assignments are insufficient. The empty-store subprocess check passed.
+
 
 ## 2026-09-14 — B10 release capability audit
 

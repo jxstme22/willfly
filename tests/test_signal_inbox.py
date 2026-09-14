@@ -1,5 +1,6 @@
 from willfly.api.server import ReadOnlyStore, _route
-from willfly.domain.signal_contracts import Confidence, InstrumentIdentity, PortfolioContext, PredictionRecord, SignalProposal
+from willfly.domain.signal_contracts import Confidence, InstrumentIdentity, ManualAction, PortfolioContext, PredictionRecord, SignalProposal
+from willfly.features.action_linking import ManualActionLink
 from willfly.ui.signals import build_signal_inbox
 
 
@@ -49,3 +50,32 @@ def test_read_only_api_exposes_signals_positions_and_training_state() -> None:
     assert status == 200 and positions["items"] == []
     training, status = _route(store, "/training")
     assert status == 200 and training["status"] == "waiting"
+
+
+def test_signal_api_exposes_manual_action_link_status() -> None:
+    action = ManualAction(
+        "action-1",
+        "proposal-1",
+        TOKEN,
+        "spot",
+        "enter",
+        None,
+        "2026-09-14T00:00:03Z",
+        "2026-09-14T00:00:04Z",
+        "reported",
+        None,
+        None,
+        True,
+        ("manual:1",),
+    )
+    link = ManualActionLink("action-1", "matched", "activity-1", ("exact_transaction_match",), ("activity:1",))
+    store = ReadOnlyStore(
+        predictions=(_prediction(),),
+        proposals=(_proposal(),),
+        signal_as_of_time="2026-09-14T00:00:10Z",
+        manual_actions=(action,),
+        action_links=(link,),
+    )
+    signals, status = _route(store, "/signals")
+    assert status == 200
+    assert signals["items"][0]["manual_status"] == "matched"

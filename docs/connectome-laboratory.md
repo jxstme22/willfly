@@ -27,3 +27,18 @@ Reproduction:
 ```text
 .venv/bin/python -m pytest -q tests/test_laboratory.py
 ```
+
+When causal labels are available, `scripts/train_malecns_feedback.py` is the
+bounded integration entrypoint. It takes an explicit feedback cutoff, feature
+map, train/validation/test assignment, MaleCNS partition and seed list; with
+insufficient labels it exits successfully with a `waiting` report and does not
+load or train the graph.
+
+```text
+.venv/bin/python scripts/train_malecns_feedback.py \
+  --feedback-dir /path/to/feedback-store \
+  --features /path/to/features.json \
+  --partitions /path/to/partitions.json \
+  --as-of-time 2026-09-14T00:06:00Z \
+  --seeds 7,17,27
+```
