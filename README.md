@@ -24,7 +24,7 @@ Read-only research software for a connectome-derived crypto decision agent.
 
 ## Status
 
-The direction remains Robinhood launch discovery, spot decisions and separately validated LP. The current checkpoint connects durable capture/backfill, header persistence, receipt attribution, immutable projections, API/dashboard loading, a read-only signal inbox and position/training views, versioned brain signal contracts, a verified MaleCNS v1.0 subset smoke run, restart-safe learning-watcher tick/status commands, typed signal snapshot loading/building, guarded candidate evaluation/status commands, durable causal-feedback import/status, an explicit multi-seed MaleCNS feedback-training runner, and public-wallet activity import/status. The latest local suite reports 219 passed and two sandbox socket skips; the skipped checks are loopback-only fixtures and do not represent product failures. These checks do not certify Observatory acceptance, whole-CNS coverage, model quality or financial advantage. Live source/archive, timed, economic and biological/model gates remain open. LP and funded execution remain disabled.
+The direction remains Robinhood launch discovery, spot decisions and separately validated LP. The current checkpoint connects durable capture/backfill, header persistence, receipt attribution, immutable projections, API/dashboard loading, a read-only signal inbox and position/training views, versioned brain signal contracts, a verified MaleCNS v1.0 subset smoke run, restart-safe learning-watcher tick/status commands, typed signal snapshot loading/building, guarded candidate evaluation/status commands, durable causal-feedback import/status, an explicit multi-seed MaleCNS feedback-training runner, public-wallet activity import/status, and a hash-lineaged connectome-result-to-signal-output bridge. The latest local suite reports 224 passed and two sandbox socket skips; the skipped checks are loopback-only fixtures and do not represent product failures. These checks do not certify Observatory acceptance, whole-CNS coverage, model quality or financial advantage. Live source/archive, timed, economic and biological/model gates remain open. LP and funded execution remain disabled.
 
 The existing 77-task tracker now distinguishes pre-audit fixture completion from full acceptance; use the new 26-task backlog for implementation order. Task status corrections preserve code and prior evidence rather than erasing progress.
 
@@ -45,6 +45,7 @@ python3 -m venv .venv
 .venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
 .venv/bin/willfly feedback-status --feedback-dir /path/to/feedback --as-of-time 2026-09-14T00:00:00Z
 .venv/bin/willfly wallet-status --wallet-dir /path/to/wallet-store --wallet 0x... --as-of-time 2026-09-14T00:00:00Z --arrival-cutoff 2026-09-14T00:00:00Z
+.venv/bin/willfly model-output --experiment-report /path/to/training-report.json --templates /path/to/prediction-templates.json --output /path/to/model-output.json --model-id male-cns-readout --model-version candidate-v2 --run-ref run:seed-7 --as-of-time 2026-09-14T00:00:00Z
 ```
 
 The source-tree equivalent is `PYTHONPATH=src python3 -m willfly ...`. `doctor`

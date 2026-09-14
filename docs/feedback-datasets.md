@@ -8,10 +8,17 @@ outcome revisions, and maintains a queue state of `waiting`, `ready`,
 
 Observed market and simulated counterfactual outcomes are first-class inputs;
 they do not require a personal trade. Actual manual outcomes remain distinct
-through the signal contract's `action_id`. Delayed labels, missing numeric
+through the dataset's `outcome_id` and `action_id` lineage as well as the
+signal contract's `action_id`. Delayed labels, missing numeric
 targets, invalidated/fork-revised outcomes, target mismatches, expired
 predictions, and self-label references remain visible but are not eligible for
 training.
+
+If more than one eligible outcome exists for the same prediction, the feedback
+dataset retains every outcome for audit but the training adapter excludes all
+of them with `multiple_eligible_outcomes_for_prediction`. This prevents an
+observed-market result, a manual action result and a simulated counterfactual
+from being collapsed into one ambiguous training row.
 
 This is a causal fixture-backed implementation. It does not claim a live
 zero-personal-trade interval, model quality, or automatic retraining. Those

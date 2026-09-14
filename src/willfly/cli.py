@@ -45,6 +45,7 @@ from willfly.features.discovery import PoolProjection
 from willfly.features.action_linking import link_manual_actions
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
 from willfly.features.signal_generation import build_research_signals
+from willfly.features.model_outputs import build_model_output_bundle
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
@@ -209,6 +210,27 @@ def _load_prediction_points(path: Path) -> tuple[PredictionPoint, ...]:
     return tuple(PredictionPoint.from_dict(item) for item in raw_points)
 
 
+def _load_prediction_templates(path: Path) -> tuple[PredictionRecord, ...]:
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.prediction-template-bundle.v0.1":
+        raise ValueError("prediction template bundle schema version is unsupported")
+    raw_predictions = payload.get("predictions")
+    if not isinstance(raw_predictions, list) or any(not isinstance(item, dict) for item in raw_predictions):
+        raise ValueError("prediction template bundle predictions must be an array of objects")
+    return tuple(PredictionRecord.from_dict(item) for item in raw_predictions)
+
+
+def _load_string_map(path: Path | None, field: str) -> dict[str, str]:
+    if path is None:
+        return {}
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str) for key, value in payload.items()
+    ):
+        raise ValueError(f"{field} must be a string map")
+    return dict(payload)
+
+
 def _load_feedback_bundle(path: Path) -> tuple[tuple[PredictionRecord, ...], tuple[OutcomeRecord, ...]]:
     payload = _load_json(path)
     if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.feedback-bundle.v0.1":
@@ -319,6 +341,68 @@ def _signal_build(*, input_path: Path, output_path: Path | None) -> dict[str, An
         "output": None if output_path is None else str(output_path),
         "output_hash": None if output_path is None else _config_hash(output_path),
         "bundle": bundle if output_path is None else None,
+        "operating_mode": "local_research_only",
+        "execution_scope": "manual_only",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _model_output(
+    *,
+    experiment_report_path: Path,
+    templates_path: Path,
+    output_path: Path,
+    model_name: str,
+    model_id: str,
+    model_version: str,
+    run_ref: str,
+    as_of_time: str,
+    run_id: str | None,
+    actions_path: Path | None,
+    exit_kinds_path: Path | None,
+) -> dict[str, Any]:
+    report = _load_json(experiment_report_path)
+    if not isinstance(report, dict):
+        raise ValueError("experiment report must be an object")
+    raw_results = report.get("experiment_results")
+    if raw_results is None and report.get("schema_version") == "connectome-experiment.v0.1":
+        raw_results = [report]
+    if not isinstance(raw_results, list) or any(not isinstance(item, dict) for item in raw_results):
+        raise ValueError("experiment report must contain experiment_results")
+    if run_id is None:
+        if len(raw_results) != 1:
+            raise ValueError("--run-id is required when the experiment report has multiple results")
+        experiment = raw_results[0]
+    else:
+        matches = [item for item in raw_results if item.get("run_id") == run_id]
+        if len(matches) != 1:
+            raise ValueError("--run-id did not identify exactly one experiment result")
+        experiment = matches[0]
+    report_hash = _config_hash(experiment_report_path)
+    bundle = build_model_output_bundle(
+        experiment,
+        _load_prediction_templates(templates_path),
+        model_name=model_name,
+        model_id=model_id,
+        model_version=model_version,
+        run_ref=run_ref,
+        as_of_time=as_of_time,
+        actions_by_prediction=_load_string_map(actions_path, "actions"),
+        exit_kinds_by_prediction=_load_string_map(exit_kinds_path, "exit_kinds"),
+        source_hash=report_hash,
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "status": "ready" if bundle["outputs"] else "waiting",
+        "output_count": len(bundle["outputs"]),
+        "model_name": model_name,
+        "run_id": experiment.get("run_id"),
+        "experiment_report": str(experiment_report_path),
+        "experiment_report_hash": report_hash,
+        "output": str(output_path),
+        "output_hash": _config_hash(output_path),
         "operating_mode": "local_research_only",
         "execution_scope": "manual_only",
         "signing": False,
@@ -1254,6 +1338,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     signal_build.add_argument("--input", type=Path, required=True, help="versioned model-output JSON bundle")
     signal_build.add_argument("--output", type=Path, default=None, help="optional signal snapshot output path")
+
+    model_output = subparsers.add_parser(
+        "model-output", help="export one connectome experiment metric as typed model outputs"
+    )
+    model_output.add_argument("--experiment-report", type=Path, required=True)
+    model_output.add_argument("--templates", type=Path, required=True, help="prediction-template bundle")
+    model_output.add_argument("--output", type=Path, required=True, help="model-output bundle destination")
+    model_output.add_argument("--model-name", default="fly")
+    model_output.add_argument("--model-id", required=True)
+    model_output.add_argument("--model-version", required=True)
+    model_output.add_argument("--run-ref", required=True)
+    model_output.add_argument("--as-of-time", required=True, help="timezone-aware output cutoff")
+    model_output.add_argument("--run-id", default=None, help="select one result from a multi-seed report")
+    model_output.add_argument("--actions", type=Path, default=None, help="explicit prediction-to-action map")
+    model_output.add_argument("--exit-kinds", type=Path, default=None, help="explicit exit-kind map")
     return parser
 
 
@@ -1389,6 +1488,20 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "signal-build":
             result = _signal_build(input_path=args.input, output_path=args.output)
+        elif args.command == "model-output":
+            result = _model_output(
+                experiment_report_path=args.experiment_report,
+                templates_path=args.templates,
+                output_path=args.output,
+                model_name=args.model_name,
+                model_id=args.model_id,
+                model_version=args.model_version,
+                run_ref=args.run_ref,
+                as_of_time=args.as_of_time,
+                run_id=args.run_id,
+                actions_path=args.actions,
+                exit_kinds_path=args.exit_kinds,
+            )
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:

@@ -26,6 +26,9 @@ class TrainingSample:
     target_bps: int
     partition: str
     source_refs: tuple[str, ...]
+    outcome_id: str | None = None
+    outcome_kind: str | None = None
+    action_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.sample_id or not self.episode_id or not self.observed_at or not self.source_refs:
@@ -56,6 +59,9 @@ class FeedbackTrainingBuild:
                     "target_bps": sample.target_bps,
                     "partition": sample.partition,
                     "source_refs": list(sample.source_refs),
+                    "outcome_id": sample.outcome_id,
+                    "outcome_kind": sample.outcome_kind,
+                    "action_id": sample.action_id,
                 }
                 for sample in self.samples
             ],
@@ -73,7 +79,27 @@ def build_training_samples_from_feedback(
 
     samples: list[TrainingSample] = []
     excluded: list[dict[str, str]] = []
-    for example in sorted(dataset.eligible_examples, key=lambda item: (item.created_at, item.prediction_id)):
+    eligible = tuple(sorted(dataset.eligible_examples, key=lambda item: (item.created_at, item.prediction_id, item.outcome_id)))
+    by_prediction: dict[str, list[Any]] = {}
+    for example in eligible:
+        by_prediction.setdefault(example.prediction_id, []).append(example)
+    ambiguous_predictions = {
+        prediction_id
+        for prediction_id, examples in by_prediction.items()
+        if len({example.outcome_id or example.prediction_id for example in examples}) > 1
+    }
+    for prediction_id in sorted(ambiguous_predictions):
+        for example in by_prediction[prediction_id]:
+            excluded.append(
+                {
+                    "prediction_id": example.prediction_id,
+                    "outcome_id": example.outcome_id or example.prediction_id,
+                    "reason": "multiple_eligible_outcomes_for_prediction",
+                }
+            )
+    for example in eligible:
+        if example.prediction_id in ambiguous_predictions:
+            continue
         inputs = inputs_by_prediction.get(example.prediction_id)
         if inputs is None:
             excluded.append({"prediction_id": example.prediction_id, "reason": "feature_inputs_missing"})
@@ -94,6 +120,9 @@ def build_training_samples_from_feedback(
                 target_bps=example.net_return_bps,
                 partition=partition,
                 source_refs=example.source_refs,
+                outcome_id=example.outcome_id or example.prediction_id,
+                outcome_kind=example.outcome_kind,
+                action_id=example.action_id,
             )
         )
     return FeedbackTrainingBuild(tuple(samples), tuple(excluded))

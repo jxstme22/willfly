@@ -1,5 +1,47 @@
 # Implementation log
 
+## Batch 2026-09-14 — feedback lineage and connectome-output bridge
+
+### Task status
+
+- B3/B4 — IN_PROGRESS: feedback examples now carry outcome and manual-action
+  identity; ambiguous multiple outcomes are retained for audit but excluded
+  from training rather than merged.
+- B6/B8 — IN_PROGRESS: one serialized connectome experiment metric can now be
+  exported as a typed model-output bundle for the existing research-only signal
+  builder. Signal/action and calibration gates remain open.
+
+### Changes
+
+- Added `outcome_id`, `action_id` and prediction horizon metadata to feedback
+  examples and training-report rows.
+- Made maturation consider all outcomes available by the cutoff, so a later
+  unresolved outcome cannot hide an earlier ready label.
+- Added `willfly model-output`, which selects one `fly`/control metric from a
+  `connectome-experiment.v0.1` result, carries graph/run/resource lineage and
+  writes the existing model-output schema. Actions remain an explicit input;
+  waiting experiments produce no outputs.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest -q tests/test_feedback_store.py tests/test_laboratory.py tests/test_model_outputs.py tests/test_cli.py -k 'feedback or model_output or watcher'
+  passed (12 tests)
+```
+
+The tests prove distinct manual/market outcomes, conservative ambiguous-label
+exclusion, restart-safe maturation and the connectome-result-to-output-file
+bridge. They do not establish live labels, model quality, calibration or
+economic readiness.
+
+### Blockers and next dependency-ready slice
+
+Live zero-personal-trade observation-to-evaluation evidence, chronological
+held-out coverage and timed release gates remain open. The next independent
+slice is to exercise the emitted output through `signal-build` and the fresh
+process dashboard/API path, then continue with remaining packaging or evidence
+work without changing research-only status.
+
 ## Batch 2026-09-13 — P0-01 through P1-02 foundation
 
 ### Task status

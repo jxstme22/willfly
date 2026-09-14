@@ -30,6 +30,12 @@ class FeedbackExample:
     eligible_for_training: bool
     reason_flags: tuple[str, ...]
     source_refs: tuple[str, ...]
+    # These fields make the outcome lineage explicit at the training boundary.
+    # Defaults preserve compatibility with small hand-built fixtures from the
+    # earlier contract revision; persisted domain records always populate them.
+    outcome_id: str = ""
+    action_id: str | None = None
+    horizon_seconds: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +51,9 @@ class FeedbackExample:
             "eligible_for_training": self.eligible_for_training,
             "reason_flags": list(self.reason_flags),
             "source_refs": list(self.source_refs),
+            "outcome_id": self.outcome_id,
+            "action_id": self.action_id,
+            "horizon_seconds": self.horizon_seconds,
         }
 
 
@@ -137,6 +146,9 @@ def build_feedback_dataset(
                 eligible_for_training=eligible,
                 reason_flags=tuple(dict.fromkeys(reasons)),
                 source_refs=tuple(dict.fromkeys((*prediction.source_refs, *outcome.source_refs))),
+                outcome_id=outcome.outcome_id,
+                action_id=outcome.action_id,
+                horizon_seconds=prediction.horizon_seconds,
             )
         )
     if not prediction_by_id:

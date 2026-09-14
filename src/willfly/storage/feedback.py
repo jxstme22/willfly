@@ -170,7 +170,7 @@ class FeedbackStore:
         if cutoff.tzinfo is None:
             raise ValueError("as_of_time must include a timezone")
         outcomes = self.list_outcomes()
-        by_prediction: dict[str, OutcomeRecord] = {}
+        by_prediction: dict[str, list[OutcomeRecord]] = {}
         for outcome in outcomes:
             available = (
                 datetime.fromisoformat(outcome.label_available_at.replace("Z", "+00:00"))
@@ -178,16 +178,24 @@ class FeedbackStore:
                 else None
             )
             if available is not None and available <= cutoff:
-                by_prediction[outcome.prediction_id] = outcome
+                by_prediction.setdefault(outcome.prediction_id, []).append(outcome)
         rows = self._connection.execute("SELECT * FROM maturation_queue ORDER BY due_at, prediction_id").fetchall()
         updated: list[QueueItem] = []
         now = datetime.now(timezone.utc).isoformat()
         with self._connection:
             for row in rows:
                 due = datetime.fromisoformat(row["due_at"].replace("Z", "+00:00"))
-                outcome = by_prediction.get(row["prediction_id"])
-                if outcome is not None:
-                    state = "ready" if outcome.status in {"observed", "censored"} else "unresolved"
+                available_outcomes = by_prediction.get(row["prediction_id"], [])
+                if available_outcomes:
+                    # A prediction may have an observed-market label and a
+                    # separately recorded manual/counterfactual outcome. The
+                    # queue is ready when any available outcome is trainable;
+                    # the dataset keeps each outcome distinct for review.
+                    state = (
+                        "ready"
+                        if any(outcome.status in {"observed", "censored"} for outcome in available_outcomes)
+                        else "unresolved"
+                    )
                     reason = None if state == "ready" else "outcome_unresolved_or_invalidated"
                 elif due <= cutoff:
                     state, reason = "missing", "label_due_without_available_outcome"

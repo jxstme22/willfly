@@ -5,6 +5,7 @@ import pytest
 from willfly.domain import OutcomeRecord
 from willfly.domain.signal_contracts import Confidence, InstrumentIdentity, PortfolioContext, PredictionRecord
 from willfly.features.feedback import build_feedback_dataset
+from willfly.models.laboratory import build_training_samples_from_feedback
 from willfly.storage.feedback import FeedbackStore
 
 
@@ -103,3 +104,44 @@ def test_prediction_payload_is_immutable(tmp_path) -> None:
         store.record_predictions([_prediction("p1")])
         with pytest.raises(ValueError, match="immutable"):
             store.record_predictions([replace(_prediction("p1"), model_version="different")])
+
+
+def test_distinct_outcomes_are_retained_but_never_merged_into_one_training_sample() -> None:
+    prediction = _prediction("p1")
+    observed = _outcome("market", "p1", kind="observed_market", value=80)
+    manual = OutcomeRecord(
+        "manual",
+        "p1",
+        "spot_entry_net_return",
+        "actual_manual",
+        "observed",
+        "2026-09-14T00:05:00Z",
+        "2026-09-14T00:05:02Z",
+        75,
+        ("receipt:manual",),
+        "action-1",
+    )
+    dataset = build_feedback_dataset([prediction], [observed, manual], as_of_time="2026-09-14T00:06:00Z")
+    assert {(example.outcome_id, example.outcome_kind, example.action_id) for example in dataset.examples} == {
+        ("market", "observed_market", None),
+        ("manual", "actual_manual", "action-1"),
+    }
+
+    build = build_training_samples_from_feedback(
+        dataset,
+        {"p1": {"node-a": 0.5}},
+        partitions_by_prediction={"p1": "train"},
+    )
+    assert build.samples == ()
+    assert len(build.excluded) == 2
+    assert {item["reason"] for item in build.excluded} == {"multiple_eligible_outcomes_for_prediction"}
+
+
+def test_maturation_does_not_let_a_later_unresolved_outcome_hide_a_ready_one(tmp_path) -> None:
+    prediction = _prediction("p1")
+    ready = _outcome("market", "p1", kind="observed_market", value=80)
+    unresolved = _outcome("counterfactual", "p1", status="unresolved", kind="simulated_counterfactual", value=None)
+    with FeedbackStore(tmp_path) as store:
+        store.record_predictions([prediction])
+        store.record_outcomes([ready, unresolved])
+        assert store.mature(as_of_time="2026-09-14T00:06:00Z")[0].state == "ready"

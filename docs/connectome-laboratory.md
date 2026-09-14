@@ -42,3 +42,30 @@ load or train the graph.
   --as-of-time 2026-09-14T00:06:00Z \
   --seeds 7,17,27
 ```
+
+The completed result for one selected seed can be carried into the signal
+boundary without hand-copying predictions. First save the training JSON
+report, then provide a typed prediction-template bundle and an explicit action
+map:
+
+```text
+.venv/bin/willfly model-output \
+  --experiment-report /path/to/training-report.json \
+  --templates /path/to/prediction-templates.json \
+  --output /path/to/model-output.json \
+  --model-id male-cns-readout \
+  --model-version candidate-v2 \
+  --run-ref run:malecns-feedback-seed-7 \
+  --as-of-time 2026-09-14T00:06:00Z \
+  --run-id malecns-feedback-1-100000-seed-7 \
+  --actions /path/to/actions.json
+.venv/bin/willfly signal-build \
+  --input /path/to/model-output.json \
+  --output /path/to/signals.json
+```
+
+`model-output` selects the named `fly` metric from the hash-bound experiment
+report and carries graph, seed-run and resource lineage into `training_state`.
+It never derives an action, confidence, calibration or economic readiness. A
+waiting experiment writes an empty output list, so the following signal build
+cannot display a fabricated prediction.

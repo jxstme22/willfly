@@ -37,6 +37,13 @@ report without changing the active model:
 `--record` consumes the final-test identity in the registry but never promotes
 the candidate. Promotion remains a separate guarded operation after review.
 
+The connectome laboratory can feed the signal boundary through the explicit
+`willfly model-output` command. It selects one seed/model metric from a
+`connectome-experiment.v0.1` result, preserves the experiment report hash and
+graph/run metadata, and emits the existing model-output schema for
+`signal-build`. The action map is still operator-supplied; no score is turned
+into a trade instruction automatically.
+
 The implementation is fixture-backed. Prospective forward windows, untouched
 production holdout, calibration, resource scheduling and a live model release
 remain open B8/B9/B10 gates.
