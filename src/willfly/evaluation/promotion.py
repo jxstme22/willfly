@@ -39,6 +39,47 @@ class PredictionPoint:
         if not self.source_refs:
             raise ValueError("prediction point requires source_refs")
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "prediction_id": self.prediction_id,
+            "model_version": self.model_version,
+            "market": self.market,
+            "window_id": self.window_id,
+            "split": self.split,
+            "observed_at": self.observed_at,
+            "predicted_bps": self.predicted_bps,
+            "target_bps": self.target_bps,
+            "source_refs": list(self.source_refs),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PredictionPoint":
+        if not isinstance(data, Mapping):
+            raise ValueError("prediction point must be an object")
+        identity_fields = ("prediction_id", "model_version", "market", "window_id", "split", "observed_at")
+        if any(not isinstance(data.get(field), str) or not data[field] for field in identity_fields):
+            raise ValueError("prediction point identity fields are invalid")
+        source_refs = data.get("source_refs")
+        if not isinstance(source_refs, list) or any(not isinstance(value, str) or not value for value in source_refs):
+            raise ValueError("prediction point source_refs must be a list")
+        predicted_bps = data.get("predicted_bps")
+        target_bps = data.get("target_bps")
+        if isinstance(predicted_bps, bool) or not isinstance(predicted_bps, (int, float)):
+            raise ValueError("prediction point predicted_bps must be numeric")
+        if isinstance(target_bps, bool) or not isinstance(target_bps, int):
+            raise ValueError("prediction point target_bps must be an integer")
+        return cls(
+            data["prediction_id"],
+            data["model_version"],
+            data["market"],
+            data["window_id"],
+            data["split"],
+            data["observed_at"],
+            predicted_bps,
+            target_bps,
+            tuple(str(value) for value in source_refs),
+        )
+
 
 @dataclass(frozen=True)
 class WindowScore:
@@ -201,6 +242,16 @@ class ModelRegistry:
     def history(self) -> tuple[dict[str, Any], ...]:
         value = self._get("history") or []
         return tuple(dict(item) for item in value)
+
+    def status(self) -> dict[str, Any]:
+        """Return the durable active-version state for operator inspection."""
+
+        return {
+            "active_version": self.active_version,
+            "known_versions": list(self._get("known_versions") or []),
+            "consumed_final_test_count": len(self._get("consumed_final_tests") or []),
+            "history": list(self.history()),
+        }
 
     def record_evaluation(self, report: CandidateEvaluation) -> None:
         consumed = list(self._get("consumed_final_tests") or [])

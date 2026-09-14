@@ -40,6 +40,7 @@ from willfly.ingest.runner import (
 )
 from willfly.features.discovery import PoolProjection
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
+from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
 from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowRunner
@@ -174,6 +175,72 @@ def _load_signal_store(path: Path) -> dict[str, Any]:
         "signal_as_of_time": as_of_time,
         "market_readiness": readiness,
         "training_state": training_state,
+    }
+
+
+def _load_prediction_points(path: Path) -> tuple[PredictionPoint, ...]:
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.prediction-points.v0.1":
+        raise ValueError("prediction points schema version is unsupported")
+    raw_points = payload.get("points")
+    if not isinstance(raw_points, list):
+        raise ValueError("prediction points must be an array")
+    return tuple(PredictionPoint.from_dict(item) for item in raw_points)
+
+
+def _evaluate_model(
+    *,
+    points_path: Path,
+    candidate_version: str,
+    active_version: str,
+    evaluated_at: str,
+    dataset_hash: str,
+    minimum_forward_windows: int,
+    minimum_points_per_window: int,
+    registry_path: Path | None,
+    record: bool,
+) -> dict[str, Any]:
+    if record and registry_path is None:
+        raise ValueError("--registry is required with --record")
+    points = _load_prediction_points(points_path)
+    report = evaluate_candidate(
+        points,
+        candidate_version=candidate_version,
+        active_version=active_version,
+        evaluated_at=evaluated_at,
+        dataset_hash=dataset_hash,
+        minimum_forward_windows=minimum_forward_windows,
+        minimum_points_per_window=minimum_points_per_window,
+    )
+    if record:
+        assert registry_path is not None
+        with ModelRegistry(registry_path, initial_active_version=active_version) as registry:
+            if registry.active_version != active_version:
+                raise ValueError("registry active version does not match evaluation input")
+            registry.record_evaluation(report)
+    return {
+        "status": report.decision,
+        "recorded": record,
+        "report": report.to_dict(),
+        "points_file": str(points_path),
+        "points_file_hash": _config_hash(points_path),
+        "registry": None if registry_path is None else str(registry_path),
+        "operating_mode": "read_only",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _model_status(*, registry_path: Path, initial_active_version: str) -> dict[str, Any]:
+    with ModelRegistry(registry_path, initial_active_version=initial_active_version) as registry:
+        status = registry.status()
+    return {
+        "status": "ready",
+        "registry": str(registry_path),
+        "state": status,
+        "operating_mode": "read_only",
+        "signing": False,
+        "broadcast": False,
     }
 
 
@@ -913,6 +980,23 @@ def build_parser() -> argparse.ArgumentParser:
     watcher_status = subparsers.add_parser("watcher-status", help="read persisted learning watcher state")
     watcher_status.add_argument("--config", type=Path, default=ROOT / "configs/learning/watcher-v0.1.json")
     watcher_status.add_argument("--state-db", type=Path, required=True)
+
+    model_evaluate = subparsers.add_parser("model-evaluate", help="evaluate a candidate model against an active model")
+    model_evaluate.add_argument("--points", type=Path, required=True, help="versioned prediction-point JSON bundle")
+    model_evaluate.add_argument("--candidate-version", required=True)
+    model_evaluate.add_argument("--active-version", required=True)
+    model_evaluate.add_argument("--evaluated-at", required=True, help="timezone-aware RFC-3339 evaluation time")
+    model_evaluate.add_argument("--dataset-hash", required=True)
+    model_evaluate.add_argument("--minimum-forward-windows", type=int, default=2)
+    model_evaluate.add_argument("--minimum-points-per-window", type=int, default=2)
+    model_evaluate.add_argument("--registry", type=Path, default=None)
+    model_evaluate.add_argument(
+        "--record", action="store_true", help="record the evaluation in the supplied model registry; never promotes"
+    )
+
+    model_status = subparsers.add_parser("model-status", help="inspect the durable model registry")
+    model_status.add_argument("--registry", type=Path, required=True)
+    model_status.add_argument("--initial-active-version", required=True)
     return parser
 
 
@@ -1015,6 +1099,20 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "watcher-status":
             result = _watcher_status(config_path=args.config, state_db=args.state_db)
+        elif args.command == "model-evaluate":
+            result = _evaluate_model(
+                points_path=args.points,
+                candidate_version=args.candidate_version,
+                active_version=args.active_version,
+                evaluated_at=args.evaluated_at,
+                dataset_hash=args.dataset_hash,
+                minimum_forward_windows=args.minimum_forward_windows,
+                minimum_points_per_window=args.minimum_points_per_window,
+                registry_path=args.registry,
+                record=args.record,
+            )
+        elif args.command == "model-status":
+            result = _model_status(registry_path=args.registry, initial_active_version=args.initial_active_version)
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:
@@ -1067,7 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["status"] == "completed" else 1
     if args.command == "operator-check":
         return 0 if result["status"] == "ready" else 1
-    if args.command in {"watcher-tick", "watcher-status"}:
+    if args.command in {"watcher-tick", "watcher-status", "model-evaluate", "model-status"}:
         return 0
     if args.command in {"capture", "backfill"}:
         if result.get("status") == "plan_only":

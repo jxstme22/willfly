@@ -1,6 +1,7 @@
 import json
 
 from willfly.cli import _load_signal_store, main
+from willfly.evaluation.promotion import PredictionPoint
 from willfly.shadow.config import freeze_shadow_config
 from willfly.storage import RawBatchStore
 
@@ -273,3 +274,70 @@ def test_signal_snapshot_loader_accepts_typed_empty_read_only_bundle(tmp_path):
     assert loaded["predictions"] == ()
     assert loaded["proposals"] == ()
     assert loaded["training_state"]["status"] == "waiting"
+
+
+def test_model_evaluate_records_comparison_without_promoting(tmp_path, capsys):
+    points = []
+    for model_version, predicted in (("candidate-v2", 1.0), ("active-v1", 3.0)):
+        points.append(
+            PredictionPoint(
+                f"forward-{model_version}",
+                model_version,
+                "spot",
+                "forward-1",
+                "forward",
+                "2026-01-01T00:00:00Z",
+                predicted,
+                1,
+                ("market:1",),
+            ).to_dict()
+        )
+        points.append(
+            PredictionPoint(
+                f"final-{model_version}",
+                model_version,
+                "spot",
+                "final",
+                "final_test",
+                "2026-01-01T01:00:00Z",
+                predicted,
+                1,
+                ("market:final",),
+            ).to_dict()
+        )
+    points_path = tmp_path / "points.json"
+    points_path.write_text(
+        json.dumps({"schema_version": "willfly.prediction-points.v0.1", "points": points}), encoding="utf-8"
+    )
+    registry = tmp_path / "models.sqlite3"
+    command = [
+        "model-evaluate",
+        "--points",
+        str(points_path),
+        "--candidate-version",
+        "candidate-v2",
+        "--active-version",
+        "active-v1",
+        "--evaluated-at",
+        "2026-01-01T02:00:00Z",
+        "--dataset-hash",
+        "dataset-1",
+        "--minimum-forward-windows",
+        "1",
+        "--minimum-points-per-window",
+        "1",
+        "--registry",
+        str(registry),
+        "--record",
+    ]
+    assert main(command) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "qualified"
+    assert result["recorded"] is True
+    assert len(result["report"]["active_forward_scores"]) == 1
+    assert result["report"]["active_final_test_scores"][0]["mae_bps"] == 2.0
+
+    assert main(["model-status", "--registry", str(registry), "--initial-active-version", "active-v1"]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["state"]["active_version"] == "active-v1"
+    assert status["state"]["consumed_final_test_count"] == 1

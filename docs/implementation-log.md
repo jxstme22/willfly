@@ -802,6 +802,11 @@ the signal contracts before being attached to the local API/dashboard, with
 readiness gates and training state preserved; an absent bundle remains an
 honest empty inbox. No live model-output or economic qualification is inferred.
 
+Added `model-evaluate` and `model-status` CLI surfaces around the B8 evaluator
+and registry. A controlled one-window candidate/active comparison was recorded
+as `qualified` with both score sets retained while the active version remained
+unchanged; this is a mechanics check, not live forward or calibration evidence.
+
 
 ## 2026-09-14 — B10 release capability audit
 
