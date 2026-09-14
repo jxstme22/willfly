@@ -41,8 +41,10 @@ The connectome laboratory can feed the signal boundary through the explicit
 `willfly model-output` command. It selects one seed/model metric from a
 `connectome-experiment.v0.1` result, preserves the experiment report hash and
 graph/run metadata, and emits the existing model-output schema for
-`signal-build`. The action map is still operator-supplied; no score is turned
-into a trade instruction automatically.
+`signal-build`. Experiment rows retain their validation/test partition, and
+final-test predictions are excluded from the signal bundle to keep the
+evaluation holdout untouched. The action map is still operator-supplied; no
+score is turned into a trade instruction automatically.
 
 The implementation is fixture-backed. Prospective forward windows, untouched
 production holdout, calibration, resource scheduling and a live model release

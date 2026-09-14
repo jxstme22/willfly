@@ -46,7 +46,7 @@ def _experiment(status: str = "completed") -> dict[str, object]:
         "models": [
             {
                 "model_name": "fly",
-                "predictions": [["feedback:prediction-1", 123.4, 110]],
+                "predictions": [["feedback:prediction-1", 123.4, 110, "validation"]],
             }
         ]
         if status == "completed"
@@ -71,6 +71,22 @@ def test_completed_experiment_metric_becomes_lineaged_model_output_bundle():
     assert bundle["training_state"]["experiment_report_hash"] == "b" * 64
     assert bundle["actions_by_prediction"] == {"prediction-1": "enter"}
     assert bundle["market_readiness"] == {"spot": "research_only", "lp": "research_only"}
+
+
+def test_final_test_rows_are_not_exported_as_signal_outputs():
+    experiment = _experiment()
+    experiment["models"][0]["predictions"].append(["feedback:final", 90.0, 80, "test"])
+    bundle = build_model_output_bundle(
+        experiment,
+        [_template()],
+        model_name="fly",
+        model_id="male-cns-readout",
+        model_version="candidate-v2",
+        run_ref="run:seed-7",
+        as_of_time="2026-09-14T00:01:00Z",
+    )
+    assert bundle["outputs"] == [{"sample_id": "feedback:prediction-1", "predicted_bps": 123.4}]
+    assert bundle["training_state"]["excluded_final_test_output_count"] == 1
 
 
 def test_waiting_experiment_exports_no_predictions_and_preserves_reason():

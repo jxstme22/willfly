@@ -41,6 +41,14 @@ The scheduled queue state is now exposed by `watcher-status` as pending task
 rows plus per-stage `scheduled_slots`; a null slot is reported as “never
 scheduled,” not as healthy operation.
 
+The connectome-output bridge was then tightened so experiment prediction rows
+carry their validation/test partition and `model-output` excludes final-test
+rows from signal generation. The report retains them for evaluation; no
+holdout prediction is silently reused as a displayed research signal.
+
+Final verification after this guard: the full suite passed 228 tests with two
+sandbox loopback skips; planning and whitespace checks remained clean.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status

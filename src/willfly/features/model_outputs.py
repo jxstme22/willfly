@@ -65,18 +65,26 @@ def build_model_output_bundle(
         if not isinstance(raw_predictions, list):
             raise ValueError("experiment model predictions must be an array")
         seen: set[str] = set()
+        excluded_output_count = 0
         for row in raw_predictions:
-            if not isinstance(row, list) or len(row) != 3:
-                raise ValueError("experiment model prediction rows must be [sample_id, prediction, target]")
-            sample_id, predicted_bps, _target_bps = row
+            if not isinstance(row, list) or len(row) != 4:
+                raise ValueError("experiment model prediction rows must be [sample_id, prediction, target, partition]")
+            sample_id, predicted_bps, _target_bps, partition = row
             if not isinstance(sample_id, str) or not sample_id:
                 raise ValueError("experiment model prediction sample_id is required")
+            if partition not in {"validation", "test"}:
+                raise ValueError("experiment model prediction partition is invalid")
             if sample_id in seen:
                 raise ValueError("experiment model prediction sample IDs must be unique")
             if isinstance(predicted_bps, bool) or not isinstance(predicted_bps, (int, float)) or not math.isfinite(float(predicted_bps)):
                 raise ValueError("experiment model prediction must be finite numeric")
             seen.add(sample_id)
+            if partition == "test":
+                excluded_output_count += 1
+                continue
             outputs.append({"sample_id": sample_id, "predicted_bps": predicted_bps})
+    else:
+        excluded_output_count = 0
 
     training_state: dict[str, Any] = {
         "status": status,
@@ -88,6 +96,7 @@ def build_model_output_bundle(
         "resource_seconds": experiment.get("resource_seconds"),
         "checkpoint_path": experiment.get("checkpoint_path"),
         "reasons": list(experiment.get("reasons", [])),
+        "excluded_final_test_output_count": excluded_output_count,
     }
     if source_hash is not None:
         if not isinstance(source_hash, str) or not source_hash:

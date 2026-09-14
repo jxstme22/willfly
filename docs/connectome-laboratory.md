@@ -66,6 +66,8 @@ map:
 
 `model-output` selects the named `fly` metric from the hash-bound experiment
 report and carries graph, seed-run and resource lineage into `training_state`.
-It never derives an action, confidence, calibration or economic readiness. A
-waiting experiment writes an empty output list, so the following signal build
-cannot display a fabricated prediction.
+Experiment prediction rows carry their `validation`/`test` partition;
+final-test rows are retained in the report but are not exported as signal
+outputs. It never derives an action, confidence, calibration or economic
+readiness. A waiting experiment writes an empty output list, so the following
+signal build cannot display a fabricated prediction.

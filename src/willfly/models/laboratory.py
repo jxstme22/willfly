@@ -154,7 +154,7 @@ class ModelMetric:
     train_count: int
     heldout_count: int
     mae_bps: float | None
-    predictions: tuple[tuple[str, float, int], ...]
+    predictions: tuple[tuple[str, float, int, str], ...]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -295,7 +295,12 @@ def run_connectome_experiment(
         train_rows = [ReadoutRow(state_rows[model_name][sample.sample_id], float(sample.target_bps)) for sample in train]
         readout = FrozenReadout.fit(train_rows, graph_hash_value=graph_hash(model_graph), l2=config.l2)
         predictions = tuple(
-            (sample.sample_id, readout.predict(state_rows[model_name][sample.sample_id]), sample.target_bps)
+            (
+                sample.sample_id,
+                readout.predict(state_rows[model_name][sample.sample_id]),
+                sample.target_bps,
+                sample.partition,
+            )
             for sample in heldout
         )
         metrics.append(_metric(model_name, graph_hash(model_graph), len(train), predictions))
@@ -315,11 +320,21 @@ def run_connectome_experiment(
     ]
     ordinary = LinearBaseline.fit([row for row in ordinary_rows if row.row_id in train_ids], l2=config.l2, seed=config.seed)
     no_state_predictions = tuple(
-        (sample.sample_id, no_state.predict(tuple(float(sample.inputs.get(name, 0.0)) for name in feature_names)), sample.target_bps)
+        (
+            sample.sample_id,
+            no_state.predict(tuple(float(sample.inputs.get(name, 0.0)) for name in feature_names)),
+            sample.target_bps,
+            sample.partition,
+        )
         for sample in heldout
     )
     ordinary_predictions = tuple(
-        (sample.sample_id, ordinary.predict((sum(sample.inputs.values()) / len(sample.inputs),)), sample.target_bps)
+        (
+            sample.sample_id,
+            ordinary.predict((sum(sample.inputs.values()) / len(sample.inputs),)),
+            sample.target_bps,
+            sample.partition,
+        )
         for sample in heldout
     )
     metrics.extend(
@@ -341,8 +356,13 @@ def run_connectome_experiment(
     )
 
 
-def _metric(model_name: str, model_hash: str | None, train_count: int, predictions: tuple[tuple[str, float, int], ...]) -> ModelMetric:
-    mae = sum(abs(predicted - target) for _, predicted, target in predictions) / len(predictions) if predictions else None
+def _metric(
+    model_name: str,
+    model_hash: str | None,
+    train_count: int,
+    predictions: tuple[tuple[str, float, int, str], ...],
+) -> ModelMetric:
+    mae = sum(abs(predicted - target) for _, predicted, target, _partition in predictions) / len(predictions) if predictions else None
     return ModelMetric(model_name, model_hash, train_count, len(predictions), mae, predictions)
 
 
