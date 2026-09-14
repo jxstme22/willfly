@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 from willfly.cli import _load_signal_store, main
 from willfly.domain import Confidence, InstrumentIdentity, PortfolioContext, PredictionRecord
@@ -72,6 +73,19 @@ def test_invalid_action_is_excluded_by_frozen_signal_contract():
     assert len(built.predictions) == 1
     assert built.proposals == ()
     assert built.excluded == ({"sample_id": "prediction-1", "reason": "proposal_contract_invalid"},)
+
+
+def test_proposal_ttl_is_capped_for_long_horizon_prediction_templates():
+    built = build_research_signals(
+        [replace(_template(), expires_at="2026-09-14T00:05:00Z")],
+        [("prediction-1", 50.0)],
+        model_id="male-cns-readout",
+        model_version="candidate-v2",
+        run_ref="run:candidate-v2",
+        actions_by_prediction={"prediction-1": "enter"},
+    )
+    assert len(built.proposals) == 1
+    assert built.proposals[0].expires_at == "2026-09-14T00:00:15+00:00"
 
 
 def test_signal_build_cli_writes_bundle_consumable_by_server_loader(tmp_path, capsys):

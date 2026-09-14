@@ -6,10 +6,12 @@ transport can be injected for deterministic tests and offline fixtures.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
+import threading
 import time
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -37,6 +39,7 @@ class WrongChainError(JsonRpcError):
 
 
 Transport = Callable[[str, list[Any]], Mapping[str, Any]]
+_CACHE_MISS = object()
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,9 @@ class ReadOnlyRpcClient:
         self.backoff_seconds = backoff_seconds
         self._transport = transport
         self._request_id = 0
+        self._request_id_lock = threading.Lock()
+        self._block_cache_lock = threading.Lock()
+        self._block_cache: dict[int, Mapping[str, Any] | None] = {}
 
     def request(self, method: str, params: list[Any] | None = None) -> Any:
         if method not in READ_METHODS:
@@ -118,10 +124,12 @@ class ReadOnlyRpcClient:
         return any(marker in text for marker in ("rate", "timeout", "tempor", "unavailable"))
 
     def _call_transport(self, method: str, params: list[Any]) -> Mapping[str, Any]:
-        self._request_id += 1
+        with self._request_id_lock:
+            self._request_id += 1
+            request_id = self._request_id
         if self._transport is not None:
             return self._transport(method, params)
-        body = json.dumps({"jsonrpc": "2.0", "id": self._request_id, "method": method, "params": params}).encode()
+        body = json.dumps({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}).encode()
         request = Request(
             self.endpoint,
             data=body,
@@ -147,7 +155,41 @@ class ReadOnlyRpcClient:
     def block(self, block_number: int) -> Mapping[str, Any]:
         if block_number < 0:
             raise ValueError("block number must be non-negative")
-        return self.request("eth_getBlockByNumber", [hex(block_number), False])
+        with self._block_cache_lock:
+            cached = self._block_cache.get(block_number, _CACHE_MISS)
+        if cached is not _CACHE_MISS:
+            if cached is None:
+                raise JsonRpcError(f"header for block {block_number} is null")
+            return cached
+        result = self.request("eth_getBlockByNumber", [hex(block_number), False])
+        if result is None:
+            with self._block_cache_lock:
+                self._block_cache[block_number] = None
+            raise JsonRpcError(f"header for block {block_number} is null")
+        if not isinstance(result, Mapping):
+            raise JsonRpcError(f"header for block {block_number} is not an object")
+        with self._block_cache_lock:
+            self._block_cache[block_number] = result
+        return result
+
+    def prefetch_blocks(self, block_numbers: Iterable[int], *, max_workers: int = 8) -> dict[int, Mapping[str, Any]]:
+        """Fetch each missing page header concurrently, within a small bound."""
+
+        unique = sorted({int(number) for number in block_numbers})
+        if not unique:
+            return {}
+        if max_workers <= 0:
+            raise ValueError("max_workers must be positive")
+        worker_count = min(max_workers, len(unique))
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="willfly-rpc") as pool:
+            headers = list(pool.map(lambda number: self.block(number), unique))
+        return dict(zip(unique, headers))
+
+    def clear_block_cache(self) -> None:
+        """Drop bounded page-local header reuse before the next page."""
+
+        with self._block_cache_lock:
+            self._block_cache.clear()
 
     def validated_header(self, block_number: int) -> "BlockHeader":
         """Return a strictly validated header for canonical-ancestry work.

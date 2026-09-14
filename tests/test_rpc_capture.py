@@ -110,3 +110,37 @@ def test_zero_block_timestamp_is_treated_as_unavailable():
         address=V4, from_block=100, to_block=100
     )[0]
     assert log.block_timestamp is None
+
+
+def test_block_header_cache_is_page_scoped_and_clearable():
+    calls: list[str] = []
+
+    def transport(method: str, params: list[Any]):
+        calls.append(method)
+        if method == "eth_getBlockByNumber":
+            return {"result": {"number": params[0], "hash": BLOCK, "parentHash": BLOCK, "timestamp": "0x1"}}
+        raise AssertionError(method)
+
+    client = ReadOnlyRpcClient("https://fixture.invalid", transport=transport, backoff_seconds=0)
+    client.block(100)
+    client.block(100)
+    assert calls == ["eth_getBlockByNumber"]
+    client.clear_block_cache()
+    client.block(100)
+    assert calls == ["eth_getBlockByNumber", "eth_getBlockByNumber"]
+
+
+def test_prefetch_blocks_fetches_each_unique_header_once():
+    calls: list[int] = []
+
+    def transport(method: str, params: list[Any]):
+        if method != "eth_getBlockByNumber":
+            raise AssertionError(method)
+        calls.append(int(params[0], 16))
+        number = params[0]
+        return {"result": {"number": number, "hash": BLOCK, "parentHash": BLOCK, "timestamp": "0x1"}}
+
+    client = ReadOnlyRpcClient("https://fixture.invalid", transport=transport, backoff_seconds=0)
+    headers = client.prefetch_blocks([100, 100, 101], max_workers=2)
+    assert set(headers) == {100, 101}
+    assert sorted(calls) == [100, 101]

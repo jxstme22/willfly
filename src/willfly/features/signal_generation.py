@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 import math
 from typing import Any, Iterable, Mapping
 
@@ -111,6 +112,11 @@ def build_research_signals(
         exit_kind = exit_kinds.get(template_id)
         market = "spot" if template.instrument.kind == "token" else "lp"
         try:
+            proposal_expires_at = min(
+                datetime.fromisoformat(template.expires_at.replace("Z", "+00:00")),
+                datetime.fromisoformat(template.created_at.replace("Z", "+00:00"))
+                + timedelta(seconds=contract.proposal_ttl_seconds),
+            ).isoformat()
             proposal = SignalProposal(
                 proposal_id=f"{model_version}:proposal:{template.prediction_id}",
                 prediction_id=prediction_id,
@@ -121,7 +127,7 @@ def build_research_signals(
                 exit_kind=exit_kind,
                 instrument=template.instrument,
                 created_at=template.created_at,
-                expires_at=template.expires_at,
+                expires_at=proposal_expires_at,
                 model_version=model_version,
                 confidence=confidence,
                 portfolio_context=template.portfolio_context,

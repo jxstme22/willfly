@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Mapping
 
 from willfly.adapters.robinhood_rpc import JsonRpcError, ReadOnlyRpcClient, RpcLog
 from willfly.domain import RawEvent
@@ -153,8 +153,23 @@ def backfill_range(
         raise BackfillError("backfill requires Robinhood chain 4663")
     now = clock or (lambda: datetime.now(timezone.utc).isoformat())
     checkpoint = checkpoint_store.get(source) if checkpoint_store is not None else None
-    if checkpoint is not None and (checkpoint.start_block != start_block or checkpoint.target_block != target_block):
+    if checkpoint is not None and checkpoint.start_block != start_block:
         raise BackfillError("checkpoint range does not match requested backfill")
+    if checkpoint is not None and checkpoint.target_block != target_block:
+        can_extend = checkpoint.target_block < target_block and checkpoint.next_block > checkpoint.target_block
+        if not can_extend:
+            raise BackfillError("checkpoint range does not match requested backfill")
+        checkpoint = BackfillCheckpoint(
+            checkpoint.source,
+            checkpoint.start_block,
+            target_block,
+            checkpoint.next_block,
+            checkpoint.page_size,
+            checkpoint.updated_at,
+            checkpoint.filter_hash,
+        )
+        if checkpoint_store is not None:
+            checkpoint_store.save(checkpoint)
     if checkpoint is not None and expected_filter_hash is not None:
         if checkpoint.filter_hash != expected_filter_hash:
             raise BackfillError("checkpoint filter does not match requested backfill")
@@ -165,6 +180,9 @@ def backfill_range(
     page_sizes: list[int] = []
 
     while cursor <= target_block:
+        clear_cache = getattr(client, "clear_block_cache", None)
+        if callable(clear_cache):
+            clear_cache()
         end_block = min(cursor + current_page_size - 1, target_block)
         try:
             logs = client.logs(address=address, from_block=cursor, to_block=end_block, max_range=current_page_size)
@@ -175,7 +193,16 @@ def backfill_range(
             continue
         _validate_page(logs, cursor, end_block)
         received_at = now()
+        missing_blocks = sorted({log.block_number for log in logs if log.block_timestamp is None})
+        prefetch_blocks = getattr(client, "prefetch_blocks", None)
         headers = {}
+        if missing_blocks and callable(prefetch_blocks):
+            prefetched = prefetch_blocks(missing_blocks)
+            headers = {
+                header["hash"]: header
+                for header in prefetched.values()
+                if isinstance(header, Mapping) and isinstance(header.get("hash"), str)
+            }
         resolved_logs = [client.resolve_log_time(log, headers) if log.block_timestamp is None else log for log in logs]
         page_events = tuple(_raw_event(log, run_id=run_id, source=source, received_at=received_at) for log in resolved_logs)
         if on_page is not None:
@@ -189,6 +216,8 @@ def backfill_range(
             checkpoint_store.save(
                 BackfillCheckpoint(source, start_block, target_block, cursor, current_page_size, now(), expected_filter_hash)
             )
+        if callable(clear_cache):
+            clear_cache()
     return BackfillResult(source, start_block, target_block, cursor, tuple(events), tuple(ranges), tuple(page_sizes))
 
 

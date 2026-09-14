@@ -163,6 +163,24 @@ def test_market_feedback_revises_unresolved_label_when_later_endpoint_arrives(tm
         assert [example.outcome_id for example in dataset.eligible_examples] == [early_outcome.outcome_id]
 
 
+def test_backfilled_endpoint_uses_arrival_time_for_causal_feedback() -> None:
+    lagged_events = [
+        replace(_initialize(), event_time="2026-01-01T00:00:00Z", received_time="2026-01-02T00:00:00Z"),
+        replace(_swap(1, 101, 1 << 96), event_time="2026-01-01T00:00:01Z", received_time="2026-01-02T00:00:01Z"),
+        replace(_swap(61, 161, 2 << 96), event_time="2026-01-01T00:01:01Z", received_time="2026-01-02T00:01:01Z"),
+    ]
+    corpus = build_market_feedback_corpus(
+        lagged_events,
+        as_of_time="2026-01-02T00:02:00Z",
+        source="fixture-source",
+        max_label_delay_seconds=0,
+    )
+    prediction = next(item for item in corpus.predictions if item.horizon_seconds == 60)
+    outcome = next(item for item in corpus.outcomes if item.prediction_id == prediction.prediction_id)
+    assert outcome.status == "observed"
+    assert outcome.observed_at == "2026-01-02T00:01:01Z"
+
+
 def test_raw_store_exposes_only_resolved_canonical_events(tmp_path) -> None:
     event = _swap(1, 101, 1 << 96)
     # A one-block genesis window gives the canonicalizer a real trusted

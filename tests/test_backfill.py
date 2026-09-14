@@ -98,6 +98,33 @@ def test_backfill_restart_resumes_after_last_checkpoint(tmp_path: Path):
         assert [event.logical_key for event in resumed.events] == [event.logical_key for event in uninterrupted.events]
 
 
+def test_backfill_extends_a_completed_checkpoint_without_replaying_prior_pages(tmp_path: Path):
+    logs = [_log(block) for block in range(1, 8)]
+    with BackfillCheckpointStore(tmp_path / "metadata.sqlite3") as checkpoints:
+        first = backfill_range(
+            FakeBackfillClient(logs),
+            address="0x" + "11" * 20,
+            start_block=1,
+            target_block=5,
+            page_size=2,
+            checkpoint_store=checkpoints,
+        )
+        assert first.complete
+        second_client = FakeBackfillClient(logs)
+        extended = backfill_range(
+            second_client,
+            address="0x" + "11" * 20,
+            start_block=1,
+            target_block=7,
+            page_size=2,
+            checkpoint_store=checkpoints,
+        )
+        assert extended.complete
+        assert extended.ranges == ((6, 7),)
+        assert second_client.calls == [(6, 7)]
+        assert checkpoints.get("robinhood_rpc_backfill").target_block == 7
+
+
 def test_backfill_surfaces_out_of_range_provider_rows(tmp_path: Path):
     class BadClient(FakeBackfillClient):
         def logs(self, *, address: str | list[str], from_block: int, to_block: int, max_range: int = 2000):

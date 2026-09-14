@@ -428,6 +428,7 @@ def build_market_feedback_corpus(
         },
         split_policy={
             "kind": "chronological_by_market_point",
+            "sort_key": "evidence_cutoff",
             "train_fraction": train_fraction,
             "validation_fraction": validation_fraction,
             "test_fraction": 1.0 - train_fraction - validation_fraction,
@@ -465,7 +466,11 @@ def _forward_outcome(
             target_id=prediction.target_id,
             outcome_kind="observed_market",
             status="observed",
-            observed_at=candidate.event_time,
+            # Historical backfills can arrive after the chain event timestamp
+            # (sometimes by a day).  The endpoint's arrival is the first time
+            # this label was observable to the operator, so using it keeps the
+            # feedback join causal without changing horizon matching.
+            observed_at=candidate.available_at,
             label_available_at=candidate.available_at,
             net_return_bps=_price_return_bps(point, candidate),
             source_refs=tuple(dict.fromkeys((*point.source_refs, *candidate.source_refs))),
@@ -500,7 +505,7 @@ def _chronological_partitions(
 ) -> dict[str, str]:
     point_ids = []
     seen: set[str] = set()
-    for prediction in sorted(predictions, key=lambda item: (item.created_at, item.prediction_id)):
+    for prediction in sorted(predictions, key=lambda item: (item.evidence_cutoff, item.created_at, item.prediction_id)):
         point_id = prediction.prediction_id.rsplit("|", 2)[0]
         if point_id not in seen:
             seen.add(point_id)
