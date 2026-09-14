@@ -58,3 +58,29 @@ def test_dashboard_renders_attached_model_registry_state():
     )
     assert "Model registry" in page
     assert "candidate-v2" in page
+
+
+def test_dashboard_escapes_untrusted_evidence_and_exposes_operator_controls():
+    launch = Launch(
+        4663,
+        "0x" + "1" * 40,
+        None,
+        None,
+        ("<script>alert('injected')</script>",),
+        None,
+        None,
+        "2026-01-01T00:00:00Z",
+        "unknown",
+        (),
+        "unknown",
+    )
+    snapshot = DiscoverySnapshot("2026-01-01T00:05:00Z", (launch,), (), 0, 1, (), "unknown", ("lineage:1",))
+    page = render_dashboard(snapshot)
+    assert "&lt;script&gt;alert(&#x27;injected&#x27;)&lt;/script&gt;" in page
+    assert "<script>alert('injected')</script>" not in page
+    assert 'id="search"' in page
+    assert 'id="pause"' in page
+    assert "Observed positions" in page
+    assert "Excluded evidence" in page
+    assert "encodeURIComponent(ref)" in page
+    assert "POST actions: rejected by read-only server" in page

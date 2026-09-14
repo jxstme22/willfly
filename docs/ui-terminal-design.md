@@ -61,6 +61,32 @@ Test keyboard-only operation and inspect desktop, tablet and narrow mobile layou
 
 Do not require trading buttons, wallet connection or funded execution to call this monitoring UI functional. Preserve the read-only scope. Keep the existing Python backend; a separate frontend framework is an implementation choice only if the required interactions justify it. Document any added build/deployment dependency.
 
+## M1-06 implementation checkpoint
+
+The local implementation now serves an escaped terminal monitor directly from
+the Python read-only server. The first response includes the persisted
+snapshot and explicit empty, unavailable and stale/degraded states. Its
+browser layer queries `/launches`, `/pools`, `/timelines`, `/signals`,
+`/positions`, `/exclusions`, `/actions` and `/health` using bounded cursor
+pagination. Search is applied to the returned contract fields before sorting
+and paging; filters, sort direction, view, page, selected detail and pause
+state are kept in URL parameters. A paused viewport keeps the last useful
+rows visible and reports pending rows when a refresh observes a newer page.
+
+Row details expose exact IDs and evidence references. Evidence is loaded only
+through the read-only `/evidence/<reference>` route, and copy controls use the
+exact text without formatting or numeric rounding. The client creates dynamic
+cells with `textContent`; server HTML and the inert initial-state JSON escape
+HTML-significant characters, including hostile metadata. `POST` requests are
+rejected with `405`.
+
+The model and training panes report attached state or `unavailable`; they do
+not infer metrics from an empty registry. The monitor remains display-only:
+no wallet connection, signer, trade route or execution control was added.
+Live evidence remains bounded by the supplied projection cutoff and source
+lineage. See [the UI checkpoint report](reports/luna-ui-checkpoint.md) for
+the verification record and remaining product limits.
+
 ## Implementation ownership
 
 The continuing implementation task owns the dashboard, API, JSON catalogue, rendered backlog and implementation log. Incorporate this requirement into M1-06 work/acceptance and later M3/M4 views without overwriting current changes. Keep advanced financial fields gated by their actual data/valuation implementation. This brief records user intent; it does not assert that the UI is already built.
