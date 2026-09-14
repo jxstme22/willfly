@@ -266,6 +266,10 @@ def test_shadow_sequence_measures_health_and_resumes_idempotently(tmp_path):
     assert summary.modeled_fill_counts["filled"] == 2
     assert summary.signing is False and summary.broadcast is False
     assert summary.modeled_positions.get("TOKEN", 0) > 0
+    assert summary.cumulative_counters["observations"] == 2
+    assert summary.cumulative_counters["health:stale"] == 1
+    assert summary.cumulative_counters["missed_decisions"] == 1
+    assert summary.cumulative_counters["action:enter"] == 1
     store.close()
 
 

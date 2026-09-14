@@ -151,6 +151,7 @@ class ShadowRunSummary:
     last_received_at: str | None
     last_decision_id: str | None
     modeled_positions: Mapping[str, int]
+    cumulative_counters: Mapping[str, int]
     status: str = "completed"
     operating_mode: str = "read_only"
     hypothetical_only: bool = True
@@ -170,6 +171,7 @@ class ShadowRunSummary:
             "last_received_at": self.last_received_at,
             "last_decision_id": self.last_decision_id,
             "modeled_positions": dict(self.modeled_positions),
+            "cumulative_counters": dict(self.cumulative_counters),
             "status": self.status,
             "operating_mode": self.operating_mode,
             "hypothetical_only": self.hypothetical_only,
@@ -202,6 +204,9 @@ class ShadowCheckpointStore:
         )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS shadow_checkpoints (name TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS shadow_counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)"
         )
         self._connection.commit()
         if run_identity:
@@ -237,7 +242,14 @@ class ShadowCheckpointStore:
             self._connection.commit()
         return cursor.rowcount == 1
 
-    def append_step(self, observation: ShadowObservation, decision: ShadowDecision) -> tuple[bool, ShadowDecision]:
+    def append_step(
+        self,
+        observation: ShadowObservation,
+        decision: ShadowDecision,
+        *,
+        health_state: str | None = None,
+        missed_deadline: bool = False,
+    ) -> tuple[bool, ShadowDecision]:
         """Publish observation, decision and cursors in one SQLite transaction."""
 
         with self._lock:
@@ -265,6 +277,21 @@ class ShadowCheckpointStore:
                         "INSERT OR REPLACE INTO shadow_checkpoints(name, value) VALUES ('last_decision_id', ?)",
                         (decision.decision_id,),
                     )
+                    increments = {
+                        "observations": 1,
+                        f"action:{decision.action}": 1,
+                        f"modeled_fill:{decision.modeled_fill_status}": 1,
+                    }
+                    if health_state:
+                        increments[f"health:{health_state}"] = 1
+                    if missed_deadline:
+                        increments["missed_decisions"] = 1
+                    for name, amount in increments.items():
+                        self._connection.execute(
+                            "INSERT INTO shadow_counters(name, value) VALUES (?, ?) "
+                            "ON CONFLICT(name) DO UPDATE SET value = value + excluded.value",
+                            (name, amount),
+                        )
                     return True, decision
             except sqlite3.IntegrityError:
                 existing = self._connection.execute(
@@ -319,6 +346,12 @@ class ShadowCheckpointStore:
             "SELECT value FROM shadow_checkpoints WHERE name = ?", (name,)
         ).fetchone()
         return None if row is None else str(row[0])
+
+    def counters(self) -> dict[str, int]:
+        rows = self._connection.execute(
+            "SELECT name, value FROM shadow_counters ORDER BY name"
+        ).fetchall()
+        return {str(name): int(value) for name, value in rows}
 
     def close(self) -> None:
         self._connection.close()
@@ -479,7 +512,12 @@ class ShadowRunner:
             modeled_output_asset,
             modeled_fill_source_ref,
         )
-        inserted, record = self.store.append_step(observation, record)
+        inserted, record = self.store.append_step(
+            observation,
+            record,
+            health_state=health.state,
+            missed_deadline=health.missed_deadline,
+        )
         return ShadowStepResult(record, not inserted, health, mapped)
 
     def run_sequence(self, inputs: Sequence[ShadowInput] | Iterable[ShadowInput]) -> ShadowRunSummary:
@@ -529,6 +567,7 @@ class ShadowRunner:
             last_received_at=self.store.checkpoint_value("last_received_at"),
             last_decision_id=self.store.checkpoint_value("last_decision_id"),
             modeled_positions=self.store.modeled_positions(),
+            cumulative_counters=self.store.counters(),
         )
 
     def _open_assets(self) -> tuple[str, ...]:

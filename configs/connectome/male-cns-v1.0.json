@@ -42,6 +42,8 @@
   "selection_policy": {
     "whole_release_rows": 151856684,
     "default_smoke_subset": "first_20000_release_order_rows",
+    "deterministic_partition_policy": "contiguous_release_order_rows_balanced_by_manifest_row_count",
+    "resource_benchmark_command": "scripts/benchmark_malecns.py",
     "weight_transform": "log1p(raw_weight)/log1p(10000)",
     "sign_policy": "release has no measured sign column; loader uses explicit positive default and reports this assumption",
     "coverage_label": "bounded subset; not whole-CNS coverage"

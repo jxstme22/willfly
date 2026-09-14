@@ -47,7 +47,10 @@ atomic capital units:
 
 The output reports processed versus duplicate observations, health states,
 missed deadlines, action and modeled-fill counts, durable checkpoints and
-modeled positions. A repeated prefix is safe to resume; a changed run identity
+modeled positions. The SQLite store also keeps cumulative health/action/fill
+counters in the same transaction as each new observation, so a stopped process
+can resume without losing availability accounting. A repeated prefix is safe
+to resume; a changed run identity
 or out-of-order new observation fails closed. This controlled path was run on
 2026-09-14 with two synthetic observations: one healthy `enter`, one delayed
 healthy observation classified as `stale`/`watch`, one missed decision, and no

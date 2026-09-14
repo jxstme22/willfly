@@ -50,6 +50,28 @@ coverage, not a pretrained executable financial model, and not evidence of
 biological memory, trading skill or financial advantage. Full-release graph
 execution, resource benchmarking and model comparison remain separate gates.
 
+## Deterministic partition benchmark
+
+The bounded loader now supports manifest-derived contiguous release-order
+partitions. On 2026-09-14, the actual graph artifact loaded 20,000 edges in
+2.30s and 100,000 edges in 20.17s from the first partition at a process peak
+RSS of 111,542,272 bytes. A nonzero four-way partition (rows
+37,964,171–75,928,342) loaded 20,000 edges in 5.51s at a process peak RSS of
+360,611,840 bytes. Each run drove a three-step reservoir episode. The benchmark
+does not claim whole-release training or financial/biological performance; it
+records the resource boundary before selecting a more scalable readout solver.
+
+## Controlled partition training
+
+The bounded dual ridge path was then exercised with the actual graph on a
+100,000-edge slice of the same four-way partition. The run completed in 5.08s
+wall time (1.76s laboratory time), selected 99,095 nodes, used 4 controlled
+training rows and 2 controlled holdout rows, and produced all five declared
+fly/control outputs. Process peak RSS was 415,186,944 bytes. The input rows and
+targets were synthetic laboratory controls rather than market labels; the
+result confirms the graph-to-reservoir-to-readout path at this bounded scale,
+not biological memory, financial skill or whole-release feasibility.
+
 ## Provenance
 
 - [Google Research overview](https://blog.google/innovation-and-ai/technology/research/male-fruit-fly-brain-map/)

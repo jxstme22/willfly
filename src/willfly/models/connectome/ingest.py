@@ -165,30 +165,68 @@ def validate_connectome_annotations(
     }
 
 
+def deterministic_row_range(total_rows: int, *, partition_index: int, partition_count: int) -> tuple[int, int]:
+    """Return one contiguous, balanced release-order partition."""
+
+    if not isinstance(total_rows, int) or isinstance(total_rows, bool) or total_rows <= 0:
+        raise ValueError("total_rows must be a positive integer")
+    if (
+        not isinstance(partition_count, int)
+        or isinstance(partition_count, bool)
+        or partition_count <= 0
+        or partition_count > total_rows
+        or not isinstance(partition_index, int)
+        or isinstance(partition_index, bool)
+        or not 0 <= partition_index < partition_count
+    ):
+        raise ValueError("partition index/count is invalid")
+    start = total_rows * partition_index // partition_count
+    end = total_rows * (partition_index + 1) // partition_count
+    return start, max(start + 1, end)
+
+
 def load_connectome_graph(
     path: str | Path,
     manifest: ConnectomeManifest,
     *,
     max_edges: int = 20_000,
     body_ids: Iterable[int] | None = None,
+    row_start: int = 0,
+    row_end: int | None = None,
 ) -> tuple[SparseGraph, dict[str, Any]]:
     """Load a bounded, declared subset of the verified directed graph.
 
     The default smoke subset is the first ``max_edges`` rows in release order.
-    It is useful for a reproducible local experiment but is never labelled as
-    whole-CNS coverage. Raw integer strengths are transformed with the fixed
-    ``log1p(weight) / log1p(10000)`` rule; the release contains no measured sign
-    column, so all loaded edges use the explicit positive sign assumption.
+    ``row_start``/``row_end`` provide a deterministic contiguous release-order
+    partition for bounded experiments that must not over-represent the first
+    rows. A partition is still not whole-CNS coverage. Raw integer strengths are
+    transformed with the fixed ``log1p(weight) / log1p(10000)`` rule; the
+    release contains no measured sign column, so all loaded edges use the
+    explicit positive sign assumption.
     """
 
     if not isinstance(max_edges, int) or isinstance(max_edges, bool) or max_edges <= 0:
         raise ValueError("max_edges must be a positive integer")
+    if not isinstance(row_start, int) or isinstance(row_start, bool) or row_start < 0:
+        raise ValueError("row_start must be a non-negative integer")
+    if row_end is not None and (
+        not isinstance(row_end, int)
+        or isinstance(row_end, bool)
+        or row_end <= row_start
+    ):
+        raise ValueError("row_end must be greater than row_start")
+    if manifest.artifact_rows is not None and row_start >= manifest.artifact_rows:
+        raise ValueError("row_start is outside the connectome artifact")
+    if manifest.artifact_rows is not None and row_end is not None and row_end > manifest.artifact_rows:
+        raise ValueError("row_end is outside the connectome artifact")
     allowed_ids = None if body_ids is None else {int(value) for value in body_ids}
     if allowed_ids is not None and not allowed_ids:
         raise ValueError("body_ids cannot be empty")
     source, reader, actual_sha256 = _verified_feather_reader(path, manifest)
     edges: list[Edge] = []
     rows_seen = 0
+    source_row = 0
+    window_end = row_end
     try:
         for batch_index in range(reader.num_record_batches):
             batch = reader.get_batch(batch_index)
@@ -196,6 +234,12 @@ def load_connectome_graph(
             post_values = batch.column(1).to_pylist()
             weight_values = batch.column(2).to_pylist()
             for source_id, target_id, raw_weight in zip(pre_values, post_values, weight_values):
+                if source_row < row_start:
+                    source_row += 1
+                    continue
+                if window_end is not None and source_row >= window_end:
+                    break
+                source_row += 1
                 rows_seen += 1
                 if allowed_ids is not None and (source_id not in allowed_ids or target_id not in allowed_ids):
                     continue
@@ -207,7 +251,7 @@ def load_connectome_graph(
                 edges.append(Edge(str(source_id), str(target_id), normalized_weight, 1))
                 if len(edges) >= max_edges:
                     break
-            if len(edges) >= max_edges:
+            if len(edges) >= max_edges or (window_end is not None and source_row >= window_end):
                 break
     finally:
         source.close()
@@ -219,11 +263,15 @@ def load_connectome_graph(
         "dataset_id": manifest.dataset_id,
         "artifact_bytes": manifest.artifact_bytes,
         "artifact_sha256": actual_sha256,
-            "source_rows": manifest.artifact_rows,
+        "source_rows": manifest.artifact_rows,
         "rows_scanned": rows_seen,
         "selected_edges": len(edges),
         "selected_nodes": len(graph.nodes),
-        "selection": "body_ids_filter" if allowed_ids is not None else f"first_{max_edges}_release_order_rows",
+        "selection": (
+            "body_ids_filter"
+            if allowed_ids is not None and row_start == 0 and row_end is None
+            else f"release_rows_{row_start}_{row_end if row_end is not None else row_start + rows_seen}"
+        ),
         "orientation": manifest.orientation,
         "graph_orientation": graph.orientation,
         "weight_transform": "log1p(raw_weight)/log1p(10000)",

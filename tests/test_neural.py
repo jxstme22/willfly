@@ -1,14 +1,16 @@
 import pytest
 
 from willfly.evaluation.neural import AblationResult, review_neural_progression, run_matched_comparisons
-from willfly.models.connectome.graph import Edge, build_graph, graph_hash
+from willfly.models.connectome.graph import Edge, SparseGraph, build_graph, graph_hash
 from willfly.models.connectome.ingest import (
     ConnectomeManifest,
+    deterministic_row_range,
     load_connectome_graph,
     sha256_file,
     validate_connectome_records,
 )
 from willfly.models.readout import FrozenReadout, ReadoutRow
+from willfly.models.ridge import fit_ridge
 from willfly.models.reservoir import SparseReservoir
 from willfly.models.package import load_neural_package, save_neural_package
 
@@ -22,6 +24,9 @@ def test_sparse_graph_reservoir_is_stable_and_resets_per_episode():
     assert [state.values for state in first] == [state.values for state in second]
     assert all(abs(value) <= 1 for state in first for value in state.values)
     assert graph.shuffled_control(7).statistics == graph.statistics
+    random_control = graph.random_weight_control(7)
+    assert random_control.statistics == graph.statistics
+    assert graph_hash(random_control) != graph_hash(graph)
 
 
 def test_graph_orientation_changes_reservoir_dynamics_and_nonfinite_weights_are_rejected():
@@ -32,6 +37,16 @@ def test_graph_orientation_changes_reservoir_dynamics_and_nonfinite_weights_are_
     assert forward_state != reverse_state
     with pytest.raises(ValueError, match="invalid"):
         Edge("a", "b", float("nan"))
+
+
+def test_large_graph_membership_validation_uses_node_identity_not_tuple_scans():
+    nodes = tuple(str(index) for index in range(2_000))
+    graph = SparseGraph(
+        nodes,
+        (Edge("0", "1", 1.0), Edge("1998", "1999", 1.0)),
+        "source_to_target",
+    )
+    assert graph.nodes == nodes
 
 
 def test_connectome_ids_remain_text_and_unverified_manifest_blocks_ingest():
@@ -67,6 +82,30 @@ def test_verified_feather_loader_preserves_direction_and_reports_subset(tmp_path
     assert report["coverage"] == "bounded subset; not whole-CNS coverage"
 
 
+def test_connectome_loader_supports_deterministic_release_row_partitions(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+    feather = pytest.importorskip("pyarrow.feather")
+    path = tmp_path / "partitioned.feather"
+    feather.write_feather(
+        pa.table({"body_pre": [101, 102, 103, 104], "body_post": [102, 103, 104, 101], "weight": [4, 9, 16, 25]}),
+        path,
+    )
+    manifest = ConnectomeManifest(
+        "male-cns:v1.0", "https://source", "https://license", sha256_file(path),
+        "minconf-0.5", "verified", "male-cns:v1.0", "presynaptic_to_postsynaptic",
+        ("body_pre", "body_post", "weight"), path.stat().st_size, 4,
+    )
+    start, end = deterministic_row_range(4, partition_index=1, partition_count=2)
+    graph, report = load_connectome_graph(path, manifest, max_edges=10, row_start=start, row_end=end)
+    assert (start, end) == (2, 4)
+    assert [(edge.source, edge.target) for edge in graph.edges] == [("103", "104"), ("104", "101")]
+    assert report["selection"] == "release_rows_2_4"
+    with pytest.raises(ValueError, match="partition"):
+        deterministic_row_range(4, partition_index=2, partition_count=2)
+    with pytest.raises(ValueError, match="partition"):
+        deterministic_row_range(2, partition_index=0, partition_count=3)
+
+
 def test_frozen_readout_and_neural_gate_are_traceable():
     readout = FrozenReadout.fit([ReadoutRow((1.0, 0.0), 1.0), ReadoutRow((0.0, 1.0), 2.0)], graph_hash_value="g" * 64)
     assert readout.graph_hash_before == readout.graph_hash_after
@@ -75,6 +114,16 @@ def test_frozen_readout_and_neural_gate_are_traceable():
     review = review_neural_progression(comparisons, [AblationResult("reset", 0, "state", None)])
     assert review.decision == "inconclusive"
     assert "insufficient_positive_test_windows" in review.reasons
+
+
+def test_ridge_uses_dual_system_for_wide_connectome_states():
+    weights, intercept = fit_ridge(
+        [(1.0, 0.0, 0.5, -1.0), (0.0, 1.0, -0.5, 1.0)],
+        [10.0, -5.0],
+        l2=1.0,
+    )
+    assert len(weights) == 4
+    assert all(value == value for value in (*weights, intercept))
 
 
 def test_neural_package_reload_preserves_hashes_and_predictions(tmp_path):

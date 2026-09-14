@@ -897,6 +897,10 @@ hypothetical with signing and broadcast disabled. The actual controlled run
 processed two inputs (one healthy entry and one delayed healthy watch) and the
 same-input resume returned a duplicate without creating a second action.
 
+The shadow checkpoint now also persists cumulative health, action, modeled-fill
+and missed-deadline counters atomically with each first-seen observation, so a
+stopped/resumed process does not lose its availability ledger.
+
 Also performed one bounded read-only RPC capture at block 61693479. Chain ID
 4663 and the configured contract filters were accepted; the range was empty,
 one header was persisted, the run acknowledged the range, and no event batch
@@ -936,6 +940,44 @@ action; gas whose denomination is absent from starting balances, including
 still do not charge gas twice. Focused LP tests cover both the debit and
 liability paths; LP eligibility remains disabled pending observed protocol
 evidence.
+
+
+## 2026-09-14 — MaleCNS deterministic partition/resource loop
+
+Extended the verified loader with manifest-derived contiguous release-order
+partitions and added `scripts/benchmark_malecns.py`. Actual runs loaded 20,000
+edges in 2.30s and 100,000 edges in 20.17s at a peak RSS of 111,542,272 bytes
+from the first partition. A nonzero four-way partition covering rows
+37,964,171–75,928,342 loaded 20,000 edges in 5.51s at a peak RSS of
+360,611,840 bytes. Each benchmark drove a three-step reservoir episode. This
+advances real graph execution beyond the smoke subset while keeping dense
+readout training and whole-release claims gated by measured resource limits.
+
+
+## 2026-09-14 — bounded MaleCNS training/control loop
+
+The wide-state ridge solver now uses an equivalent dual system when features
+outnumber samples, avoiding a width-by-width normal matrix. After fixing graph
+validation and making the random-weight control distinct on constant-weight
+partitions, the actual 100,000-edge four-way partition run completed in 5.08s
+wall time and 1.76s laboratory time at 415,186,944-byte peak RSS. It selected
+99,095 nodes and produced fly, shuffled-wiring, random-weights, no-state and
+ordinary outputs over 4 controlled training and 2 controlled holdout rows. The
+rows were synthetic laboratory inputs, so this is bounded integration/resource
+evidence only; real labels, larger samples, five seeds, chronological windows
+and whole-release acceptance remain open.
+
+
+## 2026-09-14 — connectome control scalability loop
+
+The 100k-edge run exposed an O(edges×nodes) tuple-membership check during
+matched-control construction; graph validation now uses a node set. A second
+check showed the selected partition had a degenerate constant weight
+distribution, making simple weight shuffling identical to the fly graph. The
+random-weight control now draws deterministic independent positive weights with
+the source mean preserved, and its distinct graph identity is regression-tested.
+The control remains a mean-matched ablation, not a matched marginal-distribution
+claim.
 
 
 ## 2026-09-14 — M5 gas accounting and dashboard smoke loop

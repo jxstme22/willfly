@@ -33,7 +33,8 @@ class SparseGraph:
             raise ValueError("unsupported graph orientation")
         if len(set(self.nodes)) != len(self.nodes):
             raise ValueError("graph nodes must be unique")
-        if any(edge.source not in self.nodes or edge.target not in self.nodes for edge in self.edges):
+        node_set = set(self.nodes)
+        if any(edge.source not in node_set or edge.target not in node_set for edge in self.edges):
             raise ValueError("graph edge references unknown node")
 
     @property
@@ -51,8 +52,15 @@ class SparseGraph:
         return SparseGraph(self.nodes, tuple(Edge(edge.source, target, edge.weight, edge.sign) for edge, target in zip(self.edges, targets)), self.orientation)
 
     def random_weight_control(self, seed: int) -> "SparseGraph":
-        weights = [edge.weight for edge in self.edges]
-        random.Random(seed).shuffle(weights)
+        """Assign independent positive weights while preserving source mean."""
+
+        if not self.edges:
+            return self
+        rng = random.Random(seed)
+        source_mean = sum(edge.weight for edge in self.edges) / len(self.edges)
+        draws = [0.5 + rng.random() for _ in self.edges]
+        draw_mean = sum(draws) / len(draws)
+        weights = [source_mean * draw / draw_mean for draw in draws]
         return SparseGraph(self.nodes, tuple(Edge(edge.source, edge.target, weight, edge.sign) for edge, weight in zip(self.edges, weights)), self.orientation)
 
 
