@@ -44,6 +44,7 @@ from willfly.ingest.runner import (
 from willfly.features.discovery import PoolProjection
 from willfly.features.action_linking import link_manual_actions
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
+from willfly.features.signal_generation import build_research_signals
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
@@ -232,6 +233,97 @@ def _load_wallet_bundle(path: Path) -> tuple[WalletActivity, ...]:
     if not isinstance(raw_activities, list) or any(not isinstance(item, dict) for item in raw_activities):
         raise ValueError("wallet activity bundle activities must be an array of objects")
     return tuple(WalletActivity.from_dict(item) for item in raw_activities)
+
+
+def _load_model_output_bundle(path: Path) -> dict[str, Any]:
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.model-output-bundle.v0.1":
+        raise ValueError("model output bundle schema version is unsupported")
+    raw_templates = payload.get("templates")
+    raw_outputs = payload.get("outputs")
+    if not isinstance(raw_templates, list) or not isinstance(raw_outputs, list):
+        raise ValueError("model output bundle templates and outputs must be arrays")
+    if any(not isinstance(item, dict) for item in (*raw_templates, *raw_outputs)):
+        raise ValueError("model output bundle records must be objects")
+    model_identity = (payload.get("model_id"), payload.get("model_version"), payload.get("run_ref"))
+    if any(not isinstance(value, str) or not value for value in model_identity):
+        raise ValueError("model output bundle identity is required")
+    outputs: list[tuple[str, float]] = []
+    for item in raw_outputs:
+        sample_id = item.get("sample_id")
+        predicted_bps = item.get("predicted_bps")
+        if not isinstance(sample_id, str) or not sample_id:
+            raise ValueError("model output sample_id is required")
+        if isinstance(predicted_bps, bool) or not isinstance(predicted_bps, (int, float)):
+            raise ValueError("model output predicted_bps must be numeric")
+        outputs.append((sample_id, predicted_bps))
+    actions = payload.get("actions_by_prediction", {})
+    exit_kinds = payload.get("exit_kinds_by_prediction", {})
+    readiness = payload.get("market_readiness", {"spot": "research_only", "lp": "research_only"})
+    if not isinstance(actions, dict) or not isinstance(exit_kinds, dict):
+        raise ValueError("model output action mappings must be objects")
+    if not isinstance(readiness, dict) or any(not isinstance(key, str) or not isinstance(value, str) for key, value in readiness.items()):
+        raise ValueError("model output market_readiness must be a string map")
+    as_of_time = payload.get("as_of_time")
+    if not isinstance(as_of_time, str) or not as_of_time:
+        raise ValueError("model output as_of_time is required")
+    try:
+        parsed = datetime.fromisoformat(as_of_time.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("model output as_of_time must be RFC-3339") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("model output as_of_time must include a timezone")
+    training_state = payload.get("training_state")
+    if training_state is not None and not isinstance(training_state, dict):
+        raise ValueError("model output training_state must be an object")
+    return {
+        "templates": tuple(PredictionRecord.from_dict(item) for item in raw_templates),
+        "outputs": tuple(outputs),
+        "model_id": model_identity[0],
+        "model_version": model_identity[1],
+        "run_ref": model_identity[2],
+        "actions": {str(key): str(value) for key, value in actions.items()},
+        "exit_kinds": {str(key): str(value) for key, value in exit_kinds.items()},
+        "as_of_time": as_of_time,
+        "market_readiness": readiness,
+        "training_state": training_state,
+    }
+
+
+def _signal_build(*, input_path: Path, output_path: Path | None) -> dict[str, Any]:
+    payload = _load_model_output_bundle(input_path)
+    result = build_research_signals(
+        payload["templates"],
+        payload["outputs"],
+        model_id=payload["model_id"],
+        model_version=payload["model_version"],
+        run_ref=payload["run_ref"],
+        actions_by_prediction=payload["actions"],
+        exit_kinds_by_prediction=payload["exit_kinds"],
+    )
+    bundle = result.to_bundle(
+        as_of_time=payload["as_of_time"],
+        market_readiness=payload["market_readiness"],
+        training_state=payload["training_state"],
+    )
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {
+        "status": "ready" if result.proposals else "waiting",
+        "prediction_count": len(result.predictions),
+        "proposal_count": len(result.proposals),
+        "excluded": [dict(item) for item in result.excluded],
+        "input": str(input_path),
+        "input_hash": _config_hash(input_path),
+        "output": None if output_path is None else str(output_path),
+        "output_hash": None if output_path is None else _config_hash(output_path),
+        "bundle": bundle if output_path is None else None,
+        "operating_mode": "local_research_only",
+        "execution_scope": "manual_only",
+        "signing": False,
+        "broadcast": False,
+    }
 
 
 def _wallet_import(*, bundle_path: Path, wallet_dir: Path) -> dict[str, Any]:
@@ -1156,6 +1248,12 @@ def build_parser() -> argparse.ArgumentParser:
     wallet_status.add_argument("--wallet", required=True)
     wallet_status.add_argument("--as-of-time", required=True, help="timezone-aware event cutoff")
     wallet_status.add_argument("--arrival-cutoff", required=True, help="timezone-aware arrival cutoff")
+
+    signal_build = subparsers.add_parser(
+        "signal-build", help="build versioned research signals from explicit model outputs"
+    )
+    signal_build.add_argument("--input", type=Path, required=True, help="versioned model-output JSON bundle")
+    signal_build.add_argument("--output", type=Path, default=None, help="optional signal snapshot output path")
     return parser
 
 
@@ -1289,6 +1387,8 @@ def main(argv: list[str] | None = None) -> int:
                 as_of_time=args.as_of_time,
                 arrival_cutoff=args.arrival_cutoff,
             )
+        elif args.command == "signal-build":
+            result = _signal_build(input_path=args.input, output_path=args.output)
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:
@@ -1350,6 +1450,7 @@ def main(argv: list[str] | None = None) -> int:
         "feedback-status",
         "wallet-import",
         "wallet-status",
+        "signal-build",
     }:
         return 0
     if args.command in {"capture", "backfill"}:

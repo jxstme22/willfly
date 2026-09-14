@@ -21,6 +21,18 @@ manual links are recomputed conservatively at load time. It is display-only
 and cannot enable signing or broadcast. Without the file (or a populated
 application store), the inbox truthfully shows no signals.
 
+The lab-output boundary is explicit: `signal-build` consumes a versioned model
+output bundle containing template predictions, output values, a model/run
+identity and an action mapping. It writes the same signal snapshot schema that
+`serve` reads. Generated confidence is `unavailable` until calibrated evidence
+is supplied; proposals remain `research_only` and manual-only.
+
+```text
+.venv/bin/willfly signal-build \
+  --input /path/to/model-output.json \
+  --output /path/to/signals.json
+```
+
 It remains a local read-only surface: there is no signer, broadcast, funding
 control, or automatic execution. B6 fixture checks prove rendering and gates;
 live model promotion, complete economic qualification and manual-action

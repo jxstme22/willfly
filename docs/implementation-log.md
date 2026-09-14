@@ -840,6 +840,12 @@ activity bundles. A controlled swap import was projected at explicit event and
 arrival cutoffs as one healthy activity with no LP position; no key, signer or
 broadcast path is involved. Live wallet coverage remains open.
 
+Added `signal-build` and the model-output-to-signal builder. Explicit output
+values now become versioned research predictions and contract-validated manual
+proposals with unavailable confidence, model/run lineage and transparent
+exclusions; the resulting snapshot is directly consumable by `serve`. This
+does not claim calibration, qualified economics or automatic execution.
+
 
 ## 2026-09-14 — B10 release capability audit
 
