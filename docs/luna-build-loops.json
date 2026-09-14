@@ -121,7 +121,7 @@
     "If usage/session limits interrupt a loop, leave a precise resumable checkpoint; do not imply background continuation has been scheduled."
   ],
   "repair_stage": {
-    "status": "REPAIRED_PENDING_INDEPENDENT_RECHECK",
+    "status": "ACCEPTED_RESEARCH_RELEASE_ONLY",
     "checkpoint": "docs/reports/luna-repair-checkpoint-04.md",
     "findings": {
       "DS-01": "implemented_fail_closed_anchor_policy_and_reached_anchor_invariant",
@@ -155,12 +155,12 @@
       "same-checkpoint replacement-log replay, partial cursor and replay-failure fixtures",
       "strict nested evidence and endpoint credential-canary fixtures"
     ],
-    "independent_review_required": true,
+    "independent_review_required": false,
     "coordinator_review": "docs/reports/luna-repair-review-02.md",
     "coordinator_acceptance": {
       "status": "accepted",
       "reviewed_on": "2026-09-14",
-      "evidence": "150 sandbox-passing tests plus two permitted loopback integration tests; planning, compile, reproduction and diff checks pass",
+      "evidence": "Post-0135b21 independent review: 293 tests passed with four managed-sandbox loopback skips; source-manifest, brain-release, planning, compile, shell, diff, exact checkpoint-identity and 16/16 WSL offline-smoke checks pass; see docs/reports/final-coordinator-review.md",
       "deferred_gates": [
         "live canonical source and archive evidence",
         "72-hour and 14-day elapsed acceptance windows",

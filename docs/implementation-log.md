@@ -1528,3 +1528,15 @@ filter identity probe matched in both runtime and helper paths:
 `pipeline-live-readonly:4663:6707856a8275fbb4`. The checkpoint is recorded in
 `docs/reports/luna-repair-checkpoint-04.md` and remains pending independent
 recheck; elapsed, economic, biological and production gates remain open.
+
+
+## 2026-09-14 — independent coordinator acceptance
+
+Independently reproduced the post-baseline repairs at `0135b21`. The exact
+runtime and pipeline checkpoint identities match; the full suite passed 293
+tests with four managed-sandbox loopback skips; source-manifest, brain-release,
+planning, compilation, shell, diff and 16/16 WSL offline-smoke checks passed.
+The repair checkpoint is accepted as a research-only operator build. Timed,
+provider/finality, economic, LP-benefit, causal, biological and production
+gates remain open, with signing and broadcast disabled. Full evidence is in
+`docs/reports/final-coordinator-review.md`.
