@@ -210,6 +210,12 @@ def _load_prediction_points(path: Path) -> tuple[PredictionPoint, ...]:
     return tuple(PredictionPoint.from_dict(item) for item in raw_points)
 
 
+def _load_candidate_evaluation(path: Path):
+    from willfly.evaluation.promotion import CandidateEvaluation
+
+    return CandidateEvaluation.from_dict(_load_json(path))
+
+
 def _load_prediction_templates(path: Path) -> tuple[PredictionRecord, ...]:
     payload = _load_json(path)
     if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.prediction-template-bundle.v0.1":
@@ -551,6 +557,42 @@ def _model_status(*, registry_path: Path, initial_active_version: str) -> dict[s
         "registry": str(registry_path),
         "state": status,
         "operating_mode": "read_only",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _model_promote(*, evaluation_path: Path, registry_path: Path, initial_active_version: str) -> dict[str, Any]:
+    report = _load_candidate_evaluation(evaluation_path)
+    with ModelRegistry(registry_path, initial_active_version=initial_active_version) as registry:
+        version = registry.promote_and_record(report)
+        state = registry.status()
+    return {
+        "status": "promoted",
+        "version": version,
+        "evaluation": str(evaluation_path),
+        "evaluation_hash": _config_hash(evaluation_path),
+        "registry": str(registry_path),
+        "state": state,
+        "operating_mode": "read_only_model_control",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _model_rollback(
+    *, registry_path: Path, initial_active_version: str, version: str, reason: str, evaluated_at: str
+) -> dict[str, Any]:
+    with ModelRegistry(registry_path, initial_active_version=initial_active_version) as registry:
+        active = registry.rollback(version, reason=reason, evaluated_at=evaluated_at)
+        state = registry.status()
+    return {
+        "status": "rolled_back",
+        "version": active,
+        "reason": reason,
+        "registry": str(registry_path),
+        "state": state,
+        "operating_mode": "read_only_model_control",
         "signing": False,
         "broadcast": False,
     }
@@ -1318,6 +1360,20 @@ def build_parser() -> argparse.ArgumentParser:
     model_status.add_argument("--registry", type=Path, required=True)
     model_status.add_argument("--initial-active-version", required=True)
 
+    model_promote = subparsers.add_parser(
+        "model-promote", help="promote a previously qualified candidate evaluation"
+    )
+    model_promote.add_argument("--evaluation", type=Path, required=True)
+    model_promote.add_argument("--registry", type=Path, required=True)
+    model_promote.add_argument("--initial-active-version", required=True)
+
+    model_rollback = subparsers.add_parser("model-rollback", help="roll back to a recorded model version")
+    model_rollback.add_argument("--registry", type=Path, required=True)
+    model_rollback.add_argument("--initial-active-version", required=True)
+    model_rollback.add_argument("--version", required=True)
+    model_rollback.add_argument("--reason", required=True)
+    model_rollback.add_argument("--evaluated-at", required=True, help="timezone-aware rollback time")
+
     feedback_import = subparsers.add_parser(
         "feedback-import", help="import typed read-only predictions and outcomes into the causal feedback store"
     )
@@ -1478,6 +1534,20 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "model-status":
             result = _model_status(registry_path=args.registry, initial_active_version=args.initial_active_version)
+        elif args.command == "model-promote":
+            result = _model_promote(
+                evaluation_path=args.evaluation,
+                registry_path=args.registry,
+                initial_active_version=args.initial_active_version,
+            )
+        elif args.command == "model-rollback":
+            result = _model_rollback(
+                registry_path=args.registry,
+                initial_active_version=args.initial_active_version,
+                version=args.version,
+                reason=args.reason,
+                evaluated_at=args.evaluated_at,
+            )
         elif args.command == "feedback-import":
             result = _feedback_import(
                 bundle_path=args.bundle,

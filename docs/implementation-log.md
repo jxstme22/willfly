@@ -1,5 +1,38 @@
 # Implementation log
 
+## Batch 2026-09-14 — guarded model promotion and rollback CLI
+
+### Task status
+
+- B8 — IN_PROGRESS: evaluation reports can now be loaded strictly and applied
+  through explicit qualified-only promotion or recorded-version rollback. Live
+  forward windows, calibration and release acceptance remain open.
+
+### Changes
+
+- Added validated `CandidateEvaluation` and `WindowScore` deserialization.
+- Added `model-promote` and `model-rollback` commands backed by the durable
+  registry. Promotion consumes a final-test identity once and cannot change the
+  active model from an inconclusive report; rollback requires a recorded target.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest -q tests/test_promotion.py
+  passed (5 tests)
+.venv/bin/python -m pytest
+  passed (231 tests, 2 sandbox loopback skips)
+```
+
+This is local model-registry evidence only. It does not establish forward
+quality, calibration, trading readiness or automatic execution.
+
+### Blockers and next dependency-ready slice
+
+The remaining B8/B9 work is the real chronological evaluation/calibration and
+automatic callback cycle; live source, timed, economic and zero-personal-trade
+gates remain open.
+
 ## Batch 2026-09-14 — durable learning due-stage scheduling
 
 ### Task status

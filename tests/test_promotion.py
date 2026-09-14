@@ -1,5 +1,8 @@
+import json
+
 import pytest
 
+from willfly.cli import main
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 
 
@@ -94,3 +97,51 @@ def test_inconclusive_report_cannot_promote(tmp_path) -> None:
     with ModelRegistry(tmp_path / "models.sqlite3", initial_active_version="active-v1") as registry:
         with pytest.raises(ValueError, match="qualified"):
             registry.promote(report)
+
+
+def test_evaluation_round_trip_and_cli_promote_then_rollback(tmp_path, capsys) -> None:
+    report = evaluate_candidate(
+        _points(),
+        candidate_version="candidate-v2",
+        active_version="active-v1",
+        evaluated_at="2026-09-14T02:00:00Z",
+        dataset_hash="dataset-1",
+    )
+    evaluation_path = tmp_path / "evaluation.json"
+    evaluation_path.write_text(json.dumps(report.to_dict()), encoding="utf-8")
+    registry = tmp_path / "models.sqlite3"
+    assert main(
+        [
+            "model-promote",
+            "--evaluation",
+            str(evaluation_path),
+            "--registry",
+            str(registry),
+            "--initial-active-version",
+            "active-v1",
+        ]
+    ) == 0
+    promoted = json.loads(capsys.readouterr().out)
+    assert promoted["status"] == "promoted"
+    assert promoted["state"]["active_version"] == "candidate-v2"
+    assert promoted["state"]["history"][-1]["kind"] == "promotion"
+
+    assert main(
+        [
+            "model-rollback",
+            "--registry",
+            str(registry),
+            "--initial-active-version",
+            "active-v1",
+            "--version",
+            "active-v1",
+            "--reason",
+            "controlled rollback fixture",
+            "--evaluated-at",
+            "2026-09-14T03:00:00Z",
+        ]
+    ) == 0
+    rolled_back = json.loads(capsys.readouterr().out)
+    assert rolled_back["status"] == "rolled_back"
+    assert rolled_back["state"]["active_version"] == "active-v1"
+    assert rolled_back["state"]["history"][-1]["kind"] == "rollback"

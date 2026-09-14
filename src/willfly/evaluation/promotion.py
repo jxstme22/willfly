@@ -93,6 +93,23 @@ class WindowScore:
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "WindowScore":
+        if not isinstance(data, Mapping):
+            raise ValueError("window score must be an object")
+        required = ("model_version", "market", "window_id", "split", "count", "mae_bps")
+        if any(not isinstance(data.get(field), str) or not data[field] for field in required[:4]):
+            raise ValueError("window score identity is invalid")
+        if data["market"] not in {"spot", "lp"} or data["split"] not in {"forward", "final_test"}:
+            raise ValueError("window score market or split is invalid")
+        count = data.get("count")
+        mae_bps = data.get("mae_bps")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise ValueError("window score count is invalid")
+        if isinstance(mae_bps, bool) or not isinstance(mae_bps, (int, float)) or not math.isfinite(float(mae_bps)) or mae_bps < 0:
+            raise ValueError("window score mae_bps is invalid")
+        return cls(data["model_version"], data["market"], data["window_id"], data["split"], count, float(mae_bps))
+
 
 @dataclass(frozen=True)
 class CandidateEvaluation:
@@ -130,6 +147,35 @@ class CandidateEvaluation:
             "decision": self.decision,
             "reasons": list(self.reasons),
         }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CandidateEvaluation":
+        if not isinstance(data, Mapping) or data.get("schema_version") != "candidate-evaluation.v0.1":
+            raise ValueError("candidate evaluation schema version is unsupported")
+        text_fields = ("candidate_version", "active_version", "evaluated_at", "dataset_hash", "final_test_hash", "decision")
+        if any(not isinstance(data.get(field), str) or not data[field] for field in text_fields):
+            raise ValueError("candidate evaluation identity is invalid")
+        raw_reasons = data.get("reasons")
+        if not isinstance(raw_reasons, list) or any(not isinstance(reason, str) or not reason for reason in raw_reasons):
+            raise ValueError("candidate evaluation reasons must be text")
+        def scores(field: str) -> tuple[WindowScore, ...]:
+            raw = data.get(field, [])
+            if not isinstance(raw, list):
+                raise ValueError(f"candidate evaluation {field} must be an array")
+            return tuple(WindowScore.from_dict(item) for item in raw)
+        return cls(
+            data["candidate_version"],
+            data["active_version"],
+            data["evaluated_at"],
+            data["dataset_hash"],
+            data["final_test_hash"],
+            scores("forward_scores"),
+            scores("final_test_scores"),
+            data["decision"],
+            tuple(raw_reasons),
+            scores("active_forward_scores"),
+            scores("active_final_test_scores"),
+        )
 
 
 def evaluate_candidate(

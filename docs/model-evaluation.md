@@ -37,6 +37,26 @@ report without changing the active model:
 `--record` consumes the final-test identity in the registry but never promotes
 the candidate. Promotion remains a separate guarded operation after review.
 
+After review, a serialized `qualified` evaluation can be applied explicitly:
+
+```text
+.venv/bin/willfly model-promote \
+  --evaluation /path/to/evaluation.json \
+  --registry /path/to/models.sqlite3 \
+  --initial-active-version active-v1
+.venv/bin/willfly model-rollback \
+  --registry /path/to/models.sqlite3 \
+  --initial-active-version active-v1 \
+  --version active-v1 \
+  --reason "controlled rollback" \
+  --evaluated-at 2026-09-14T03:00:00Z
+```
+
+Promotion rejects inconclusive/rejected reports, stale active versions and a
+previously consumed final-test identity. Rollback is limited to a version
+already recorded in the registry. Both commands change only the local model
+registry; they do not enable signing, funding or transaction execution.
+
 The connectome laboratory can feed the signal boundary through the explicit
 `willfly model-output` command. It selects one seed/model metric from a
 `connectome-experiment.v0.1` result, preserves the experiment report hash and
