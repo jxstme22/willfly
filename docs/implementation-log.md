@@ -34,6 +34,13 @@ This closes the local backup/restore implementation boundary only. It does not
 prove that a running service was stopped cleanly, that a Windows/WSL2 install
 works on a fresh PC, or that live observation/training resumes after an outage.
 
+A fresh-process smoke against the checked-in `data/observatory` store created a
+two-file archive with SHA-256
+`deaebaa9e21c43cab9ee6fcca9c757ea821ddd76b6d44e856a1847b4000fc33e` and restored
+it into a new destination successfully. The archive contained the SQLite
+metadata database and the prior capture manifest; it contained no raw event
+batches because that source has none.
+
 ## Batch 2026-09-14 — canonical market-feedback corpus bridge
 
 ### Task status
