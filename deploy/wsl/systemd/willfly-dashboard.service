@@ -1,0 +1,23 @@
+[Unit]
+Description=Willfly local read-only dashboard
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=%h/.config/willfly/willfly.env
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/willfly/willfly.env
+ExecStart=/bin/bash %h/.local/share/willfly/bin/run-service.sh dashboard
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStopSec=15s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=1G
+CPUQuota=100%
+
+[Install]
+WantedBy=default.target

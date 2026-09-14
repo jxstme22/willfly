@@ -1,0 +1,16 @@
+[Unit]
+Description=Willfly read-only hypothetical shadow evaluation pass
+After=willfly-capture.service
+ConditionPathExists=%h/.config/willfly/willfly.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/willfly/willfly.env
+ExecStart=/bin/bash %h/.local/share/willfly/bin/run-service.sh shadow
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=1G
+CPUQuota=100%
+TimeoutStartSec=10min

@@ -1,0 +1,12 @@
+[Unit]
+Description=Schedule Willfly read-only hypothetical shadow evaluation
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=60s
+RandomizedDelaySec=10s
+Persistent=true
+Unit=willfly-shadow.service
+
+[Install]
+WantedBy=timers.target

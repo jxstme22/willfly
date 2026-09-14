@@ -1,0 +1,17 @@
+[Unit]
+Description=Willfly forward candidate evaluation pass
+After=willfly-train.service
+ConditionPathExists=%h/.config/willfly/willfly.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/willfly/willfly.env
+ExecStart=/bin/bash %h/.local/share/willfly/bin/run-service.sh evaluate
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryMax=4G
+CPUQuota=400%
+Nice=10
+TimeoutStartSec=30min

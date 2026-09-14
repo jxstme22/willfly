@@ -1,0 +1,12 @@
+[Unit]
+Description=Schedule Willfly restart-safe learning watcher ticks
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=60s
+RandomizedDelaySec=10s
+Persistent=true
+Unit=willfly-watcher.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Small, user-level WSL2 operator command. It never invokes sudo and refuses
+# backup/restore while a known state writer is active.
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+ENV_FILE="${WILLFLY_ENV_FILE:-$HOME/.config/willfly/willfly.env}"
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+fi
+PROJECT_DIR="${WILLFLY_PROJECT_DIR:-$(cd -- "$SCRIPT_DIR/../.." && pwd -P)}"
+VENV_DIR="${WILLFLY_VENV:-$HOME/.local/share/willfly/venv}"
+PYTHON_BIN="${WILLFLY_PYTHON:-$VENV_DIR/bin/python}"
+WILLFLY_BIN="${WILLFLY_BIN:-$VENV_DIR/bin/willfly}"
+STATE_DIR="${WILLFLY_STATE_DIR:-$HOME/.local/state/willfly}"
+
+die() {
+    printf 'willflyctl: %s\n' "$*" >&2
+    exit 2
+}
+
+usage() {
+    cat <<'EOF'
+Usage:
+  willflyctl install [--dry-run]
+  willflyctl start [dashboard|capture|watcher|train|evaluate|shadow|all] ...
+  willflyctl stop  [dashboard|capture|watcher|train|evaluate|shadow|all] ...
+  willflyctl status [dashboard|capture|watcher|train|evaluate|shadow|all] ...
+  willflyctl backup --output PATH [--source NAME=PATH ...]
+  willflyctl restore --archive PATH --destination PATH
+  willflyctl smoke
+
+Start defaults to dashboard, watcher and capture. Training, shadow and
+evaluation are opt-in because their inputs are operator-specific.
+EOF
+}
+
+systemd_user() {
+    command -v systemctl >/dev/null 2>&1 || die "systemctl is required; enable systemd=true in WSL2 first"
+    systemctl --user show-environment >/dev/null 2>&1 || die "systemd user bus is unavailable; start WSL2 systemd and retry"
+}
+
+unit_for() {
+    case "$1" in
+        dashboard) printf 'willfly-dashboard.service\n' ;;
+        capture|watcher|train|evaluate|shadow) printf 'willfly-%s.service\n' "$1" ;;
+        *) die "unknown service: $1" ;;
+    esac
+}
+
+timer_for() {
+    case "$1" in
+        capture|watcher|train|evaluate|shadow) printf 'willfly-%s.timer\n' "$1" ;;
+        *) printf '\n' ;;
+    esac
+}
+
+expand_services() {
+    if [[ $# -eq 0 ]]; then
+        printf '%s\n' dashboard watcher capture
+        return
+    fi
+    local item
+    for item in "$@"; do
+        if [[ "$item" == all ]]; then
+            printf '%s\n' dashboard capture watcher train evaluate shadow
+        else
+            unit_for "$item" >/dev/null
+            printf '%s\n' "$item"
+        fi
+    done
+}
+
+start_services() {
+    systemd_user
+    local service unit timer
+    while IFS= read -r service; do
+        unit="$(unit_for "$service")"
+        timer="$(timer_for "$service")"
+        # Execute one immediate pass, then arm the timer. Waiting inputs exit
+        # cleanly and remain visible in the private service log.
+        if ! systemctl --user start "$unit"; then
+            printf 'initial %s pass failed; continuing to arm its timer\n' "$service" >&2
+        fi
+        if [[ -n "$timer" ]]; then
+            systemctl --user start "$timer"
+        fi
+    done < <(expand_services "$@")
+    printf 'Requested start for: %s\n' "$(expand_services "$@" | paste -sd, -)"
+    printf 'Use status to inspect actual active state; packaging is not uptime evidence.\n'
+}
+
+stop_services() {
+    systemd_user
+    local service unit timer
+    while IFS= read -r service; do
+        unit="$(unit_for "$service")"
+        timer="$(timer_for "$service")"
+        if [[ -n "$timer" ]]; then
+            systemctl --user stop "$timer" >/dev/null 2>&1 || true
+        fi
+        systemctl --user stop "$unit" >/dev/null 2>&1 || true
+    done < <(expand_services "$@")
+    printf 'Requested stop for: %s\n' "$(expand_services "$@" | paste -sd, -)"
+}
+
+status_services() {
+    systemd_user
+    local service unit timer active enabled
+    while IFS= read -r service; do
+        unit="$(unit_for "$service")"
+        timer="$(timer_for "$service")"
+        active="$(systemctl --user is-active "$unit" 2>/dev/null || true)"
+        enabled="$(systemctl --user is-enabled "$unit" 2>/dev/null || true)"
+        printf '%s service_active=%s service_enabled=%s' "$service" "${active:-unknown}" "${enabled:-unknown}"
+        if [[ -n "$timer" ]]; then
+            printf ' timer_active=%s next=%s' \
+                "$(systemctl --user is-active "$timer" 2>/dev/null || true)" \
+                "$(systemctl --user show "$timer" -p NextElapseUSecRealtime --value 2>/dev/null || true)"
+        fi
+        printf '\n'
+    done < <(expand_services "$@")
+}
+
+ensure_writers_stopped() {
+    systemd_user
+    local service active
+    for service in capture watcher train evaluate shadow; do
+        active="$(systemctl --user is-active "$(unit_for "$service")" 2>/dev/null || true)"
+        [[ "$active" != active ]] || die "$service is active; run willflyctl stop all before touching state"
+    done
+}
+
+backup_state() {
+    ensure_writers_stopped
+    local output='' source_spec
+    local -a sources=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --output) [[ $# -ge 2 ]] || die '--output needs a path'; output="$2"; shift 2 ;;
+            --source) [[ $# -ge 2 ]] || die '--source needs NAME=PATH'; sources+=("$2"); shift 2 ;;
+            *) die "unknown backup argument: $1" ;;
+        esac
+    done
+    [[ -n "$output" ]] || die '--output is required'
+    if [[ ${#sources[@]} -eq 0 ]]; then
+        local name path
+        for name in observatory feedback watcher shadow models training; do
+            case "$name" in
+                observatory) path="${WILLFLY_OBSERVATORY_DIR:-$STATE_DIR/observatory}" ;;
+                feedback) path="${WILLFLY_FEEDBACK_DIR:-$STATE_DIR/feedback}" ;;
+                watcher) path="${WILLFLY_WATCHER_DB:-$STATE_DIR/watcher.sqlite3}" ;;
+                shadow) path="${WILLFLY_SHADOW_DB:-$STATE_DIR/shadow.sqlite3}" ;;
+                models) path="${WILLFLY_MODEL_REGISTRY:-$STATE_DIR/models.sqlite3}" ;;
+                training) path="${WILLFLY_TRAIN_REPORT_DIR:-$STATE_DIR/training}" ;;
+            esac
+            [[ -e "$path" ]] && sources+=("$name=$path")
+        done
+    fi
+    [[ ${#sources[@]} -gt 0 ]] || die 'no existing state paths were found; pass --source NAME=PATH explicitly'
+    local -a command=("$WILLFLY_BIN" state-backup --output "$output")
+    for source_spec in "${sources[@]}"; do
+        command+=(--source "$source_spec")
+    done
+    "${command[@]}"
+}
+
+restore_state() {
+    ensure_writers_stopped
+    local archive='' destination=''
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --archive) [[ $# -ge 2 ]] || die '--archive needs a path'; archive="$2"; shift 2 ;;
+            --destination) [[ $# -ge 2 ]] || die '--destination needs a path'; destination="$2"; shift 2 ;;
+            *) die "unknown restore argument: $1" ;;
+        esac
+    done
+    [[ -n "$archive" && -n "$destination" ]] || die '--archive and --destination are required'
+    "$WILLFLY_BIN" state-restore --archive "$archive" --destination "$destination"
+}
+
+case "${1:-}" in
+    install)
+        shift
+        exec "$PROJECT_DIR/deploy/wsl/install.sh" "$@"
+        ;;
+    start)
+        shift
+        start_services "$@"
+        ;;
+    stop)
+        shift
+        stop_services "$@"
+        ;;
+    status)
+        shift
+        status_services "$@"
+        ;;
+    backup)
+        shift
+        backup_state "$@"
+        ;;
+    restore)
+        shift
+        restore_state "$@"
+        ;;
+    smoke)
+        exec "$SCRIPT_DIR/smoke.sh"
+        ;;
+    -h|--help|'')
+        usage
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac

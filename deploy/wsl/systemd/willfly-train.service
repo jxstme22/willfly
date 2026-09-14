@@ -1,0 +1,18 @@
+[Unit]
+Description=Willfly bounded candidate training pass
+After=willfly-watcher.service
+ConditionPathExists=%h/.config/willfly/willfly.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/willfly/willfly.env
+ExecStart=/bin/bash %h/.local/share/willfly/bin/run-service.sh train
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+MemoryHigh=20G
+MemoryMax=24G
+CPUQuota=800%
+Nice=15
+TimeoutStartSec=2h
