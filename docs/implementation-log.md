@@ -1,5 +1,42 @@
 # Implementation log
 
+## Batch 2026-09-14 — durable learning due-stage scheduling
+
+### Task status
+
+- B9 — IN_PROGRESS: the watcher now has an opt-in durable planner for
+  observation, label, training and evaluation due slots. Worker callbacks,
+  resource execution, live source recovery and elapsed-time acceptance remain
+  open.
+
+### Changes
+
+- Added persisted last-scheduled instants and deterministic task IDs for each
+  watcher stage.
+- Added pending-task coalescing so repeated ticks do not create an unbounded
+  duplicate queue during an outage or slow callback.
+- Added `watcher-tick --schedule` and regression coverage for first scheduling,
+  due intervals, restart persistence and the zero-personal-trade boundary.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest -q tests/test_watcher.py tests/test_cli.py -k watcher
+  passed (5 tests)
+.venv/bin/python -m pytest
+  passed (227 tests, 2 sandbox loopback skips)
+```
+
+This proves durable queue planning only. It does not claim that a worker ran,
+that training/evaluation completed, or that a live 24/7 interval exists.
+
+### Blockers and next dependency-ready slice
+
+The next slice is to expose the scheduled queue state clearly in the operator
+surface and then continue independent packaging/evidence work. Live source
+coverage, candidate callbacks, calibration, economic qualification and timed
+gates remain open.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status

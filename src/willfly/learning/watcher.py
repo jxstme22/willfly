@@ -62,6 +62,17 @@ class WatcherSnapshot:
         return self.__dict__.copy()
 
 
+@dataclass(frozen=True)
+class ScheduleDecision:
+    kind: str
+    task_id: str | None
+    scheduled: bool
+    reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.__dict__.copy()
+
+
 class LearningWatcher:
     """Persist scheduler state; callbacks remain explicit integration points.
 
@@ -142,6 +153,43 @@ class LearningWatcher:
             "SELECT task_id, kind, status, reason, created_at, finished_at FROM watcher_tasks WHERE status IN ('queued', 'waiting') ORDER BY created_at, task_id"
         ).fetchall()
         return tuple(dict(row) for row in rows)
+
+    def schedule_due_tasks(self, *, observed_at: str) -> tuple[ScheduleDecision, ...]:
+        """Enqueue at most one pending task per due stage.
+
+        Scheduling is deliberately separate from task execution. A durable
+        slot records that observation, label, training or evaluation work was
+        due, while an integration callback remains responsible for doing the
+        work and calling :meth:`finish_task`. A pending task coalesces later
+        ticks so an outage cannot create an unbounded duplicate queue.
+        """
+
+        current = _instant(observed_at)
+        intervals = {
+            "observation": self.config.observation_interval_seconds,
+            "labels": self.config.label_interval_seconds,
+            "training": self.config.training_interval_seconds,
+            "evaluation": self.config.evaluation_interval_seconds,
+        }
+        pending_kinds = {str(item["kind"]) for item in self.pending_tasks()}
+        decisions: list[ScheduleDecision] = []
+        for kind, interval in intervals.items():
+            last_raw = self._get(f"last_scheduled:{kind}")
+            if last_raw is not None and (current - _instant(str(last_raw))).total_seconds() < interval:
+                decisions.append(ScheduleDecision(kind, None, False, "not_due"))
+                continue
+            if kind in pending_kinds:
+                decisions.append(ScheduleDecision(kind, None, False, "pending_task_coalesced"))
+                continue
+            task_id = f"{kind}:{observed_at}"
+            inserted = self.enqueue(task_id=task_id, kind=kind, created_at=observed_at)
+            if inserted:
+                self._set(f"last_scheduled:{kind}", observed_at)
+                pending_kinds.add(kind)
+                decisions.append(ScheduleDecision(kind, task_id, True, "due_slot_enqueued"))
+            else:
+                decisions.append(ScheduleDecision(kind, task_id, False, "duplicate_task_id"))
+        return tuple(decisions)
 
     def tick(
         self,
@@ -244,4 +292,4 @@ class LearningWatcher:
             )
 
 
-__all__ = ["LearningWatcher", "WatcherConfig", "WatcherSnapshot"]
+__all__ = ["LearningWatcher", "ScheduleDecision", "WatcherConfig", "WatcherSnapshot"]

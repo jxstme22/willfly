@@ -255,6 +255,32 @@ def test_watcher_cli_records_zero_trade_tick_and_restart_status(tmp_path, capsys
     assert status["personal_trade_trigger_required"] is False
 
 
+def test_watcher_cli_can_enqueue_due_stages_without_personal_trade_trigger(tmp_path, capsys):
+    state_db = tmp_path / "watcher.sqlite3"
+    feedback_dir = tmp_path / "feedback"
+    assert main(
+        [
+            "watcher-tick",
+            "--state-db",
+            str(state_db),
+            "--feedback-dir",
+            str(feedback_dir),
+            "--observed-at",
+            "2026-01-01T00:00:00Z",
+            "--schedule",
+        ]
+    ) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert {item["kind"] for item in result["schedule"] if item["scheduled"]} == {
+        "observation",
+        "labels",
+        "training",
+        "evaluation",
+    }
+    assert result["snapshot"]["queued_task_count"] == 4
+    assert result["personal_trade_trigger_required"] is False
+
+
 def test_signal_snapshot_loader_accepts_typed_empty_read_only_bundle(tmp_path):
     path = tmp_path / "signals.json"
     path.write_text(

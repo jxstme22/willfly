@@ -18,6 +18,12 @@ is unavailable, and it never fabricates observations, labels, training or
 evaluation results. The configuration keeps personal trades out of the trigger
 path and keeps execution read-only.
 
+`watcher-tick --schedule` adds a durable due-slot planner for all four stages.
+It records one queued task per due stage, persists the last scheduled instant,
+and coalesces a still-pending task after a gap. This is queue evidence only:
+the task worker, source callbacks, automatic training/evaluation execution and
+real 24/7 acceptance remain separate gates.
+
 This is scheduler and restart fixture evidence. A fresh Windows/WSL2 install,
 real 24/7 observation period, resource benchmark, automatic candidate cycle,
 and outage/recovery run against live sources remain open B9/B10 gates.
@@ -31,7 +37,8 @@ callbacks remain waiting/degraded rather than being synthesized.
 .venv/bin/willfly watcher-tick \
   --state-db /path/to/watcher.sqlite3 \
   --feedback-dir /path/to/feedback \
-  --observed-at 2026-09-14T00:00:00Z
+  --observed-at 2026-09-14T00:00:00Z \
+  --schedule
 .venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
 ```
 

@@ -30,3 +30,36 @@ def test_watcher_rejects_changed_persisted_config_identity(tmp_path) -> None:
         assert "config identity changed" in str(exc)
     else:  # pragma: no cover - assertion keeps the close path obvious
         raise AssertionError("changed watcher config identity was accepted")
+
+
+def test_watcher_due_scheduler_persists_slots_and_coalesces_pending_work(tmp_path) -> None:
+    path = tmp_path / "watcher.sqlite3"
+    config = WatcherConfig(
+        observation_interval_seconds=15,
+        label_interval_seconds=60,
+        training_interval_seconds=900,
+        evaluation_interval_seconds=900,
+    )
+    with LearningWatcher(path, config=config) as watcher:
+        first = watcher.schedule_due_tasks(observed_at="2026-09-14T00:00:00Z")
+        assert {item.kind for item in first if item.scheduled} == {
+            "observation",
+            "labels",
+            "training",
+            "evaluation",
+        }
+        assert len(watcher.pending_tasks()) == 4
+        immediate = watcher.schedule_due_tasks(observed_at="2026-09-14T00:00:01Z")
+        assert {item.reason for item in immediate} == {"not_due"}
+        for task in watcher.pending_tasks():
+            watcher.finish_task(task_id=task["task_id"], status="completed", finished_at="2026-09-14T00:00:02Z")
+        next_slot = watcher.schedule_due_tasks(observed_at="2026-09-14T00:00:15Z")
+        assert {item.kind for item in next_slot if item.scheduled} == {"observation"}
+        assert {item.reason for item in next_slot if not item.scheduled} == {"not_due"}
+        coalesced = watcher.schedule_due_tasks(observed_at="2026-09-14T00:01:00Z")
+        assert next(item for item in coalesced if item.kind == "observation").reason == "pending_task_coalesced"
+        assert next(item for item in coalesced if item.kind == "labels").scheduled is True
+        assert len(watcher.pending_tasks()) == 2
+    with LearningWatcher(path, config=config) as restarted:
+        assert len(restarted.pending_tasks()) == 2
+        assert restarted.schedule_due_tasks(observed_at="2026-09-14T00:01:01Z")[0].reason == "pending_task_coalesced"

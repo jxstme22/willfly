@@ -1123,6 +1123,7 @@ def _watcher_tick(
     observation_state: str,
     training_state: str,
     evaluation_state: str,
+    schedule: bool,
 ) -> dict[str, Any]:
     payload, config = _load_watcher_config(config_path)
     if personal_trade_count < 0:
@@ -1131,6 +1132,7 @@ def _watcher_tick(
     with FeedbackStore(feedback_dir) as feedback_store, LearningWatcher(
         state_db, config=config, config_identity=config_hash
     ) as watcher:
+        schedule_decisions = watcher.schedule_due_tasks(observed_at=observed_at) if schedule else ()
         snapshot = watcher.tick(
             observed_at=observed_at,
             feedback_store=feedback_store,
@@ -1143,6 +1145,7 @@ def _watcher_tick(
         "status": snapshot.status,
         "recorded": True,
         "snapshot": snapshot.to_dict(),
+        "schedule": [decision.to_dict() for decision in schedule_decisions],
         "config": str(config_path),
         "config_hash": config_hash,
         "state_db": str(state_db),
@@ -1287,6 +1290,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     watcher_tick.add_argument(
         "--evaluation-state", choices=("running", "waiting", "degraded", "failed"), default="waiting"
+    )
+    watcher_tick.add_argument(
+        "--schedule", action="store_true", help="enqueue due observation/label/training/evaluation tasks"
     )
 
     watcher_status = subparsers.add_parser("watcher-status", help="read persisted learning watcher state")
@@ -1452,6 +1458,7 @@ def main(argv: list[str] | None = None) -> int:
                 observation_state=args.observation_state,
                 training_state=args.training_state,
                 evaluation_state=args.evaluation_state,
+                schedule=args.schedule,
             )
         elif args.command == "watcher-status":
             result = _watcher_status(config_path=args.config, state_db=args.state_db)
