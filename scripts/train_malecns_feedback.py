@@ -22,6 +22,7 @@ from willfly.models.laboratory import (
     build_training_samples_from_feedback,
     run_connectome_experiment,
 )
+from willfly.features.market_feedback import MarketPoint, corpus_content_hashes
 from willfly.storage.feedback import FeedbackStore
 from willfly.domain import OutcomeRecord, PredictionRecord
 
@@ -44,13 +45,17 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
         raise ValueError("corpus must use willfly.market-feedback-bundle.v0.1")
     raw_predictions = payload.get("predictions")
     raw_outcomes = payload.get("outcomes")
+    raw_observations = payload.get("market_observations", [])
     features = payload.get("features_by_prediction")
     partitions = payload.get("partitions_by_prediction")
     if not isinstance(raw_predictions, list) or not isinstance(raw_outcomes, list):
         raise ValueError("corpus predictions and outcomes must be arrays")
+    if not isinstance(raw_observations, list):
+        raise ValueError("corpus market_observations must be an array")
     if not isinstance(features, dict) or not isinstance(partitions, dict):
         raise ValueError("corpus must contain feature and partition maps")
-    if raw_predictions or raw_outcomes or payload.get("market_observations"):
+    nonempty = bool(raw_predictions or raw_outcomes or raw_observations)
+    if nonempty:
         if payload.get("canonical_projection_required") is not True:
             raise ValueError("non-empty corpus must declare canonical_projection_required")
         checkpoint = payload.get("canonical_checkpoint")
@@ -63,6 +68,12 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
             "canonical_tip_hash",
             "canonical_event_set_hash",
             "canonical_checkpoint_hash",
+            "event_content_hash",
+            "observation_content_hash",
+            "predictions_content_hash",
+            "outcomes_content_hash",
+            "features_content_hash",
+            "partitions_content_hash",
         )
         if not isinstance(provenance, dict) or any(
             not isinstance(provenance.get(field), str) or not provenance[field]
@@ -79,8 +90,19 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
         raise ValueError("market corpus must not use personal trades as its training trigger")
     predictions = tuple(PredictionRecord.from_dict(item) for item in raw_predictions if isinstance(item, dict))
     outcomes = tuple(OutcomeRecord.from_dict(item) for item in raw_outcomes if isinstance(item, dict))
+    observations = tuple(MarketPoint.from_dict(item) for item in raw_observations if isinstance(item, dict))
     if len(predictions) != len(raw_predictions) or len(outcomes) != len(raw_outcomes):
         raise ValueError("corpus records must be objects")
+    if len(observations) != len(raw_observations):
+        raise ValueError("corpus market observations must be objects")
+    if nonempty:
+        try:
+            actual_hashes = corpus_content_hashes(observations, predictions, outcomes, features, partitions)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("corpus content is malformed") from exc
+        for field, actual in actual_hashes.items():
+            if provenance.get(field) != actual:
+                raise ValueError(f"corpus {field} content hash does not match")
     return payload, predictions, outcomes
 
 
@@ -133,6 +155,12 @@ def train_feedback(
             raise ValueError("corpus partition map is malformed")
     else:
         partition_values = _load_mapping(partitions_path, "partitions")
+    if corpus_payload is not None:
+        declared = corpus_payload.get("provenance")
+        if isinstance(declared, dict) and features_path is not None and declared.get("features_content_hash") != _mapping_hash(feature_values):
+            raise ValueError("features input does not match corpus features_content_hash")
+        if isinstance(declared, dict) and partitions_path is not None and declared.get("partitions_content_hash") != _mapping_hash(partition_values):
+            raise ValueError("partitions input does not match corpus partitions_content_hash")
     with FeedbackStore(feedback_dir) as store:
         if corpus_predictions or corpus_outcomes:
             store.record_predictions(corpus_predictions)

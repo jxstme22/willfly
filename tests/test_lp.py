@@ -166,7 +166,30 @@ def test_lp_mode_comparison_keeps_unverified_lp_out_of_shared_capital_metrics():
     assert disabled.mutually_exclusive is True
     assert disabled.lp is None
     assert disabled.reasons == ("lp_disabled_until_verified_evidence",)
-    enabled = compare_lp_modes(cases, capital_atomic=100_000, lp_evidence_state="verified")
+    missing = compare_lp_modes(cases, capital_atomic=100_000, lp_evidence_state="verified")
+    assert missing.lp is None
+    assert missing.reasons == ("lp_disabled_until_verified_evidence",)
+    enabled = compare_lp_modes(
+        cases,
+        capital_atomic=100_000,
+        lp_evidence_state="verified",
+        lp_evidence=LPEvidence(
+            chain_id=4663,
+            deployment_ref="rpc:deployment",
+            bytecode_ref="rpc:bytecode",
+            live_protocol_verified=True,
+            token_order_verified=True,
+            tick_math_verified=True,
+            hook_behavior_verified=True,
+            supported_tokens_verified=True,
+            position_state_verified=True,
+            receipt_accounting_verified=True,
+            gas_denomination_verified=True,
+            complete_receipts_verified=True,
+            observed_checkpoint_count=1,
+            source_refs=("rpc:position",),
+        ),
+    )
     assert enabled.lp is not None
     assert enabled.lp.max_drawdown_bps == 0
 

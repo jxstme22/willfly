@@ -1,8 +1,12 @@
 from dataclasses import replace
+import json
+
+import pytest
 
 from willfly.adapters.protocols.v4 import INITIALIZE_TOPIC, SWAP_TOPIC
 from willfly.domain import RawEvent
 from willfly.features.market_feedback import build_market_feedback_corpus
+from scripts.train_malecns_feedback import _load_corpus, _mapping_hash
 from willfly.storage.feedback import FeedbackStore
 from willfly.storage.raw import AncestryAnchor, BlockHeader, RawBatchStore, anchor_evidence_record
 
@@ -95,6 +99,34 @@ def test_market_feedback_uses_canonical_v4_swaps_and_delayed_forward_labels() ->
     assert corpus.to_bundle()["personal_trade_count"] == 0
     assert set(corpus.partitions_by_prediction.values()) == {"train"}
     assert corpus.split_policy["group_isolation"] is True
+
+
+def test_feedback_corpus_rejects_mutated_content_after_provenance_binding(tmp_path) -> None:
+    corpus = build_market_feedback_corpus(
+        [_initialize(), _swap(1, 101, 1 << 96), _swap(61, 161, 2 << 96)],
+        as_of_time="2026-01-01T00:05:00Z",
+        source="fixture-source",
+        max_label_delay_seconds=0,
+    )
+    payload = corpus.to_bundle()
+    checkpoint = {"source": "fixture-source", "tip_hash": "tip", "state": "canonical"}
+    payload["canonical_projection_required"] = True
+    payload["canonical_checkpoint"] = checkpoint
+    payload["provenance"].update(
+        {
+            "config_hash": "config",
+            "canonical_tip_hash": "tip",
+            "canonical_checkpoint_hash": _mapping_hash(checkpoint),
+        }
+    )
+    path = tmp_path / "corpus.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    _load_corpus(path)
+    prediction_id = next(iter(payload["features_by_prediction"]))
+    payload["features_by_prediction"][prediction_id]["market.price_change_bps"] = 999.0
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="features_content_hash"):
+        _load_corpus(path)
 
 
 def test_market_feedback_excludes_noncanonical_and_future_arrivals() -> None:

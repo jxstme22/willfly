@@ -21,6 +21,8 @@ import sys
 import tempfile
 from typing import Any, Callable, Mapping, Sequence
 
+from willfly.ingest.runner import checkpoint_source, filter_identity
+
 
 def _instant(value: str) -> datetime:
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -330,6 +332,21 @@ class PipelineRunner:
         if stage == "observation":
             values = self.config.payload.get("observation", {})
             parameters = dict(values) if isinstance(values, dict) else {}
+            if parameters.get("mode", "backfill") == "rolling_backfill":
+                # A rolling observation is a sequence of due ticks, not one
+                # forever-reusable backfill.  The tick remains the stable
+                # retry key for a single scheduler attempt; the next tick
+                # must get a new idempotency key and revalidate the checkpoint.
+                parameters["rolling_tick"] = observed_at
+                bootstrap = self._rolling_bootstrap_from_environment(parameters.get("bootstrap_from_block"))
+                if bootstrap is not None:
+                    parameters["effective_bootstrap_from_block"] = bootstrap
+                source_config = self.config.path_value("source_config", required=False)
+                provider_identity = _hash_file(source_config) if source_config is not None and source_config.is_file() else "unavailable"
+                parameters["provider_identity"] = provider_identity
+                parameters["checkpoint_source_identity"] = self._rolling_checkpoint_source(
+                    source_config, str(parameters.get("source", "pipeline-live-readonly")), provider_identity
+                )
         elif stage == "labels":
             parameters = {"as_of_time": observed_at}
         else:
@@ -420,7 +437,8 @@ class PipelineRunner:
                 "manifest": payload,
             }, ("reuse", str(input_path))
         if mode == "rolling_backfill":
-            bootstrap = self.config.value("observation", "bootstrap_from_block")
+            configured_bootstrap = self.config.value("observation", "bootstrap_from_block")
+            bootstrap = self._rolling_bootstrap_from_environment(configured_bootstrap)
             if bootstrap is not None and (isinstance(bootstrap, bool) or not isinstance(bootstrap, int) or bootstrap < 0):
                 return None, ("rolling-backfill", "waiting:rolling_bootstrap_from_block_invalid")
             config_path = self.config.path_value("source_config")
@@ -482,6 +500,49 @@ class PipelineRunner:
         result = self._run_json(command, "observation")
         return result, command
 
+    @staticmethod
+    def _rolling_bootstrap_from_environment(configured: object) -> int | None:
+        if configured is not None:
+            return configured if isinstance(configured, int) and not isinstance(configured, bool) else configured  # validated by caller
+        raw = os.environ.get("WILLFLY_CAPTURE_START_BLOCK", "").strip()
+        if not raw:
+            return None
+        if not raw.isdigit():
+            return raw  # validated by caller and reported as a waiting state
+        return int(raw)
+
+    def _rolling_checkpoint_source(self, source_config: Path | None, base_source: str, provider_identity: str) -> str:
+        """Derive the same filter-bound namespace used by rolling-backfill."""
+
+        if source_config is None or not source_config.is_file():
+            return f"{base_source}:unresolved:{provider_identity[:16]}"
+        try:
+            payload = json.loads(source_config.read_text(encoding="utf-8"))
+            chain = payload.get("chain", {})
+            protocols = payload.get("protocols", {})
+            v4 = protocols.get("uniswap_v4", {}) if isinstance(protocols, dict) else {}
+            launches = payload.get("launch_sources", {})
+            pons = launches.get("pons_v2", {}) if isinstance(launches, dict) else {}
+            contracts = payload.get("contracts")
+            addresses = [contracts] if isinstance(contracts, str) else [item for item in (v4.get("pool_manager"), pons.get("address")) if item]
+            abi_hashes = [item for item in (v4.get("abi_sha256"), pons.get("abi_sha256")) if isinstance(item, str)]
+            for manifest in (v4.get("abi_manifest"), pons.get("abi_manifest")):
+                abi_path = self.config.project_dir / manifest if isinstance(manifest, str) else None
+                if abi_path is not None and abi_path.is_file():
+                    abi_hashes.append(_hash_file(abi_path))
+            families = list(v4.get("event_families", []) or []) + [
+                "TokenLaunched", "LaunchSwept", "GraduationTokensPermanentlyLocked", "PoolGraduated"
+            ]
+            filter_hash = filter_identity(
+                chain_id=int(chain.get("chain_id", 4663)),
+                addresses=addresses,
+                abi_hashes=abi_hashes,
+                event_families=families,
+            )
+            return checkpoint_source(base_source, int(chain.get("chain_id", 4663)), filter_hash)
+        except (KeyError, TypeError, ValueError, OSError):
+            return f"{base_source}:unresolved:{provider_identity[:16]}"
+
     def _labels(self, observed_at: str, observation: sqlite3.Row) -> tuple[dict[str, Any] | None, dict[str, Any] | None, Sequence[str]]:
         if self.config.value("labels", "mode", "build") == "reuse":
             input_path = self.config.path_value("corpus_input")
@@ -490,6 +551,13 @@ class PipelineRunner:
             self._validate_source_provenance(bundle.get("provenance"), "reused corpus")
             return {"status": "ready", "reused": True, "input": str(input_path)}, bundle, ("reuse", str(input_path))
         source = self.config.value("observation", "source", "pipeline-live-readonly")
+        if self.config.value("observation", "mode", "backfill") == "rolling_backfill":
+            observation_payload = json.loads(Path(observation["path"]).read_text(encoding="utf-8"))
+            manifest = observation_payload.get("manifest") if isinstance(observation_payload.get("manifest"), dict) else observation_payload
+            checkpoint_source = manifest.get("checkpoint_source") if isinstance(manifest, dict) else None
+            if not isinstance(checkpoint_source, str) or not checkpoint_source:
+                raise ValueError("rolling observation manifest checkpoint_source is required")
+            source = checkpoint_source
         config_path = self.config.path_value("source_config")
         store_dir = self.config.path_value("store_dir")
         feedback_dir = self.config.path_value("feedback_dir")

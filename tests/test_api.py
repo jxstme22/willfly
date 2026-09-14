@@ -117,3 +117,18 @@ def test_http_surface_refreshes_published_training_snapshot():
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_catalog_unifies_projection_signal_training_and_model_state():
+    store = ReadOnlyStore(
+        signal_as_of_time="2026-09-14T06:00:00Z",
+        quality_details={"canonical_event_count": 17},
+        training_state={"status": "waiting", "reason": "no_mature_labels"},
+        model_state={"active_version": "active-v1", "known_versions": ["active-v1"]},
+    )
+    payload, status = _route(store, "/catalog")
+    assert status == 200
+    assert payload["as_of_time"] == "2026-09-14T06:00:00Z"
+    assert payload["counts"]["canonical_events"] == 17
+    assert payload["training"]["status"] == "waiting"
+    assert payload["models"]["active_version"] == "active-v1"

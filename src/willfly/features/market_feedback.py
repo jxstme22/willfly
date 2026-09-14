@@ -108,6 +108,64 @@ class MarketPoint:
             "source_refs": list(self.source_refs),
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "MarketPoint":
+        if not isinstance(data, Mapping):
+            raise ValueError("market point must be an object")
+        refs = data.get("source_refs")
+        if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
+            raise ValueError("market point source_refs must be a string array")
+        try:
+            return cls(
+                point_id=str(data["point_id"]),
+                chain_id=int(data["chain_id"]),
+                pool_id=str(data["pool_id"]),
+                base_asset=str(data["base_asset"]),
+                quote_asset=str(data["quote_asset"]),
+                event_time=str(data["event_time"]),
+                available_at=str(data["available_at"]),
+                price_numerator=int(data["price_numerator"]),
+                price_denominator=int(data["price_denominator"]),
+                sqrt_price_x96=int(data["sqrt_price_x96"]),
+                liquidity=int(data["liquidity"]),
+                tick=int(data["tick"]),
+                fee=int(data["fee"]),
+                amount0=int(data["amount0"]),
+                amount1=int(data["amount1"]),
+                source_refs=tuple(refs),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("market point fields are malformed") from exc
+
+
+def corpus_content_hashes(
+    points: Iterable[MarketPoint],
+    predictions: Iterable[PredictionRecord],
+    outcomes: Iterable[OutcomeRecord],
+    features_by_prediction: Mapping[str, Mapping[str, float]],
+    partitions_by_prediction: Mapping[str, str],
+) -> dict[str, str]:
+    """Return hashes over normalized corpus content, including event lineage."""
+
+    point_rows = [point.to_dict() for point in points]
+    prediction_rows = [prediction.to_dict() for prediction in predictions]
+    outcome_rows = [outcome.to_dict() for outcome in outcomes]
+    feature_rows = {str(key): dict(value) for key, value in sorted(features_by_prediction.items())}
+    partition_rows = {str(key): str(value) for key, value in sorted(partitions_by_prediction.items())}
+    event_refs = sorted({ref for point in point_rows for ref in point["source_refs"]})
+
+    def digest(value: object) -> str:
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    return {
+        "event_content_hash": digest(event_refs),
+        "observation_content_hash": digest(point_rows),
+        "predictions_content_hash": digest(prediction_rows),
+        "outcomes_content_hash": digest(outcome_rows),
+        "features_content_hash": digest(feature_rows),
+        "partitions_content_hash": digest(partition_rows),
+    }
+
 
 @dataclass(frozen=True)
 class MarketFeedbackCorpus:
@@ -475,6 +533,16 @@ def build_market_feedback_corpus(
             "canonical_event_set_hash": _canonical_event_set_hash(records, cutoff),
             "canonical_event_set_cutoff": as_of_time,
             "expected_emitter": expected_emitter,
+            **corpus_content_hashes(
+                points,
+                predictions,
+                outcomes,
+                {
+                    prediction.prediction_id: features[prediction_point[prediction.prediction_id].point_id]
+                    for prediction in predictions
+                },
+                partitions,
+            ),
         },
     )
 
@@ -692,4 +760,4 @@ def _clamp(value: float) -> float:
     return max(-1.0, min(1.0, value))
 
 
-__all__ = ["MarketFeedbackCorpus", "MarketPoint", "Q96", "build_market_feedback_corpus"]
+__all__ = ["MarketFeedbackCorpus", "MarketPoint", "Q96", "build_market_feedback_corpus", "corpus_content_hashes"]

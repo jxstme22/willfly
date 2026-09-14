@@ -58,6 +58,9 @@ class WatcherSnapshot:
     mature_label_count: int
     eligible_label_count: int
     queued_task_count: int
+    last_completed_stage: str | None = None
+    last_completed_task_id: str | None = None
+    last_completed_at: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -251,6 +254,8 @@ class LearningWatcher:
                 finished_at=observed_at,
                 reason=reason,
             )
+            if status == "completed":
+                self._record_completion(kind=str(row["kind"]), task_id=str(row["task_id"]), completed_at=observed_at)
             results.append(TaskExecution(row["task_id"], row["kind"], status, reason))
         return tuple(results)
 
@@ -368,6 +373,9 @@ class LearningWatcher:
             "mature_label_count": mature_count,
             "eligible_label_count": eligible_count,
             "queued_task_count": len(self.pending_tasks()),
+            "last_completed_stage": self._get("last_completed_stage"),
+            "last_completed_task_id": self._get("last_completed_task_id"),
+            "last_completed_at": self._get("last_completed_at"),
         })
         return WatcherSnapshot(
             observed_at,
@@ -382,11 +390,34 @@ class LearningWatcher:
             mature_count,
             eligible_count,
             len(self.pending_tasks()),
+            self._get("last_completed_stage"),
+            self._get("last_completed_task_id"),
+            self._get("last_completed_at"),
         )
 
     def snapshot(self) -> WatcherSnapshot | None:
         value = self._get("last_snapshot")
-        return None if value is None else WatcherSnapshot(**value)
+        if value is None:
+            return None
+        value = dict(value)
+        value.setdefault("last_completed_stage", self._get("last_completed_stage"))
+        value.setdefault("last_completed_task_id", self._get("last_completed_task_id"))
+        value.setdefault("last_completed_at", self._get("last_completed_at"))
+        return WatcherSnapshot(**value)
+
+    def _record_completion(self, *, kind: str, task_id: str, completed_at: str) -> None:
+        self._set("last_completed_stage", kind)
+        self._set("last_completed_task_id", task_id)
+        self._set("last_completed_at", completed_at)
+        snapshot = self._get("last_snapshot")
+        if isinstance(snapshot, dict):
+            snapshot = dict(snapshot)
+            snapshot.update(
+                last_completed_stage=kind,
+                last_completed_task_id=task_id,
+                last_completed_at=completed_at,
+            )
+            self._set("last_snapshot", snapshot)
 
     def _get(self, key: str) -> Any:
         row = self._connection.execute("SELECT value_json FROM watcher_state WHERE key = ?", (key,)).fetchone()

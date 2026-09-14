@@ -89,6 +89,13 @@ def test_watcher_recovers_running_tasks_and_executes_only_bound_callbacks(tmp_pa
         pending = watcher.pending_tasks()
         assert pending[0]["task_id"] == "labels:1"
         assert pending[0]["status"] == "queued"
+        watcher.tick(observed_at="2026-09-14T00:00:11Z")
+        assert watcher.snapshot().last_completed_stage == "observation"
+        assert watcher.snapshot().last_completed_task_id == "observation:1"
+    with LearningWatcher(path) as restarted:
+        assert restarted.snapshot().last_completed_stage == "observation"
+        assert restarted.snapshot().last_completed_task_id == "observation:1"
+        assert restarted.snapshot().last_completed_at == "2026-09-14T00:00:10Z"
 
 
 def test_watcher_records_callback_failure_without_losing_the_service_loop(tmp_path) -> None:

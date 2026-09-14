@@ -1483,3 +1483,28 @@ access or broadcast path was added.
 Final verification for this loop: 285 tests collected, 281 passed and 4
 sandbox loopback skips; WSL2 offline smoke passed all 16 fixture checks;
 planning render/check and shell, JSON, compile and diff checks passed.
+
+
+## 2026-09-14 — coordinator handoff audit closure loop
+
+Repaired the remaining concrete handoff blockers. Rolling observation runs now
+bind the scheduler tick, provider manifest identity and filter-derived
+checkpoint namespace, while same-tick retries remain idempotent. Labels read
+the exact filter-bound `checkpoint_source` from the observation artifact and
+carry it into corpus and downstream provenance. LP comparison is fail-closed
+unless a qualifying `LPEvidence` object is supplied.
+
+The WSL installer now substitutes pipeline config/state and signal paths, and
+the rolling pipeline accepts the explicit `WILLFLY_CAPTURE_START_BLOCK`
+bootstrap used by `willflyctl start pipeline`. The dashboard starts in an
+explicit signal-waiting state, retains its last good snapshot across transient
+alias failures, and refreshes as-of, canonical count, training and model state
+through the unified `/catalog` response. Watcher callback completion is
+durable, and market feedback corpus loading recomputes all event/observation/
+prediction/outcome/feature/partition content identities before training.
+
+Added targeted regressions for each repair, generated-env placeholder
+substitution, exact checkpoint-source propagation, catalog DOM refresh and
+mutated corpus rejection. The independent handoff checkpoint is recorded in
+`docs/reports/luna-repair-checkpoint-03.md`; roadmap acceptance gates remain
+open until the coordinator rechecks this loop.

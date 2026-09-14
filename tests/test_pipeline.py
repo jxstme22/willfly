@@ -45,7 +45,8 @@ def _config(tmp_path: Path, *, observation: dict | None = None) -> Path:
     return path
 
 
-def test_pipeline_rolling_observation_command_is_bounded_and_checkpointed(tmp_path):
+def test_pipeline_rolling_observation_command_is_bounded_and_checkpointed(monkeypatch, tmp_path):
+    monkeypatch.delenv("WILLFLY_CAPTURE_START_BLOCK", raising=False)
     config = _config(
         tmp_path,
         observation={
@@ -72,6 +73,65 @@ def test_pipeline_rolling_observation_command_is_bounded_and_checkpointed(tmp_pa
     assert "--max-blocks" in command and command[command.index("--max-blocks") + 1] == "500"
     assert "--page-size" in command and command[command.index("--page-size") + 1] == "250"
     assert "--bootstrap-from-block" not in command
+
+
+def test_pipeline_rolling_observation_uses_operator_bootstrap_and_tick_identity(monkeypatch, tmp_path):
+    monkeypatch.setenv("WILLFLY_CAPTURE_START_BLOCK", "61692800")
+    config = _config(
+        tmp_path,
+        observation={
+            "mode": "rolling_backfill",
+            "bootstrap_from_block": None,
+            "confirmation_lag_blocks": 12,
+            "max_blocks": 500,
+            "page_size": 250,
+            "source": "fixture",
+        },
+    )
+    commands = []
+
+    def command_runner(command, _budget, _cwd):
+        commands.append(tuple(command))
+        return subprocess.CompletedProcess(command, 0, '{"status":"waiting","reason":"bootstrap_required"}', "")
+
+    with PipelineRunner(config, tmp_path / "pipeline.sqlite3", command_runner=command_runner) as runner:
+        first = runner.run("observation", observed_at="2026-09-14T06:00:00Z")
+        second = runner.run("observation", observed_at="2026-09-14T06:00:15Z")
+    assert first.idempotency_key != second.idempotency_key
+    assert all("--bootstrap-from-block" in command for command in commands)
+    assert all(command[command.index("--bootstrap-from-block") + 1] == "61692800" for command in commands)
+
+
+def test_pipeline_labels_use_filter_bound_checkpoint_source(tmp_path):
+    config = _config(
+        tmp_path,
+        observation={
+            "mode": "rolling_backfill",
+            "bootstrap_from_block": 10,
+            "confirmation_lag_blocks": 12,
+            "max_blocks": 500,
+            "page_size": 250,
+            "source": "bare-config-source",
+        },
+    )
+    commands = []
+
+    def command_runner(command, _budget, _cwd):
+        commands.append(tuple(command))
+        if "rolling-backfill" in command:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                '{"status":"executed","checkpoint_source":"pipeline-live-readonly:4663:hash"}',
+                "",
+            )
+        return subprocess.CompletedProcess(command, 0, '{"status":"waiting","reason":"no_canonical_checkpoint"}', "")
+
+    with PipelineRunner(config, tmp_path / "pipeline.sqlite3", command_runner=command_runner) as runner:
+        assert runner.run("observation", observed_at="2026-09-14T06:00:00Z").status == "completed"
+        assert runner.run("labels", observed_at="2026-09-14T06:00:00Z").status == "waiting"
+    labels_command = next(command for command in commands if "market-feedback-build" in command)
+    assert labels_command[labels_command.index("--source") + 1] == "pipeline-live-readonly:4663:hash"
 
 
 def test_pipeline_runs_bounded_chain_and_reuses_completed_artifacts(tmp_path):

@@ -90,12 +90,15 @@ if [[ ! -f "$ENV_FILE" ]]; then
         -e "s|^WILLFLY_LOG_DIR=.*|WILLFLY_LOG_DIR=\"$STATE_DIR/logs\"|" \
         -e "s|^WILLFLY_SOURCE_CONFIG=.*|WILLFLY_SOURCE_CONFIG=\"$PROJECT_DIR/configs/sources/robinhood-chain-v0.1.json\"|" \
         -e "s|^WILLFLY_WATCHER_CONFIG=.*|WILLFLY_WATCHER_CONFIG=\"$PROJECT_DIR/configs/learning/watcher-v0.1.json\"|" \
+        -e "s|^WILLFLY_PIPELINE_CONFIG=.*|WILLFLY_PIPELINE_CONFIG=\"$PROJECT_DIR/configs/learning/pipeline-v0.1.json\"|" \
         -e "s|^WILLFLY_SHADOW_CONFIG=.*|WILLFLY_SHADOW_CONFIG=\"$PROJECT_DIR/configs/shadow/config.json\"|" \
         -e "s|^WILLFLY_OBSERVATORY_DIR=.*|WILLFLY_OBSERVATORY_DIR=\"$STATE_DIR/observatory\"|" \
         -e "s|^WILLFLY_FEEDBACK_DIR=.*|WILLFLY_FEEDBACK_DIR=\"$STATE_DIR/feedback\"|" \
         -e "s|^WILLFLY_WATCHER_DB=.*|WILLFLY_WATCHER_DB=\"$STATE_DIR/watcher.sqlite3\"|" \
+        -e "s|^WILLFLY_PIPELINE_STATE_DB=.*|WILLFLY_PIPELINE_STATE_DB=\"$STATE_DIR/pipeline.sqlite3\"|" \
         -e "s|^WILLFLY_SHADOW_DB=.*|WILLFLY_SHADOW_DB=\"$STATE_DIR/shadow.sqlite3\"|" \
         -e "s|^WILLFLY_MODEL_REGISTRY=.*|WILLFLY_MODEL_REGISTRY=\"$STATE_DIR/models.sqlite3\"|" \
+        -e "s|^WILLFLY_SIGNALS_FILE=.*|WILLFLY_SIGNALS_FILE=\"$PROJECT_DIR/data/pipeline/signals-latest.json\"|" \
         -e "s|^WILLFLY_TRAIN_MANIFEST=.*|WILLFLY_TRAIN_MANIFEST=\"$PROJECT_DIR/configs/connectome/male-cns-v1.0.json\"|" \
         -e "s|^WILLFLY_TRAIN_DATA_ROOT=.*|WILLFLY_TRAIN_DATA_ROOT=\"$STATE_DIR/connectome\"|" \
         -e "s|^WILLFLY_TRAIN_REPORT_DIR=.*|WILLFLY_TRAIN_REPORT_DIR=\"$STATE_DIR/training\"|" \

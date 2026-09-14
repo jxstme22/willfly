@@ -38,6 +38,7 @@ class ReadOnlyStore:
     manual_actions: tuple[ManualAction, ...] = ()
     action_links: tuple[ManualActionLink, ...] = ()
     signal_loader: Callable[[], Mapping[str, object]] | None = None
+    runtime_loader: Callable[[], Mapping[str, object]] | None = None
     signal_file: str | None = None
     signal_file_hash: str | None = None
     signal_provenance: Mapping[str, object] | None = None
@@ -45,9 +46,10 @@ class ReadOnlyStore:
     def refresh(self) -> "ReadOnlyStore":
         """Reload an operator-published signal snapshot for each GET request."""
 
-        if self.signal_loader is None:
+        loader = self.runtime_loader or self.signal_loader
+        if loader is None:
             return self
-        values = self.signal_loader()
+        values = loader()
         return replace(self, **dict(values))
 
     @classmethod
@@ -364,14 +366,23 @@ class ReadOnlyStore:
     def catalog(self) -> dict[str, object]:
         """Return a bounded first-page catalogue used by the browser shell."""
 
+        health = self.health()
+        details = health.get("details", {}) if isinstance(health, dict) else {}
+        canonical_event_count = details.get(
+            "canonical_event_count",
+            self.discovery_snapshot.canonical_event_count if self.discovery_snapshot else 0,
+        )
         return {
-            "as_of_time": self.signal_as_of_time or (self.discovery_snapshot.as_of_time if self.discovery_snapshot else "1970-01-01T00:00:00Z"),
-            "health": self.health(),
+            "as_of_time": self._as_of_time(),
+            "training": self.training(),
+            "models": self.models(),
+            "health": health,
             "counts": {
                 "launches": len(self.launches), "pools": len(self.pools), "timelines": len(self.timelines),
                 "exclusions": len(self.exclusions), "signals": len(self._signal_entries()),
                 "positions": sum(len(item.positions) for item in self.wallet_observations),
                 "actions": len(self.manual_actions),
+                "canonical_events": canonical_event_count,
             },
         }
 

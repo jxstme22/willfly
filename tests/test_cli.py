@@ -1,5 +1,6 @@
 import json
 
+import willfly.cli as cli
 from willfly.cli import _load_signal_store, main
 from willfly.evaluation.promotion import PredictionPoint
 from willfly.shadow.config import freeze_shadow_config
@@ -11,6 +12,26 @@ def test_fixture_check_passes(capsys):
     result = json.loads(capsys.readouterr().out)
     assert result["origin"] == "synthetic"
     assert result["failed"] == 0
+
+
+def test_resilient_signal_loader_waits_then_keeps_last_good_snapshot(monkeypatch, tmp_path):
+    path = tmp_path / "signals.json"
+    path.write_text("placeholder", encoding="utf-8")
+    good = {
+        "predictions": (),
+        "proposals": (),
+        "signal_as_of_time": "2026-09-14T00:00:00Z",
+        "market_readiness": {"spot": "research_only", "lp": "waiting"},
+        "training_state": {"status": "completed"},
+        "signal_provenance": None,
+        "manual_actions": (),
+        "action_links": (),
+    }
+    monkeypatch.setattr(cli, "_load_signal_store", lambda _path: dict(good))
+    initial, loader = cli._resilient_signal_loader(path)
+    assert initial["training_state"]["status"] == "completed"
+    monkeypatch.setattr(cli, "_load_signal_store", lambda _path: (_ for _ in ()).throw(OSError("temporary read")))
+    assert loader()["signal_as_of_time"] == "2026-09-14T00:00:00Z"
 
 
 def test_doctor_reports_open_launch_gate(capsys):

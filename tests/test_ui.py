@@ -58,6 +58,10 @@ def test_dashboard_renders_attached_model_registry_state():
     )
     assert "Model registry" in page
     assert "candidate-v2" in page
+    assert 'id="training-status"' in page
+    assert 'id="active-model"' in page
+    assert 'fetch("/catalog"' in page
+    assert 'id="canonical-count"' in page
 
 
 def test_dashboard_escapes_untrusted_evidence_and_exposes_operator_controls():

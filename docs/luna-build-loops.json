@@ -44,12 +44,13 @@
     {
       "id": "G0",
       "goal": "Audit and repair DeepSeek checkpoint",
-      "status": "DONE",
+      "status": "IN_PROGRESS",
       "tasks": [],
       "done_when": "Every release-blocking finding is fixed and independently rechecked; any deferred finding has an explicit affected-capability gate. A passing suite alone is insufficient.",
       "status_evidence": [
         "docs/reports/luna-repair-checkpoint.md",
-        "docs/reports/luna-repair-review-02.md"
+        "docs/reports/luna-repair-review-02.md",
+        "docs/reports/luna-repair-checkpoint-03.md"
       ]
     },
     {
@@ -119,8 +120,8 @@
     "If usage/session limits interrupt a loop, leave a precise resumable checkpoint; do not imply background continuation has been scheduled."
   ],
   "repair_stage": {
-    "status": "ACCEPTED_BY_COORDINATOR_BUILD_STAGE_OPEN",
-    "checkpoint": "docs/reports/luna-repair-checkpoint.md",
+    "status": "REPAIRED_PENDING_INDEPENDENT_RECHECK",
+    "checkpoint": "docs/reports/luna-repair-checkpoint-03.md",
     "findings": {
       "DS-01": "implemented_fail_closed_anchor_policy_and_reached_anchor_invariant",
       "DS-02": "implemented_proven_height_range_and_out_of_scope_unresolved_classification",
@@ -148,7 +149,7 @@
       "same-checkpoint replacement-log replay, partial cursor and replay-failure fixtures",
       "strict nested evidence and endpoint credential-canary fixtures"
     ],
-    "independent_review_required": false,
+    "independent_review_required": true,
     "coordinator_review": "docs/reports/luna-repair-review-02.md",
     "coordinator_acceptance": {
       "status": "accepted",

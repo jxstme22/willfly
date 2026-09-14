@@ -136,7 +136,9 @@ def compare_lp_modes(
     lp_report: MetricReport | None = None
     if lp_evidence_state != "verified":
         reasons.append("lp_disabled_until_verified_evidence")
-    elif lp_evidence is not None and not is_verified_live_evidence(lp_evidence):
+    elif lp_evidence is None:
+        reasons.append("lp_disabled_until_verified_evidence")
+    elif not is_verified_live_evidence(lp_evidence):
         reasons.append("lp_disabled_until_verified_live_evidence")
     elif any(case.lp_net_return_bps is None for case in ordered):
         reasons.append("missing_lp_outcomes")

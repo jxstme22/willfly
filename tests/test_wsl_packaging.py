@@ -33,6 +33,9 @@ def test_wsl_shell_and_systemd_files_parse() -> None:
         else:
             assert "[Timer]" in text and "Unit=willfly-" in text
     assert "MemoryMax=24G" in (WSL / "systemd" / "willfly-train.service").read_text(encoding="utf-8")
+    installer = (WSL / "install.sh").read_text(encoding="utf-8")
+    for key in ("WILLFLY_PIPELINE_CONFIG", "WILLFLY_PIPELINE_STATE_DB", "WILLFLY_SIGNALS_FILE"):
+        assert f"^{key}=.*" in installer
 
 
 def test_wsl_offline_smoke_path() -> None:
@@ -58,3 +61,23 @@ def test_capture_dry_run_is_bounded_and_does_not_create_state(tmp_path: Path) ->
     assert "backfill" in result.stdout
     assert "61692800" in result.stdout
     assert not (tmp_path / "state").exists()
+
+
+def test_wsl_installer_materializes_all_generated_paths(tmp_path: Path) -> None:
+    config_home = tmp_path / "config-home"
+    env = {
+        "XDG_CONFIG_HOME": str(config_home),
+        "WILLFLY_PROJECT_DIR": str(ROOT),
+        "WILLFLY_RUNTIME_DIR": str(tmp_path / "runtime"),
+        "WILLFLY_STATE_DIR": str(tmp_path / "state"),
+        "WILLFLY_CONFIG_DIR": str(tmp_path / "config"),
+        "WILLFLY_ENV_FILE": str(tmp_path / "config" / "willfly.env"),
+        "WILLFLY_PYTHON": sys.executable,
+        "WILLFLY_SKIP_PACKAGE_INSTALL": "1",
+    }
+    result = _run(["bash", str(WSL / "install.sh")], env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    generated = (tmp_path / "config" / "willfly.env").read_text(encoding="utf-8")
+    assert "/path/to" not in generated and "/home/user" not in generated
+    assert f'WILLFLY_PIPELINE_CONFIG="{ROOT}/configs/learning/pipeline-v0.1.json"' in generated
+    assert f'WILLFLY_SIGNALS_FILE="{ROOT}/data/pipeline/signals-latest.json"' in generated

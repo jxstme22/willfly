@@ -11,7 +11,7 @@ from pathlib import Path
 import signal
 import sqlite3
 import sys
-from typing import Any
+from typing import Any, Callable
 
 from willfly import __version__
 from willfly.domain import (
@@ -215,6 +215,41 @@ def _load_signal_store(path: Path) -> dict[str, Any]:
             manual_actions, wallet_activities, time_window_seconds=time_window_seconds
         ),
     }
+
+
+def _waiting_signal_store(reason: str) -> dict[str, Any]:
+    """Return an explicit empty state while a published signal is unavailable."""
+
+    return {
+        "predictions": (),
+        "proposals": (),
+        "signal_as_of_time": None,
+        "market_readiness": {"spot": "waiting", "lp": "waiting"},
+        "training_state": {"status": "waiting", "reason": reason},
+        "signal_provenance": None,
+        "manual_actions": (),
+        "action_links": (),
+    }
+
+
+def _resilient_signal_loader(path: Path) -> tuple[dict[str, Any], Callable[[], dict[str, Any]]]:
+    """Load signals without taking the dashboard down during atomic replacement."""
+
+    state: dict[str, Any] = {"last_good": None, "last_hash": None}
+
+    def load() -> dict[str, Any]:
+        try:
+            values = _load_signal_store(path)
+            values["signal_file_hash"] = _config_hash(path)
+            state["last_good"] = dict(values)
+            state["last_hash"] = values["signal_file_hash"]
+            return values
+        except (OSError, ValueError, json.JSONDecodeError):
+            if isinstance(state.get("last_good"), dict):
+                return dict(state["last_good"])
+            return _waiting_signal_store("signal_file_not_available")
+
+    return load(), load
 
 
 def _load_prediction_points(path: Path) -> tuple[PredictionPoint, ...]:
@@ -2298,23 +2333,19 @@ def main(argv: list[str] | None = None) -> int:
                 read_store = ReadOnlyStore()
             signal_file_hash = None
             signal_loader = None
+            runtime_loader = None
             if args.signals_file is not None:
-                signal_values = _load_signal_store(args.signals_file)
-                def load_current_signal(path: Path = args.signals_file) -> dict[str, Any]:
-                    values = _load_signal_store(path)
-                    values["signal_file_hash"] = _config_hash(path)
-                    return values
-
-                signal_loader = load_current_signal
+                signal_values, signal_loader = _resilient_signal_loader(args.signals_file)
                 read_store = replace(
                     read_store,
                     **signal_values,
                     signal_loader=signal_loader,
                     signal_file=str(args.signals_file),
-                    signal_file_hash=_config_hash(args.signals_file),
+                    signal_file_hash=signal_values.get("signal_file_hash"),
                 )
-                signal_file_hash = _config_hash(args.signals_file)
+                signal_file_hash = signal_values.get("signal_file_hash")
             model_state = None
+            model_registry_path = args.model_registry
             if args.model_registry is not None:
                 if not args.initial_active_version:
                     raise ValueError("--initial-active-version is required with --model-registry")
@@ -2323,6 +2354,16 @@ def main(argv: list[str] | None = None) -> int:
                 with ModelRegistry(args.model_registry, initial_active_version=args.initial_active_version) as registry:
                     model_state = registry.status()
                 read_store = replace(read_store, model_state=model_state)
+            if signal_loader is not None or model_registry_path is not None:
+                def load_runtime_state() -> dict[str, Any]:
+                    values: dict[str, Any] = signal_loader() if signal_loader is not None else {}
+                    if model_registry_path is not None:
+                        with ModelRegistry(model_registry_path, initial_active_version=args.initial_active_version) as registry:
+                            values["model_state"] = registry.status()
+                    return values
+
+                runtime_loader = load_runtime_state
+                read_store = replace(read_store, runtime_loader=runtime_loader)
             server = create_server(store=read_store, host=args.host, port=args.port)
             result = _operation_plan(
                 "serve",
