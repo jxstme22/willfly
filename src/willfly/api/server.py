@@ -34,6 +34,7 @@ class ReadOnlyStore:
     market_readiness: Mapping[str, str] | None = None
     wallet_observations: tuple[WalletObservation, ...] = ()
     training_state: Mapping[str, object] | None = None
+    model_state: Mapping[str, object] | None = None
     manual_actions: tuple[ManualAction, ...] = ()
     action_links: tuple[ManualActionLink, ...] = ()
 
@@ -162,6 +163,9 @@ class ReadOnlyStore:
     def training(self) -> dict[str, object]:
         return dict(self.training_state or {"status": "unknown", "reason": "training_state_unavailable"})
 
+    def models(self) -> dict[str, object]:
+        return dict(self.model_state or {"status": "unknown", "reason": "model_registry_unavailable"})
+
     def actions(self) -> dict[str, object]:
         links = {link.action_id: link.to_dict() for link in self.action_links}
         return {
@@ -196,7 +200,15 @@ class ReadOnlyStore:
             manual_status_by_proposal=proposal_status,
         )
         positions = [position.to_dict() | {"wallet": observation.wallet} for observation in self.wallet_observations for position in observation.positions]
-        return render_dashboard(snapshot, self.timelines, self.exclusions, signals=signals, positions=tuple(positions), training_state=self.training_state)
+        return render_dashboard(
+            snapshot,
+            self.timelines,
+            self.exclusions,
+            signals=signals,
+            positions=tuple(positions),
+            training_state=self.training_state,
+            model_state=self.model_state,
+        )
 
 
 def create_server(*, store: ReadOnlyStore, host: str = "127.0.0.1", port: int = 0) -> ThreadingHTTPServer:
@@ -266,6 +278,8 @@ def _route(store: ReadOnlyStore, path: str) -> tuple[dict[str, object], int]:
         return store.list_positions(wallet=_single_param(params, "wallet")), 200
     if parts == ["training"]:
         return store.training(), 200
+    if parts == ["models"]:
+        return store.models(), 200
     if parts == ["actions"]:
         return store.actions(), 200
     if len(parts) == 2 and parts[0] == "evidence":

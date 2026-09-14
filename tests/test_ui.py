@@ -48,3 +48,13 @@ def test_dashboard_renders_manual_action_status_on_signal_row():
     page = render_dashboard(snapshot, signals=(signal,))
     assert "Manual status" in page
     assert "matched" in page
+
+
+def test_dashboard_renders_attached_model_registry_state():
+    snapshot = DiscoverySnapshot("2026-01-01T00:05:00Z", (), (), 0, 0, (), "healthy", ("fixture:dashboard",))
+    page = render_dashboard(
+        snapshot,
+        model_state={"active_version": "candidate-v2", "known_versions": ["active-v1", "candidate-v2"], "history": []},
+    )
+    assert "Model registry" in page
+    assert "candidate-v2" in page

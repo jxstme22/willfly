@@ -34,6 +34,18 @@ To inspect controlled signal output, pass a validated
 .venv/bin/willfly serve --check --signals-file /path/to/signals.json
 ```
 
+To show active model and promotion history, attach an existing registry:
+
+```text
+.venv/bin/willfly serve --check \
+  --signals-file /path/to/signals.json \
+  --model-registry /path/to/models.sqlite3 \
+  --initial-active-version active-v1
+```
+
+The registry must already exist; this inspection command does not initialize
+one. Model promotion and rollback remain separate explicit local commands.
+
 The bundle is display-only. Research-only or unsupported readiness remains an
 abstain state in the inbox, and no signal file can enable signing or broadcast.
 Include optional `manual_actions` and `wallet_activities` arrays to inspect

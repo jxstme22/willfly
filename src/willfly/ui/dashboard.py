@@ -18,6 +18,7 @@ def render_dashboard(
     signals: tuple[SignalInboxEntry, ...] = (),
     positions: tuple[Mapping[str, object], ...] = (),
     training_state: Mapping[str, object] | None = None,
+    model_state: Mapping[str, object] | None = None,
 ) -> str:
     """Render evidence and exclusions without changing the underlying dataset."""
 
@@ -64,6 +65,9 @@ def render_dashboard(
         for position in positions
     ) or '<tr><td colspan="5">No observed positions.</td></tr>'
     training = training_state or {"status": "unknown", "reason": "training_state_unavailable"}
+    models = model_state or {"status": "unknown", "reason": "model_registry_unavailable"}
+    model_history = models.get("history", [])
+    history_count = len(model_history) if isinstance(model_history, list) else 0
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Willfly Observatory</title>
 <style>body{{font-family:system-ui,sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem}}
@@ -83,6 +87,10 @@ small{{color:#666}}</style></head><body>
 <h2>Observed positions</h2><table><thead><tr><th>Wallet</th><th>Pool</th><th>Position</th><th>Liquidity</th><th>State</th></tr></thead>
 <tbody>{position_rows}</tbody></table>
 <h2>Training</h2><p class="quality">Status: {escape(str(training.get('status', 'unknown')))} &middot; {escape(str(training.get('reason', 'none')))}</p>
+<h2>Model registry</h2><p class="quality">Active: {escape(str(models.get('active_version', 'unknown')))}
+ &middot; known versions: {escape(str(len(models.get('known_versions', []))))}
+ &middot; history entries: {history_count}
+ &middot; {escape(str(models.get('reason', 'local registry attached')))}</p>
 <h2>Excluded evidence</h2><table><thead><tr><th>Kind</th><th>Reason</th><th>Reference</th></tr></thead>
 <tbody>{exclusion_rows}</tbody></table>
 <p><small>Raw rows and source claims remain available through their lineage references and the read-only evidence endpoint.</small></p>

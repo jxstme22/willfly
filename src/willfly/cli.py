@@ -1293,6 +1293,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="load a versioned read-only signal/training snapshot for the dashboard",
     )
+    serve.add_argument("--model-registry", type=Path, default=None, help="optional local model registry database")
+    serve.add_argument("--initial-active-version", default=None, help="required with --model-registry")
     serve.add_argument("--check", action="store_true", help="validate binding without starting the loop")
 
     shadow = subparsers.add_parser("shadow", help="check or prepare the read-only hypothetical shadow loop")
@@ -1592,6 +1594,15 @@ def main(argv: list[str] | None = None) -> int:
                 signal_values = _load_signal_store(args.signals_file)
                 read_store = replace(read_store, **signal_values)
                 signal_file_hash = _config_hash(args.signals_file)
+            model_state = None
+            if args.model_registry is not None:
+                if not args.initial_active_version:
+                    raise ValueError("--initial-active-version is required with --model-registry")
+                if not args.model_registry.is_file():
+                    raise ValueError("model registry file does not exist")
+                with ModelRegistry(args.model_registry, initial_active_version=args.initial_active_version) as registry:
+                    model_state = registry.status()
+                read_store = replace(read_store, model_state=model_state)
             server = create_server(store=read_store, host=args.host, port=args.port)
             result = _operation_plan(
                 "serve",
@@ -1602,6 +1613,8 @@ def main(argv: list[str] | None = None) -> int:
                     "signals_file": None if args.signals_file is None else str(args.signals_file),
                     "signals_file_hash": signal_file_hash,
                     "signal_count": len(read_store.proposals),
+                    "model_registry": None if args.model_registry is None else str(args.model_registry),
+                    "active_model_version": None if model_state is None else model_state.get("active_version"),
                 },
             )
             if not args.check:

@@ -94,6 +94,13 @@ example budget is exceeded.
 Final verification for this guard: the full suite passed 230 tests with two
 sandbox loopback skips; planning and whitespace checks remained clean.
 
+The optional model registry is now exposed through read-only `GET /models` and
+the dashboard. `serve --model-registry` requires an existing database and an
+explicit initial version, so inspection cannot silently initialize model state.
+
+Final verification for this surface: the full suite passed 233 tests with two
+sandbox loopback skips; planning and whitespace checks remained clean.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status

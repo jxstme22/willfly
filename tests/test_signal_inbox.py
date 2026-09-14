@@ -50,6 +50,17 @@ def test_read_only_api_exposes_signals_positions_and_training_state() -> None:
     assert status == 200 and positions["items"] == []
     training, status = _route(store, "/training")
     assert status == 200 and training["status"] == "waiting"
+    models, status = _route(store, "/models")
+    assert status == 200 and models["status"] == "unknown"
+
+
+def test_read_only_api_exposes_attached_model_registry_state() -> None:
+    store = ReadOnlyStore(
+        model_state={"active_version": "candidate-v2", "known_versions": ["active-v1", "candidate-v2"]}
+    )
+    models, status = _route(store, "/models")
+    assert status == 200
+    assert models["active_version"] == "candidate-v2"
 
 
 def test_signal_api_exposes_manual_action_link_status() -> None:

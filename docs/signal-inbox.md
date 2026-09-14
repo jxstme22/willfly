@@ -8,10 +8,11 @@ abstain action; expired and invalidated proposals also abstain. The original
 proposal is not mutated.
 
 The API exposes `GET /signals` for paginated inbox entries, `GET /positions`
-for observed LP ownership states, and `GET /training` for the current
-training/waiting summary. The existing `GET /dashboard` includes signal,
-position, manual-link status and training sections; `/signals` exposes the
-same manual-link status in its JSON rows.
+for observed LP ownership states, `GET /training` for the current
+training/waiting summary, and `GET /models` for an optional attached model
+registry. The existing `GET /dashboard` includes signal, position,
+manual-link status, training and model-registry sections; `/signals` exposes
+the same manual-link status in its JSON rows.
 
 For a local controlled run, `willfly serve --signals-file PATH` loads a typed
 `willfly.signal-snapshot.v0.1` JSON bundle containing predictions, proposals,
@@ -20,6 +21,11 @@ public-wallet activities. The file is validated through the domain contracts;
 manual links are recomputed conservatively at load time. It is display-only
 and cannot enable signing or broadcast. Without the file (or a populated
 application store), the inbox truthfully shows no signals.
+
+An optional `--model-registry` plus `--initial-active-version` on `serve`
+attaches the local registry as read-only model state. The server refuses a
+missing registry file or missing initial version rather than creating hidden
+model state during a display run.
 
 The lab-output boundary is explicit: `signal-build` consumes a versioned model
 output bundle containing template predictions, output values, a model/run
