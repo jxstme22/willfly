@@ -61,7 +61,8 @@ or evaluation. Record an explicit heartbeat with the feedback store attached:
 .venv/bin/willfly watcher-tick \
   --state-db /path/to/watcher.sqlite3 \
   --feedback-dir /path/to/feedback \
-  --observed-at 2026-09-14T00:00:00Z
+  --observed-at 2026-09-14T00:00:00Z \
+  --schedule --execute-pending
 .venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
 ```
 
@@ -70,6 +71,12 @@ when those integrations have current evidence. The default is `waiting`; a
 large gap between explicit ticks is persisted as an outage interval. The
 default personal-trade count is zero, so personal activity is not required to
 advance the scheduler state.
+
+`--execute-pending` runs only local bounded callbacks: label maturation is
+performed against the feedback store, while observation, training and
+evaluation remain explicitly waiting until their configured external inputs
+exist. This makes the capture-to-label-to-training queue auditable without
+claiming that a separate service completed work.
 
 ## Start a controlled shadow replay
 

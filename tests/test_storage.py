@@ -48,6 +48,19 @@ def test_unacknowledged_batch_survives_restart(tmp_path: Path):
         assert restarted.get_checkpoint("fixture-rpc") is None
 
 
+def test_acknowledgement_rejects_backward_or_hash_changed_checkpoints(tmp_path: Path):
+    with RawBatchStore(tmp_path) as store:
+        first = store.publish([_event(100)], source="fixture-rpc", partition_date="2026-09-13")
+        store.acknowledge(first.batch_id, source="fixture-rpc", last_block_number=100, last_block_hash=_event(100).block_hash)
+        second = store.publish([_event(101)], source="fixture-rpc", partition_date="2026-09-13")
+        with pytest.raises(ValueError, match="moved backwards"):
+            store.acknowledge(second.batch_id, source="fixture-rpc", last_block_number=99, last_block_hash=_event(101).block_hash)
+        conflicting = "0x" + "5" * 64
+        third = store.publish([_event(100)], source="fixture-rpc", partition_date="2026-09-13")
+        with pytest.raises(ValueError, match="hash changed"):
+            store.acknowledge(third.batch_id, source="fixture-rpc", last_block_number=100, last_block_hash=conflicting)
+
+
 def test_truncated_batch_is_detected_and_last_checkpoint_remains(tmp_path: Path):
     with RawBatchStore(tmp_path) as store:
         first = store.publish([_event()], source="fixture-rpc", partition_date="2026-09-13")

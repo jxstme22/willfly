@@ -115,7 +115,13 @@ def test_restart_reconciles_multi_block_fork_through_quiet_headers(tmp_path: Pat
         replacement = store.publish(
             [_event(4, b4, quiet_b3, index=1)], source=source, partition_date="2026-09-13"
         )
-        store.acknowledge(replacement.batch_id, source=source, last_block_number=4, last_block_hash=b4)
+        store.acknowledge(
+            replacement.batch_id,
+            source=source,
+            last_block_number=4,
+            last_block_hash=b4,
+            allow_reorg=True,
+        )
         store.persist_headers(
             [
                 BlockHeader(2, b2, root),

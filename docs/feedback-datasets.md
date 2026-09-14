@@ -25,9 +25,13 @@ pipeline. `market-feedback-build` reads only events covered by a canonical
 checkpoint, decodes V4 `Initialize`/`Swap` logs, derives exact integer price
 ratios and availability-aware market features, and creates observed-market
 forward labels without wallet activity. The bundle records its canonical
-checkpoint, raw references, chronological point split, unsupported/malformed
-event exclusions and a zero personal-trade count. It returns `waiting` when
-the source has no resolved canonical projection or no matured endpoint.
+checkpoint, raw references, pool-isolated chronological split, unsupported/
+malformed event exclusions and a zero personal-trade count. Feature history is
+ordered by arrival time, so a late-arriving earlier chain event cannot leak
+into an older prediction. The default CLI binds the bundle to the configured
+V4 PoolManager and records source config, canonical tip, checkpoint and
+canonical event-set hashes. It returns `waiting` when the source has no
+resolved canonical projection or no matured endpoint.
 
 ```text
 .venv/bin/willfly market-feedback-build \

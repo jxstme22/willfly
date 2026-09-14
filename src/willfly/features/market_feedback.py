@@ -10,7 +10,7 @@ used to create a label.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import hashlib
 import json
@@ -125,6 +125,7 @@ class MarketFeedbackCorpus:
     lineage: tuple[str, ...]
     label_policy: Mapping[str, Any]
     split_policy: Mapping[str, Any]
+    provenance: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _instant(self.as_of_time)
@@ -153,6 +154,8 @@ class MarketFeedbackCorpus:
             raise ValueError("market corpus partitions must be train, validation or test")
         if not self.lineage:
             raise ValueError("market corpus lineage cannot be empty")
+        if not isinstance(self.provenance, Mapping):
+            raise ValueError("market corpus provenance must be an object")
 
     @property
     def observed_outcome_count(self) -> int:
@@ -178,6 +181,7 @@ class MarketFeedbackCorpus:
             "lineage": list(self.lineage),
             "label_policy": dict(self.label_policy),
             "split_policy": dict(self.split_policy),
+            "provenance": dict(self.provenance),
             "personal_trade_count": 0,
             "operating_mode": "read_only_observation_import",
             "execution_scope": "manual_only",
@@ -196,6 +200,7 @@ def build_market_feedback_corpus(
     max_label_delay_seconds: int = 15,
     train_fraction: float = 0.70,
     validation_fraction: float = 0.15,
+    expected_emitter: str | None = None,
 ) -> MarketFeedbackCorpus:
     """Build observed-market feedback from canonical V4 logs only.
 
@@ -214,6 +219,11 @@ def build_market_feedback_corpus(
         raise ValueError("max_label_delay_seconds cannot be negative")
     if not 0 < train_fraction < 1 or not 0 <= validation_fraction < 1 or train_fraction + validation_fraction >= 1:
         raise ValueError("train and validation fractions must leave a positive test fraction")
+    if expected_emitter is not None and (
+        not isinstance(expected_emitter, str) or not expected_emitter.startswith("0x") or len(expected_emitter) != 42
+    ):
+        raise ValueError("expected_emitter must be a 20-byte hex address")
+    expected_emitter = expected_emitter.lower() if expected_emitter is not None else None
     records = tuple(raw_events)
     excluded: list[dict[str, str]] = []
     canonical = []
@@ -228,7 +238,17 @@ def build_market_feedback_corpus(
             excluded.append({"kind": "raw_event", "reference": _raw_ref(event), "reason": "event_after_arrival"})
             continue
         try:
-            canonical.append((decode_v4_event(event), event))
+            decoded = decode_v4_event(event)
+            if expected_emitter is not None and decoded.emitter.lower() != expected_emitter:
+                excluded.append(
+                    {
+                        "kind": "raw_event",
+                        "reference": _raw_ref(event),
+                        "reason": "unexpected_v4_pool_manager",
+                    }
+                )
+                continue
+            canonical.append((decoded, event))
         except (DecodeError, ValueError) as exc:
             excluded.append({"kind": "raw_event", "reference": _raw_ref(event), "reason": f"decode_failed:{type(exc).__name__}"})
     decoded = deduplicate_decoded_events(item[0] for item in canonical)
@@ -324,12 +344,21 @@ def build_market_feedback_corpus(
     for point in points:
         points_by_pool.setdefault(point.pool_id.lower(), []).append(point)
     for pool_points in points_by_pool.values():
-        first = pool_points[0]
+        # Features must follow arrival order.  Event-time order is still used
+        # below for forward horizon matching, but an earlier chain event that
+        # arrives later cannot become visible history for an older prediction.
+        history_points = sorted(
+            pool_points,
+            key=lambda point: (_instant(point.available_at), _instant(point.event_time), point.point_id),
+        )
+        first = history_points[0]
         previous: MarketPoint | None = None
-        for index, point in enumerate(pool_points):
+        for index, point in enumerate(history_points):
             previous_return = _price_return_bps(previous, point) if previous is not None else 0
             level_return = _price_return_bps(first, point) if point is not first else 0
-            delta_seconds = 0 if previous is None else max(0, int((_instant(point.event_time) - _instant(previous.event_time)).total_seconds()))
+            delta_seconds = 0 if previous is None else max(
+                0, int((_instant(point.available_at) - _instant(previous.available_at)).total_seconds())
+            )
             features[point.point_id] = {
                 "market.price_change_bps": float(previous_return),
                 "market.price_level_bps": float(level_return),
@@ -396,7 +425,12 @@ def build_market_feedback_corpus(
                 max_label_delay_seconds=max_label_delay_seconds,
             ))
 
-    partitions = _chronological_partitions(predictions, train_fraction, validation_fraction)
+    partitions = _chronological_partitions(
+        predictions,
+        train_fraction,
+        validation_fraction,
+        pool_by_prediction={prediction_id: prediction_point[prediction_id].pool_id for prediction_id in prediction_point},
+    )
     lineage = tuple(dict.fromkeys(ref for point in points for ref in point.source_refs))
     if not points:
         missingness = ("no_canonical_v4_swap_points_at_cutoff",)
@@ -433,6 +467,14 @@ def build_market_feedback_corpus(
             "validation_fraction": validation_fraction,
             "test_fraction": 1.0 - train_fraction - validation_fraction,
             "group_key": "pool_id",
+            "group_isolation": True,
+            "purge": "pool_id_group_isolation",
+        },
+        provenance={
+            "source": source,
+            "canonical_event_set_hash": _canonical_event_set_hash(records, cutoff),
+            "canonical_event_set_cutoff": as_of_time,
+            "expected_emitter": expected_emitter,
         },
     )
 
@@ -476,13 +518,17 @@ def _forward_outcome(
             source_refs=tuple(dict.fromkeys((*point.source_refs, *candidate.source_refs))),
         )
     if _instant(as_of_time) >= target_time:
+        # A backfilled historical window can have a chain-time horizon before
+        # the prediction's arrival.  The censored label becomes observable only
+        # after both the horizon and the prediction itself are known.
+        censored_observed_at = max(target_time, _instant(point.available_at)).isoformat()
         return OutcomeRecord(
             outcome_id=outcome_id,
             prediction_id=prediction.prediction_id,
             target_id=prediction.target_id,
             outcome_kind="observed_market",
             status="censored",
-            observed_at=target_time.isoformat(),
+            observed_at=censored_observed_at,
             label_available_at=as_of_time,
             net_return_bps=None,
             source_refs=tuple(dict.fromkeys((*point.source_refs, label_ref))),
@@ -501,29 +547,51 @@ def _forward_outcome(
 
 
 def _chronological_partitions(
-    predictions: Sequence[PredictionRecord], train_fraction: float, validation_fraction: float
+    predictions: Sequence[PredictionRecord],
+    train_fraction: float,
+    validation_fraction: float,
+    *,
+    pool_by_prediction: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    point_ids = []
+    group_ids = []
     seen: set[str] = set()
     for prediction in sorted(predictions, key=lambda item: (item.evidence_cutoff, item.created_at, item.prediction_id)):
         point_id = prediction.prediction_id.rsplit("|", 2)[0]
-        if point_id not in seen:
-            seen.add(point_id)
-            point_ids.append(point_id)
-    count = len(point_ids)
+        group_id = (pool_by_prediction or {}).get(prediction.prediction_id, point_id).lower()
+        if group_id not in seen:
+            seen.add(group_id)
+            group_ids.append(group_id)
+    count = len(group_ids)
     train_end = max(1, min(count, math.floor(count * train_fraction))) if count else 0
     validation_end = max(train_end, min(count, math.floor(count * (train_fraction + validation_fraction))))
     if count >= 3:
         train_end = min(train_end, count - 2)
         validation_end = max(train_end + 1, min(validation_end, count - 1))
     labels = {
-        point_id: "train" if index < train_end else "validation" if index < validation_end else "test"
-        for index, point_id in enumerate(point_ids)
+        group_id: "train" if index < train_end else "validation" if index < validation_end else "test"
+        for index, group_id in enumerate(group_ids)
     }
     return {
-        prediction.prediction_id: labels[prediction.prediction_id.rsplit("|", 2)[0]]
+        prediction.prediction_id: labels[(pool_by_prediction or {}).get(
+            prediction.prediction_id, prediction.prediction_id.rsplit("|", 2)[0]
+        ).lower()]
         for prediction in predictions
     }
+
+
+def _canonical_event_set_hash(records: Sequence[RawEvent], cutoff: datetime) -> str:
+    selected = [
+        event.to_dict()
+        for event in records
+        if event.canonical_status == "canonical"
+        and _instant(event.event_time) <= cutoff
+        and _instant(event.received_time) <= cutoff
+    ]
+    # RawEvent.to_dict intentionally does not expose the computed logical key;
+    # sorting by the stable serialized identity keeps the hash deterministic.
+    selected.sort(key=lambda event: json.dumps(event, sort_keys=True, separators=(",", ":")))
+    encoded = json.dumps(selected, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _price_return_bps(start: MarketPoint | None, end: MarketPoint) -> int:

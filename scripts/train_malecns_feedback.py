@@ -56,6 +56,25 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
         checkpoint = payload.get("canonical_checkpoint")
         if not isinstance(checkpoint, dict) or checkpoint.get("state") != "canonical":
             raise ValueError("non-empty corpus requires a resolved canonical checkpoint")
+        provenance = payload.get("provenance")
+        required_provenance = (
+            "source",
+            "config_hash",
+            "canonical_tip_hash",
+            "canonical_event_set_hash",
+            "canonical_checkpoint_hash",
+        )
+        if not isinstance(provenance, dict) or any(
+            not isinstance(provenance.get(field), str) or not provenance[field]
+            for field in required_provenance
+        ):
+            raise ValueError("non-empty corpus requires complete source provenance")
+        if provenance["source"] != payload.get("source"):
+            raise ValueError("corpus provenance source does not match bundle source")
+        if provenance["canonical_tip_hash"] != checkpoint.get("tip_hash"):
+            raise ValueError("corpus provenance tip does not match canonical checkpoint")
+        if provenance["canonical_checkpoint_hash"] != _mapping_hash(checkpoint):
+            raise ValueError("corpus provenance checkpoint hash does not match canonical checkpoint")
     if payload.get("personal_trade_count", 0) != 0:
         raise ValueError("market corpus must not use personal trades as its training trigger")
     predictions = tuple(PredictionRecord.from_dict(item) for item in raw_predictions if isinstance(item, dict))
@@ -161,7 +180,9 @@ def train_feedback(
             "schema_version": "willfly.market-feedback-bundle.v0.1",
             "source": corpus_payload.get("source") if corpus_payload is not None else None,
             "personal_trade_count": 0,
+            "provenance": None if corpus_payload is None else corpus_payload.get("provenance"),
         },
+        "provenance": None if corpus_payload is None else corpus_payload.get("provenance"),
         "operating_mode": "local_research_only",
         "execution_scope": "manual_only",
         "signing": False,
@@ -238,6 +259,7 @@ def train_feedback(
             "graph": graph_report,
             "experiment_results": results,
             "boundary": "causal feedback labels and operator-supplied features/partitions; no synthetic labels",
+            "provenance": None if corpus_payload is None else corpus_payload.get("provenance"),
         }
     )
     report["wall_seconds"] = time.perf_counter() - started

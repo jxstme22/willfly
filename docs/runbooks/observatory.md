@@ -55,8 +55,9 @@ For a bounded window, qualify an anchor by declaring its height/hash and
 providing a second configured RPC endpoint. The CLI reads `eth_chainId` and
 `eth_getBlockByNumber` from both the primary endpoint in the source manifest and
 the independent endpoint, then records the matching headers, endpoint
-identities, read methods and the explicit operator trust assumption. Finality
-is not verified by this command:
+identities, read methods and the explicit operator trust assumption. This is
+an anchor-header identity check only; it does not compare event coverage
+between providers, and finality is not verified by this command:
 
 ```text
 willfly qualify-anchor --config configs/sources/robinhood-chain-v0.1.json \

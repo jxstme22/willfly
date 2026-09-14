@@ -231,6 +231,24 @@ def _stored_lineage_hash(store: RawBatchStore, source: str, block_number: int) -
     return None
 
 
+def _raw_acknowledgement_replaces_prior(
+    store: RawBatchStore, source: str, block_number: int, block_hash: str | None
+) -> bool:
+    """Allow the runner's explicit fork-replay path to replace raw cursor identity."""
+
+    prior = store.get_checkpoint(source)
+    if prior is None or prior["last_block_number"] is None:
+        return False
+    if block_number < prior["last_block_number"]:
+        return True
+    return (
+        block_number == prior["last_block_number"]
+        and block_hash is not None
+        and prior["last_block_hash"] is not None
+        and block_hash.lower() != prior["last_block_hash"].lower()
+    )
+
+
 def _lineage_probe(
     client: ReadOnlyRpcClient,
     store: RawBatchStore,
@@ -463,7 +481,11 @@ def capture_to_store(
             (event.block_hash for event in reversed(durable_events) if event.block_hash), None
         )
         store.acknowledge(
-            batch.batch_id, source=source_key, last_block_number=last, last_block_hash=last_hash
+            batch.batch_id,
+            source=source_key,
+            last_block_number=last,
+            last_block_hash=last_hash,
+            allow_reorg=_raw_acknowledgement_replaces_prior(store, source_key, last, last_hash),
         )
         batches.append(batch.batch_id)
         acknowledged = (from_block, result.to_block)
@@ -497,6 +519,17 @@ def capture_to_store(
     )
     header_evidence["canonical_tip_hash"] = tip_hash
     header_evidence["ancestry_anchor_state"] = anchor_state
+    canonical_checkpoint = store.get_canonical_checkpoint(source_key)
+    header_evidence.update(
+        {
+            "delivery_state": "delivered",
+            "header_coverage_state": "complete" if not header_gaps else "incomplete",
+            "raw_acknowledgement_state": "acknowledged" if acknowledged is not None else "not_acknowledged",
+            "canonical_projection_state": None
+            if canonical_checkpoint is None
+            else canonical_checkpoint["state"],
+        }
+    )
     finished = now()
     manifest = RunManifest(
         run_id=run_id,
@@ -689,7 +722,11 @@ def backfill_to_store(
             (event.block_hash for event in reversed(rebound) if event.block_hash), None
         )
         store.acknowledge(
-            batch.batch_id, source=source_key, last_block_number=last, last_block_hash=last_hash
+            batch.batch_id,
+            source=source_key,
+            last_block_number=last,
+            last_block_hash=last_hash,
+            allow_reorg=_raw_acknowledgement_replaces_prior(store, source_key, last, last_hash),
         )
         batch_ids.append(batch.batch_id)
         total_events += len(rebound)
@@ -773,6 +810,11 @@ def backfill_to_store(
             config_identity=config_identity,
         )
         coverage_state = "repaired" if lineage_repair else "complete"
+    acknowledged = (
+        (start_block, result.next_block - 1)
+        if result is not None and result.next_block > start_block and not lineage_unavailable
+        else None
+    )
     header_evidence = {
         "chain_id": chain_id,
         "covered_ranges": [list(r) for r in covered or (result.ranges if result is not None else ())],
@@ -781,12 +823,13 @@ def backfill_to_store(
         "canonical_tip_hash": canonical_tip,
         "ancestry_anchor_state": anchor_state,
         "coverage_state": coverage_state,
+        "delivery_state": "delivered" if result is not None else "not_delivered",
+        "header_coverage_state": "complete" if not header_gaps else "incomplete",
+        "raw_acknowledgement_state": "acknowledged" if acknowledged is not None else "not_acknowledged",
+        "canonical_projection_state": store.get_canonical_checkpoint(source_key)["state"]
+        if store.get_canonical_checkpoint(source_key) is not None
+        else None,
     }
-    acknowledged = (
-        (start_block, result.next_block - 1)
-        if result is not None and result.next_block > start_block and not lineage_unavailable
-        else None
-    )
     empty = total_events == 0
     finished = now()
     manifest = RunManifest(

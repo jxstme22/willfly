@@ -192,7 +192,8 @@ watcher() {
         --state-db "$state_db"
         --feedback-dir "$feedback_dir"
         --observed-at "$(now_utc)"
-        --schedule)
+        --schedule
+        --execute-pending)
     for pair in \
         "WILLFLY_WATCHER_OBSERVATION_STATE:--observation-state" \
         "WILLFLY_WATCHER_TRAINING_STATE:--training-state" \

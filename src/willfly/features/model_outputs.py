@@ -21,6 +21,7 @@ def build_model_output_bundle(
     actions_by_prediction: Mapping[str, str] | None = None,
     exit_kinds_by_prediction: Mapping[str, str] | None = None,
     source_hash: str | None = None,
+    template_hash: str | None = None,
 ) -> dict[str, Any]:
     """Create a signal-builder input from one recorded experiment result.
 
@@ -102,6 +103,15 @@ def build_model_output_bundle(
         if not isinstance(source_hash, str) or not source_hash:
             raise ValueError("source_hash must be non-empty text")
         training_state["experiment_report_hash"] = source_hash
+    if template_hash is not None:
+        if not isinstance(template_hash, str) or not template_hash:
+            raise ValueError("template_hash must be non-empty text")
+        training_state["template_bundle_hash"] = template_hash
+    provenance = experiment.get("provenance")
+    if provenance is not None:
+        if not isinstance(provenance, Mapping):
+            raise ValueError("experiment provenance must be an object")
+        training_state["provenance"] = dict(provenance)
     return {
         "schema_version": "willfly.model-output-bundle.v0.1",
         "as_of_time": as_of_time,

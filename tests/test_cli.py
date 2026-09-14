@@ -348,6 +348,33 @@ def test_watcher_cli_can_enqueue_due_stages_without_personal_trade_trigger(tmp_p
     }
 
 
+def test_watcher_cli_executes_pending_stages_without_claiming_external_work(tmp_path, capsys):
+    state_db = tmp_path / "watcher.sqlite3"
+    feedback_dir = tmp_path / "feedback"
+    assert main(
+        [
+            "watcher-tick",
+            "--state-db",
+            str(state_db),
+            "--feedback-dir",
+            str(feedback_dir),
+            "--observed-at",
+            "2026-01-01T00:00:00Z",
+            "--schedule",
+            "--execute-pending",
+        ]
+    ) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert {item["kind"] for item in result["executions"]} == {
+        "observation",
+        "labels",
+        "training",
+        "evaluation",
+    }
+    assert {item["status"] for item in result["executions"]} == {"waiting"}
+    assert result["snapshot"]["queued_task_count"] == 4
+
+
 def test_signal_snapshot_loader_accepts_typed_empty_read_only_bundle(tmp_path):
     path = tmp_path / "signals.json"
     path.write_text(

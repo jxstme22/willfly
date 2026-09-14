@@ -1365,3 +1365,37 @@ The local read-only server was started on loopback for an HTTP smoke test:
 Observatory markup, and POST returned 405. The server was stopped after the
 check. This confirms local UI/API wiring only; the default server still loads
 an empty in-memory store unless an immutable projection snapshot is supplied.
+
+
+## 2026-09-14 — live causal corpus and signal bridge loop
+
+Qualified the bounded read-only source with the official Robinhood RPC and an
+independent PublicNode chain-identity check, then backfilled blocks
+61692800-61694600. Canonicalization resolved the range with no header gaps and
+the configured V4 PoolManager emitter; the resulting corpus contains 4,587
+canonical events, 148 pool points, 444 predictions and 85 eligible labels.
+Finality and provider coverage comparison remain unverified.
+
+Hardened market feedback against event-time leakage by ordering feature history
+by availability, isolating chronological partitions by pool, rejecting events
+from an unexpected configured PoolManager, and recording source/config/tip/
+checkpoint/event-set provenance. Censored labels now become observable at the
+later prediction-arrival boundary instead of producing an invalid earlier
+observation timestamp.
+
+Ran the clean feedback-v3 corpus through the bounded MaleCNS loop: 100,000
+edges scanned, 54 train rows, 31 heldout rows, three declared seeds and the
+fly/shuffled-wiring/random-weights/no-state/ordinary control set. The run
+completed with `numeric_target_unavailable` only for censored labels; equal
+control metrics are benchmark evidence, not a trading-edge claim. The
+model-output and signal-build bridge produced five explicit `abstain`,
+research-only, no-signing/no-broadcast proposals carrying canonical
+provenance and template hashes.
+
+The watcher now has an explicit `--execute-pending` path whose bounded labels
+callback only matures durable feedback; observation, training and evaluation
+callbacks remain waiting until real integrations are supplied. Raw checkpoint
+replacements require an explicit reorg flag, and the restart fork fixture now
+exercises that contract. Focused regression tests and the full suite pass
+(274 collected, 3 sandbox skips). Timed observation, economic, biological and
+production execution gates remain open.

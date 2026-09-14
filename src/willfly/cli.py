@@ -309,6 +309,13 @@ def _load_model_output_bundle(path: Path) -> dict[str, Any]:
     training_state = payload.get("training_state")
     if training_state is not None and not isinstance(training_state, dict):
         raise ValueError("model output training_state must be an object")
+    if isinstance(training_state, dict) and training_state.get("provenance") is not None:
+        provenance = training_state["provenance"]
+        required = ("source", "config_hash", "canonical_tip_hash", "canonical_event_set_hash")
+        if not isinstance(provenance, dict) or any(
+            not isinstance(provenance.get(field), str) or not provenance[field] for field in required
+        ):
+            raise ValueError("model output provenance is incomplete")
     return {
         "templates": tuple(PredictionRecord.from_dict(item) for item in raw_templates),
         "outputs": tuple(outputs),
@@ -340,6 +347,7 @@ def _market_feedback_build(
     source: str,
     as_of_time: str,
     output_path: Path,
+    config_path: Path,
     pool_identities_path: Path | None,
     feedback_dir: Path | None,
     max_label_delay_seconds: int,
@@ -348,6 +356,13 @@ def _market_feedback_build(
 ) -> dict[str, Any]:
     """Build a feedback corpus from the resolved read-only chain projection."""
 
+    config = _load_json(config_path)
+    capture_context = _capture_context(config, config_path, [])
+    protocols = config.get("protocols", {})
+    v4 = protocols.get("uniswap_v4", {}) if isinstance(protocols, dict) else {}
+    expected_emitter = v4.get("pool_manager")
+    if not isinstance(expected_emitter, str) or not expected_emitter:
+        raise ValueError("source config must declare protocols.uniswap_v4.pool_manager")
     pool_identities = _load_pool_identities(pool_identities_path)
     with RawBatchStore(store_dir) as store:
         checkpoint = store.get_canonical_checkpoint(source)
@@ -360,6 +375,7 @@ def _market_feedback_build(
         max_label_delay_seconds=max_label_delay_seconds,
         train_fraction=train_fraction,
         validation_fraction=validation_fraction,
+        expected_emitter=expected_emitter,
     )
     bundle = corpus.to_bundle()
     bundle["canonical_checkpoint"] = None if checkpoint is None else {
@@ -378,6 +394,19 @@ def _market_feedback_build(
     }
     bundle["canonical_event_count"] = len(events)
     bundle["canonical_projection_required"] = True
+    provenance = dict(bundle.get("provenance", {}))
+    provenance.update(
+        {
+            "config_path": str(config_path),
+            "config_hash": capture_context["config_hash"],
+            "chain_id": capture_context["expected_chain"],
+            "canonical_tip_hash": None if checkpoint is None else checkpoint["tip_hash"],
+            "canonical_checkpoint_hash": None
+            if checkpoint is None
+            else _json_hash(bundle["canonical_checkpoint"]),
+        }
+    )
+    bundle["provenance"] = provenance
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     feedback_result = None
@@ -412,6 +441,7 @@ def _market_feedback_build(
         "missingness": list(corpus.missingness),
         "excluded_count": len(corpus.excluded),
         "feedback": feedback_result,
+        "provenance": provenance,
         "operating_mode": "read_only_observation_import",
         "execution_scope": "manual_only",
         "personal_trade_count": 0,
@@ -488,6 +518,9 @@ def _model_output(
             raise ValueError("--run-id did not identify exactly one experiment result")
         experiment = matches[0]
     report_hash = _config_hash(experiment_report_path)
+    experiment = dict(experiment)
+    if report.get("provenance") is not None and "provenance" not in experiment:
+        experiment["provenance"] = report["provenance"]
     bundle = build_model_output_bundle(
         experiment,
         _load_prediction_templates(templates_path),
@@ -499,6 +532,7 @@ def _model_output(
         actions_by_prediction=_load_string_map(actions_path, "actions"),
         exit_kinds_by_prediction=_load_string_map(exit_kinds_path, "exit_kinds"),
         source_hash=report_hash,
+        template_hash=_config_hash(templates_path),
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -735,6 +769,12 @@ def _model_rollback(
 
 def _config_hash(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _json_hash(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _capture_context(config: dict[str, Any], config_path: Path, addresses: list[str]) -> dict[str, Any]:
@@ -1019,6 +1059,8 @@ def _qualify_anchor(
         "independent_endpoint": independent_endpoint_ref,
         "read_methods": ["eth_chainId", "eth_getBlockByNumber"],
         "verification": "performed_rpc_cross_check",
+        "verification_scope": "anchor_header_identity_only",
+        "coverage_comparison": "not_performed",
         "trust_policy": "distinct_configured_endpoints_operator_assumption",
         "finality_status": "not_verified",
         "primary_header": {
@@ -1301,6 +1343,7 @@ def _watcher_tick(
     training_state: str,
     evaluation_state: str,
     schedule: bool,
+    execute_pending: bool,
 ) -> dict[str, Any]:
     payload, config = _load_watcher_config(config_path)
     if personal_trade_count < 0:
@@ -1310,6 +1353,24 @@ def _watcher_tick(
         state_db, config=config, config_identity=config_hash
     ) as watcher:
         schedule_decisions = watcher.schedule_due_tasks(observed_at=observed_at) if schedule else ()
+        executions = ()
+        if execute_pending:
+            def wait_for_external_stage(_row: dict[str, Any]) -> str:
+                return "waiting"
+
+            def mature_labels(_row: dict[str, Any]) -> str:
+                queue = feedback_store.mature(as_of_time=observed_at)
+                return "completed" if queue else "waiting"
+
+            executions = watcher.run_pending_tasks(
+                observed_at=observed_at,
+                callbacks={
+                    "observation": wait_for_external_stage,
+                    "labels": mature_labels,
+                    "training": wait_for_external_stage,
+                    "evaluation": wait_for_external_stage,
+                },
+            )
         snapshot = watcher.tick(
             observed_at=observed_at,
             feedback_store=feedback_store,
@@ -1323,6 +1384,7 @@ def _watcher_tick(
         "recorded": True,
         "snapshot": snapshot.to_dict(),
         "schedule": [decision.to_dict() for decision in schedule_decisions],
+        "executions": [execution.to_dict() for execution in executions],
         "config": str(config_path),
         "config_hash": config_hash,
         "state_db": str(state_db),
@@ -1475,6 +1537,11 @@ def build_parser() -> argparse.ArgumentParser:
     watcher_tick.add_argument(
         "--schedule", action="store_true", help="enqueue due observation/label/training/evaluation tasks"
     )
+    watcher_tick.add_argument(
+        "--execute-pending",
+        action="store_true",
+        help="run the bounded local callbacks for queued stages and record waiting/completed outcomes",
+    )
 
     watcher_status = subparsers.add_parser("watcher-status", help="read persisted learning watcher state")
     watcher_status.add_argument("--config", type=Path, default=ROOT / "configs/learning/watcher-v0.1.json")
@@ -1541,6 +1608,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="build causal observed-market feedback from a resolved canonical V4 projection",
     )
     market_feedback.add_argument("--store-dir", type=Path, required=True)
+    market_feedback.add_argument(
+        "--config", type=Path, default=ROOT / "configs/sources/robinhood-chain-v0.1.json"
+    )
     market_feedback.add_argument("--source", required=True, help="resolved canonical projection namespace")
     market_feedback.add_argument("--as-of-time", required=True, help="timezone-aware RFC-3339 corpus cutoff")
     market_feedback.add_argument("--output", type=Path, required=True, help="market-feedback bundle destination")
@@ -1682,6 +1752,7 @@ def main(argv: list[str] | None = None) -> int:
                 training_state=args.training_state,
                 evaluation_state=args.evaluation_state,
                 schedule=args.schedule,
+                execute_pending=args.execute_pending,
             )
         elif args.command == "watcher-status":
             result = _watcher_status(config_path=args.config, state_db=args.state_db)
@@ -1731,6 +1802,7 @@ def main(argv: list[str] | None = None) -> int:
                 source=args.source,
                 as_of_time=args.as_of_time,
                 output_path=args.output,
+                config_path=args.config,
                 pool_identities_path=args.pool_identities,
                 feedback_dir=args.feedback_dir,
                 max_label_delay_seconds=args.max_label_delay_seconds,

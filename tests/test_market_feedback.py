@@ -93,7 +93,8 @@ def test_market_feedback_uses_canonical_v4_swaps_and_delayed_forward_labels() ->
     assert all(prediction.prediction_id not in outcomes[prediction.prediction_id].source_refs for prediction in first)
     assert corpus.predictions[0].portfolio_context.wallet_scope == "none"
     assert corpus.to_bundle()["personal_trade_count"] == 0
-    assert set(corpus.partitions_by_prediction.values()) == {"train", "validation", "test"}
+    assert set(corpus.partitions_by_prediction.values()) == {"train"}
+    assert corpus.split_policy["group_isolation"] is True
 
 
 def test_market_feedback_excludes_noncanonical_and_future_arrivals() -> None:
@@ -121,6 +122,26 @@ def test_market_feedback_preserves_censored_windows_without_numeric_targets() ->
     outcomes = {outcome_id: outcome for outcome_id, outcome in ((item.outcome_id, item) for item in corpus.outcomes)}
     assert outcomes["outcome:" + corpus.predictions[0].prediction_id].status == "censored"
     assert outcomes["outcome:" + corpus.predictions[0].prediction_id].net_return_bps is None
+
+
+def test_backfilled_censored_window_is_observable_after_prediction_arrival() -> None:
+    point = replace(
+        _swap(1, 101, 1 << 96),
+        event_time="2026-01-01T00:00:01Z",
+        received_time="2026-01-02T00:00:01Z",
+    )
+    corpus = build_market_feedback_corpus(
+        [
+            replace(_initialize(), event_time="2026-01-01T00:00:00Z", received_time="2026-01-02T00:00:00Z"),
+            point,
+        ],
+        as_of_time="2026-01-02T00:02:00Z",
+        source="fixture-source",
+        max_label_delay_seconds=0,
+    )
+    outcome = next(item for item in corpus.outcomes if item.prediction_id == corpus.predictions[0].prediction_id)
+    assert outcome.status == "censored"
+    assert outcome.observed_at == "2026-01-02T00:00:01+00:00"
 
 
 def test_market_feedback_revises_unresolved_label_when_later_endpoint_arrives(tmp_path) -> None:
@@ -179,6 +200,45 @@ def test_backfilled_endpoint_uses_arrival_time_for_causal_feedback() -> None:
     outcome = next(item for item in corpus.outcomes if item.prediction_id == prediction.prediction_id)
     assert outcome.status == "observed"
     assert outcome.observed_at == "2026-01-02T00:01:01Z"
+
+
+def test_market_features_never_use_later_arriving_earlier_event_as_history() -> None:
+    arriving_first = _swap(10, 110, 1 << 96)
+    arriving_later = replace(_swap(5, 105, 2 << 96), received_time="2026-01-01T00:00:31Z")
+    corpus = build_market_feedback_corpus(
+        [_initialize(), arriving_first, arriving_later],
+        as_of_time="2026-01-01T00:01:00Z",
+        source="fixture-source",
+        expected_emitter=MANAGER,
+    )
+    by_price = {point.sqrt_price_x96: point for point in corpus.points}
+    first_prediction = next(
+        prediction
+        for prediction in corpus.predictions
+        if prediction.prediction_id.startswith(by_price[1 << 96].point_id + "|")
+    )
+    later_prediction = next(
+        prediction
+        for prediction in corpus.predictions
+        if prediction.prediction_id.startswith(by_price[2 << 96].point_id + "|")
+    )
+    assert corpus.features_by_prediction[first_prediction.prediction_id]["market.history_available"] == 0.0
+    assert corpus.features_by_prediction[later_prediction.prediction_id]["market.history_available"] == 1.0
+
+
+def test_market_feedback_rejects_events_from_an_unexpected_pool_manager() -> None:
+    forged = replace(
+        _swap(1, 101, 1 << 96),
+        payload={**_swap(1, 101, 1 << 96).payload, "address": "0x" + "2" * 40},
+    )
+    corpus = build_market_feedback_corpus(
+        [_initialize(), forged],
+        as_of_time="2026-01-01T00:02:00Z",
+        source="fixture-source",
+        expected_emitter=MANAGER,
+    )
+    assert corpus.points == ()
+    assert any(item["reason"] == "unexpected_v4_pool_manager" for item in corpus.excluded)
 
 
 def test_raw_store_exposes_only_resolved_canonical_events(tmp_path) -> None:

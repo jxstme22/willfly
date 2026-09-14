@@ -424,9 +424,26 @@ class RawBatchStore:
             return self._row_to_batch(row)
         return StoredBatch(batch_id, source, final_path, digest, len(records), final_path.stat().st_size, False)
 
-    def acknowledge(self, batch_id: str, *, source: str, last_block_number: int | None, last_block_hash: str | None) -> None:
-        """Commit a checkpoint and acknowledgement in one SQLite transaction."""
+    def acknowledge(
+        self,
+        batch_id: str,
+        *,
+        source: str,
+        last_block_number: int | None,
+        last_block_hash: str | None,
+        allow_reorg: bool = False,
+    ) -> None:
+        """Commit a checkpoint and acknowledgement in one SQLite transaction.
 
+        Normal callers must advance the raw cursor monotonically.  The bounded
+        canonical-ingest runner may explicitly acknowledge a replacement hash
+        while retaining both provisional batches for fork reconciliation.
+        """
+
+        if last_block_number is not None and (not isinstance(last_block_number, int) or last_block_number < 0):
+            raise ValueError("checkpoint block number must be a non-negative integer")
+        if last_block_hash is not None:
+            _validate_hash(last_block_hash, "checkpoint block hash")
         now = datetime.now(timezone.utc).isoformat()
         with self._connection:
             row = self._connection.execute("SELECT source FROM batches WHERE batch_id = ?", (batch_id,)).fetchone()
@@ -434,6 +451,19 @@ class RawBatchStore:
                 raise KeyError(f"unknown batch: {batch_id}")
             if row["source"] != source:
                 raise ValueError("checkpoint source does not match batch source")
+            prior = self._connection.execute(
+                "SELECT last_block_number, last_block_hash FROM checkpoints WHERE source = ?", (source,)
+            ).fetchone()
+            if not allow_reorg and prior is not None and prior["last_block_number"] is not None and last_block_number is not None:
+                if last_block_number < prior["last_block_number"]:
+                    raise ValueError("raw checkpoint acknowledgement moved backwards")
+                if (
+                    last_block_number == prior["last_block_number"]
+                    and prior["last_block_hash"] is not None
+                    and last_block_hash is not None
+                    and prior["last_block_hash"].lower() != last_block_hash.lower()
+                ):
+                    raise ValueError("raw checkpoint hash changed at an acknowledged height")
             self._connection.execute("UPDATE batches SET acknowledged = 1 WHERE batch_id = ?", (batch_id,))
             self._connection.execute(
                 """
@@ -468,8 +498,25 @@ class RawBatchStore:
                 raise ValueError("source must be a simple partition name or filter-bound key")
         if not run_id:
             raise ValueError("run_id is required for empty-range acknowledgement")
+        if last_block_number is not None and (not isinstance(last_block_number, int) or last_block_number < 0):
+            raise ValueError("empty-range block number must be a non-negative integer")
+        if last_block_hash is not None:
+            _validate_hash(last_block_hash, "empty-range block hash")
         now = datetime.now(timezone.utc).isoformat()
         with self._connection:
+            prior = self._connection.execute(
+                "SELECT last_block_number, last_block_hash FROM empty_range_acks WHERE source = ?", (source,)
+            ).fetchone()
+            if prior is not None and prior["last_block_number"] is not None and last_block_number is not None:
+                if last_block_number < prior["last_block_number"]:
+                    raise ValueError("empty-range acknowledgement moved backwards")
+                if (
+                    last_block_number == prior["last_block_number"]
+                    and prior["last_block_hash"] is not None
+                    and last_block_hash is not None
+                    and prior["last_block_hash"].lower() != last_block_hash.lower()
+                ):
+                    raise ValueError("empty-range hash changed at an acknowledged height")
             self._connection.execute(
                 """
                 INSERT INTO empty_range_acks(source, last_block_number, last_block_hash, run_id, updated_at)
