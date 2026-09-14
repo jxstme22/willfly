@@ -14,7 +14,7 @@ import resource
 import sys
 import time
 
-from willfly.models.connectome import ConnectomeManifest, deterministic_row_range, load_connectome_graph
+from willfly.models.connectome import ConnectomeManifest, deterministic_row_range, load_connectome_graph, sha256_file
 from willfly.models.laboratory import (
     ExperimentConfig,
     build_training_samples_from_feedback,
@@ -67,6 +67,7 @@ def train_feedback(
         {key: value for key, value in feature_values.items() if isinstance(value, dict)},
         partitions_by_prediction={key: value for key, value in partition_values.items() if isinstance(value, str)},
     )
+    minimum_train_examples = 4
     report: dict[str, object] = {
         "as_of_time": as_of_time,
         "feedback_dir": str(feedback_dir),
@@ -81,12 +82,22 @@ def train_feedback(
             "excluded": [dict(item) for item in build.excluded],
         },
         "seeds": list(seeds),
+        "input_hashes": {
+            "manifest_sha256": sha256_file(manifest_path),
+            "features_sha256": sha256_file(features_path),
+            "partitions_sha256": sha256_file(partitions_path),
+        },
+        "experiment_config": {
+            "decay": 0.9,
+            "input_scale": 1.0,
+            "l2": 1.0,
+            "minimum_train_examples": minimum_train_examples,
+        },
         "operating_mode": "local_research_only",
         "execution_scope": "manual_only",
         "signing": False,
         "broadcast": False,
     }
-    minimum_train_examples = 4
     if len(build.samples) < minimum_train_examples or not any(sample.partition != "train" for sample in build.samples):
         reasons = []
         if len(build.samples) < minimum_train_examples:

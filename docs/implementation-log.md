@@ -49,6 +49,11 @@ holdout prediction is silently reused as a displayed research signal.
 Final verification after this guard: the full suite passed 228 tests with two
 sandbox loopback skips; planning and whitespace checks remained clean.
 
+The feedback-training report now records SHA-256 identities for the connectome
+manifest, feature map and explicit partition map, plus the fixed experiment
+configuration used by the runner. An insufficient-label run still returns
+waiting before graph loading.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status

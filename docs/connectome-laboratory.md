@@ -30,9 +30,10 @@ Reproduction:
 
 When causal labels are available, `scripts/train_malecns_feedback.py` is the
 bounded integration entrypoint. It takes an explicit feedback cutoff, feature
-map, train/validation/test assignment, MaleCNS partition and seed list; with
-insufficient labels it exits successfully with a `waiting` report and does not
-load or train the graph.
+map, train/validation/test assignment, MaleCNS partition and seed list. Its
+report hashes the manifest, feature map and partition inputs and records the
+experiment configuration; with insufficient labels it exits successfully with
+a `waiting` report and does not load or train the graph.
 
 ```text
 .venv/bin/python scripts/train_malecns_feedback.py \
