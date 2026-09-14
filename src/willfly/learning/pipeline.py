@@ -404,6 +404,21 @@ class PipelineRunner:
 
     def _observation(self, observed_at: str) -> tuple[dict[str, Any] | None, Sequence[str]]:
         mode = self.config.value("observation", "mode", "backfill")
+        if mode == "reuse":
+            input_path = self.config.path_value("observation_input")
+            assert input_path is not None
+            payload = self._load_reuse(input_path, "observation")
+            header_evidence = payload.get("header_evidence")
+            if payload.get("status") != "executed" or payload.get("operating_mode") != "read_only":
+                raise ValueError("reused observation must be an executed read-only manifest")
+            if not isinstance(header_evidence, dict) or header_evidence.get("coverage_state") != "complete":
+                raise ValueError("reused observation must have complete header coverage")
+            return {
+                "status": "executed",
+                "reused": True,
+                "input": str(input_path),
+                "manifest": payload,
+            }, ("reuse", str(input_path))
         start = self.config.value("observation", "from_block")
         finish = self.config.value("observation", "to_block")
         if isinstance(start, bool) or not isinstance(start, int) or start < 0:
@@ -439,6 +454,12 @@ class PipelineRunner:
         return result, command
 
     def _labels(self, observed_at: str, observation: sqlite3.Row) -> tuple[dict[str, Any] | None, dict[str, Any] | None, Sequence[str]]:
+        if self.config.value("labels", "mode", "build") == "reuse":
+            input_path = self.config.path_value("corpus_input")
+            assert input_path is not None
+            bundle = self._load_reuse(input_path, "labels")
+            self._validate_source_provenance(bundle.get("provenance"), "reused corpus")
+            return {"status": "ready", "reused": True, "input": str(input_path)}, bundle, ("reuse", str(input_path))
         source = self.config.value("observation", "source", "pipeline-live-readonly")
         config_path = self.config.path_value("source_config")
         store_dir = self.config.path_value("store_dir")
@@ -478,6 +499,14 @@ class PipelineRunner:
             temporary.unlink(missing_ok=True)
 
     def _training(self, observed_at: str, labels: sqlite3.Row) -> tuple[dict[str, Any] | None, Sequence[str]]:
+        if self.config.value("training", "mode", "train") == "reuse":
+            input_path = self.config.path_value("training_input")
+            assert input_path is not None
+            report = self._load_reuse(input_path, "training")
+            if report.get("status") != "completed":
+                raise ValueError("reused training report must be completed")
+            self._validate_source_provenance(report.get("provenance"), "reused training report")
+            return report, ("reuse", str(input_path))
         manifest = self.config.path_value("training_manifest")
         data_root = self.config.path_value("training_data_root")
         feedback_dir = self.config.path_value("feedback_dir")
@@ -684,6 +713,30 @@ class PipelineRunner:
         return payload
 
     @staticmethod
+    def _load_reuse(path: Path, stage: str) -> dict[str, Any]:
+        if not path.is_file():
+            raise ValueError(f"{stage} reuse input does not exist: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"{stage} reuse input must be a JSON object")
+        return payload
+
+    @staticmethod
+    def _validate_source_provenance(value: object, label: str) -> dict[str, Any]:
+        required = (
+            "source",
+            "config_hash",
+            "canonical_tip_hash",
+            "canonical_event_set_hash",
+            "canonical_checkpoint_hash",
+        )
+        if not isinstance(value, dict) or any(
+            not isinstance(value.get(field), str) or not value[field] for field in required
+        ):
+            raise ValueError(f"{label} source provenance is incomplete")
+        return dict(value)
+
+    @staticmethod
     def _run_command(command: Sequence[str], budget: StageBudget, cwd: Path) -> subprocess.CompletedProcess[str]:
         preexec_fn = None
         if os.name == "posix":
@@ -692,7 +745,12 @@ class PipelineRunner:
             def limit() -> None:
                 os.setsid()
                 resource.setrlimit(resource.RLIMIT_CPU, (budget.cpu_seconds, budget.cpu_seconds + 1))
-                resource.setrlimit(resource.RLIMIT_AS, (budget.memory_bytes, budget.memory_bytes))
+                # macOS exposes RLIMIT_AS but rejects changing it. WSL/Linux
+                # enforce the configured address-space budget; on Darwin the
+                # timeout/CPU limits still apply and the memory budget remains
+                # recorded in the run/artifact metadata.
+                if sys.platform.startswith("linux"):
+                    resource.setrlimit(resource.RLIMIT_AS, (budget.memory_bytes, budget.memory_bytes))
 
             preexec_fn = limit
         return subprocess.run(
@@ -721,6 +779,14 @@ class PipelineRunner:
             raise ValueError(f"{stage} artifact payload must be an object")
         base = dict(payload)
         provenance = dict(base.get("pipeline_provenance", {})) if isinstance(base.get("pipeline_provenance"), dict) else {}
+        source_provenance = base.get("provenance")
+        if not isinstance(source_provenance, dict):
+            training_state = base.get("training_state")
+            source_provenance = training_state.get("provenance") if isinstance(training_state, dict) else None
+        if source_provenance is not None:
+            provenance["source_provenance"] = self._validate_source_provenance(
+                source_provenance, f"{stage} artifact"
+            )
         provenance.update(
             {
                 "pipeline_schema_version": "willfly.pipeline-artifact.v0.1",

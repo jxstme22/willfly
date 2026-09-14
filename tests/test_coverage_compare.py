@@ -37,7 +37,7 @@ def test_coverage_compare_checks_event_sets_beyond_anchor_identity(monkeypatch, 
             "config_hash": "config-hash",
         },
     )
-    monkeypatch.setattr(cli, "ReadOnlyRpcClient", lambda endpoint, expected_chain_id: endpoint)
+    monkeypatch.setattr(cli, "ReadOnlyRpcClient", lambda endpoint, expected_chain_id, **_kwargs: endpoint)
     monkeypatch.setattr(
         cli,
         "capture_once",
@@ -55,3 +55,32 @@ def test_coverage_compare_checks_event_sets_beyond_anchor_identity(monkeypatch, 
     assert result["report"]["matched_count"] == 1
     assert result["report"]["provider_independent"] is True
     assert result["signing"] is False and result["broadcast"] is False
+
+
+def test_coverage_compare_reports_provider_timeout_as_degraded(monkeypatch, tmp_path):
+    (tmp_path / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        cli,
+        "_capture_context",
+        lambda *_args: {
+            "endpoint": "https://primary.example",
+            "expected_chain": 4663,
+            "addresses": ("0x" + "3" * 40,),
+            "config_hash": "config-hash",
+        },
+    )
+    monkeypatch.setattr(cli, "ReadOnlyRpcClient", lambda endpoint, expected_chain_id, **_kwargs: endpoint)
+    monkeypatch.setattr(cli, "capture_once", lambda *_args, **_kwargs: (_ for _ in ()).throw(TimeoutError("budget")))
+    result = cli._coverage_compare(
+        config_path=tmp_path / "config.json",
+        from_block=10,
+        to_block=10,
+        independent_rpc_url="https://independent.example",
+        addresses=[],
+        rpc_timeout_seconds=1,
+        max_rpc_retries=0,
+        max_runtime_seconds=1,
+    )
+    assert result["status"] == "degraded"
+    assert "comparison" in result["provider_errors"]
+    assert result["range_complete"] is False

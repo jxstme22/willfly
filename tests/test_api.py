@@ -64,6 +64,13 @@ def test_evidence_reference_with_slash_round_trips_through_route():
     assert payload["status"] == "canonical"
 
 
+def test_signal_as_of_time_is_used_when_projection_is_empty():
+    store = ReadOnlyStore(signal_as_of_time="2026-09-14T06:10:00Z")
+    payload, status = _route(store, "/signals")
+    assert status == 200
+    assert payload["as_of_time"] == "2026-09-14T06:10:00Z"
+
+
 def test_http_surface_rejects_post_as_read_only():
     try:
         server = create_server(store=ReadOnlyStore(), host="127.0.0.1", port=0)

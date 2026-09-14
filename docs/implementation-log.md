@@ -1431,8 +1431,17 @@ supports `willflyctl start pipeline`, pipeline state/restart wiring and the
 pipeline-enabled dashboard signal alias.
 
 Verification: WSL2 offline smoke passed; focused pipeline/API/coverage,
-capture/ancestry and CLI/watcher tests passed; full pytest passed with 278
-collected tests and 4 sandbox skips. The live cross-provider coverage check,
-72-hour capture and 14-day shadow window are prepared but not claimed as
-elapsed evidence; economic, causal-generalization and biological gates remain
-open.
+capture/ancestry and CLI/watcher tests passed; full pytest passed with 281
+collected tests and 4 sandbox skips. A fresh-process acceptance tick against
+the real canonical corpus and verified MaleCNS report completed all four
+stages, published 31 model outputs and five abstain/manual-only proposals,
+and bound source/config/tip/event-set/checkpoint provenance through the signal
+alias. The local read-only dashboard served that alias, refreshed its file
+hash after a later publication, and reported the corrected as-of timestamp;
+the old proposals were honestly displayed as expired because their source
+observation window had elapsed. The live cross-provider comparison was
+attempted over 61692800-61694600 with explicit 5-second RPC, zero-retry and
+90-second whole-run budgets; the primary provider timed out while resolving
+headers, so status is degraded and no coverage claim is made. The 72-hour
+capture and 14-day shadow window are prepared but not claimed as elapsed
+evidence; economic, causal-generalization and biological gates remain open.

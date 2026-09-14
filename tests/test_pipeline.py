@@ -60,7 +60,7 @@ def test_pipeline_runs_bounded_chain_and_reuses_completed_artifacts(tmp_path):
                         "as_of_time": "2026-09-14T06:00:00Z",
                         "predictions": [],
                         "outcomes": [],
-                        "provenance": {"source": "fixture", "config_hash": "fixture", "canonical_tip_hash": "tip", "canonical_event_set_hash": "events"},
+                        "provenance": {"source": "fixture", "config_hash": "fixture", "canonical_tip_hash": "tip", "canonical_event_set_hash": "events", "canonical_checkpoint_hash": "checkpoint"},
                     }
                 ),
                 encoding="utf-8",
@@ -93,6 +93,13 @@ def test_pipeline_runs_bounded_chain_and_reuses_completed_artifacts(tmp_path):
                 encoding="utf-8",
             )
             return subprocess.CompletedProcess(command, 0, '{"status":"ready"}', "")
+        if any("train_malecns_feedback.py" in item for item in command):
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                '{"status":"completed","provenance":{"source":"fixture","config_hash":"fixture","canonical_tip_hash":"tip","canonical_event_set_hash":"events","canonical_checkpoint_hash":"checkpoint"}}',
+                "",
+            )
         if "signal-build" in command:
             output = Path(command[command.index("--output") + 1])
             output.write_text(
@@ -110,8 +117,6 @@ def test_pipeline_runs_bounded_chain_and_reuses_completed_artifacts(tmp_path):
                 encoding="utf-8",
             )
             return subprocess.CompletedProcess(command, 0, '{"status":"ready"}', "")
-        if any("train_malecns_feedback.py" in item for item in command):
-            return subprocess.CompletedProcess(command, 0, '{"status":"completed","provenance":{"source":"fixture"}}', "")
         return subprocess.CompletedProcess(command, 0, '{"status":"executed","event_count":1}', "")
 
     with PipelineRunner(config, tmp_path / "pipeline.sqlite3", command_runner=command_runner) as runner:
@@ -145,3 +150,42 @@ def test_pipeline_requeues_running_stage_after_restart(tmp_path):
     with PipelineRunner(config, state_db) as runner:
         row = runner._connection.execute("SELECT status, reason FROM pipeline_runs WHERE run_id = 'crashed'").fetchone()
         assert tuple(row) == ("waiting", "interrupted_process_recovery")
+
+
+def test_pipeline_reuses_provenance_bound_observation_corpus_and_training(tmp_path):
+    config = _config(tmp_path)
+    provenance = {
+        "source": "bounded-live-v4-corpus:4663:test",
+        "config_hash": "source-config",
+        "canonical_tip_hash": "tip",
+        "canonical_event_set_hash": "events",
+        "canonical_checkpoint_hash": "checkpoint",
+    }
+    observation_input = tmp_path / "observation.json"
+    observation_input.write_text(
+        json.dumps({"status": "executed", "operating_mode": "read_only", "header_evidence": {"coverage_state": "complete"}}),
+        encoding="utf-8",
+    )
+    corpus_input = tmp_path / "corpus.json"
+    corpus_input.write_text(
+        json.dumps({"schema_version": "willfly.market-feedback-bundle.v0.1", "provenance": provenance}),
+        encoding="utf-8",
+    )
+    training_input = tmp_path / "training.json"
+    training_input.write_text(json.dumps({"status": "completed", "provenance": provenance}), encoding="utf-8")
+    payload = json.loads(config.read_text(encoding="utf-8"))
+    payload["paths"].update(
+        observation_input=str(observation_input), corpus_input=str(corpus_input), training_input=str(training_input)
+    )
+    payload["observation"]["mode"] = "reuse"
+    payload["labels"] = {"mode": "reuse"}
+    payload["training"]["mode"] = "reuse"
+    config.write_text(json.dumps(payload), encoding="utf-8")
+
+    with PipelineRunner(config, tmp_path / "pipeline.sqlite3") as runner:
+        assert runner.run("observation", observed_at="2026-09-14T06:00:00Z").status == "completed"
+        assert runner.run("labels", observed_at="2026-09-14T06:00:00Z").status == "completed"
+        assert runner.run("training", observed_at="2026-09-14T06:00:00Z").status == "completed"
+        artifact = runner.last_executions[-1].artifacts[0]
+        published = json.loads(Path(artifact["path"]).read_text(encoding="utf-8"))
+        assert published["pipeline_provenance"]["source_provenance"] == provenance

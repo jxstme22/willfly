@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import signal
 import sys
 from typing import Any
 
@@ -956,38 +957,93 @@ def _coverage_compare(
     to_block: int,
     independent_rpc_url: str,
     addresses: list[str],
+    rpc_timeout_seconds: float = 10.0,
+    max_rpc_retries: int = 0,
+    max_runtime_seconds: int = 120,
 ) -> dict[str, Any]:
     """Compare the same bounded event range across two read-only providers."""
 
     if from_block < 0 or to_block < from_block or to_block - from_block > 1999:
         raise ValueError("coverage comparison range must be a bounded non-negative interval of at most 2000 blocks")
+    if rpc_timeout_seconds <= 0 or max_rpc_retries < 0 or max_runtime_seconds <= 0:
+        raise ValueError("coverage comparison budgets must be positive, with non-negative retries")
     config = _load_json(config_path)
     context = _capture_context(config, config_path, addresses)
     if redact_endpoint(context["endpoint"]) == redact_endpoint(independent_rpc_url):
         raise ValueError("coverage comparison requires distinct configured RPC endpoints")
-    primary = ReadOnlyRpcClient(context["endpoint"], expected_chain_id=context["expected_chain"])
-    independent = ReadOnlyRpcClient(independent_rpc_url, expected_chain_id=context["expected_chain"])
-    primary_capture = capture_once(
-        primary,
-        addresses=list(context["addresses"]),
-        from_block=from_block,
-        to_block=to_block,
-        run_id="coverage-primary",
+    primary = ReadOnlyRpcClient(
+        context["endpoint"],
+        expected_chain_id=context["expected_chain"],
+        timeout_seconds=rpc_timeout_seconds,
+        max_retries=max_rpc_retries,
     )
-    independent_capture = capture_once(
-        independent,
-        addresses=list(context["addresses"]),
-        from_block=from_block,
-        to_block=to_block,
-        run_id="coverage-independent",
+    independent = ReadOnlyRpcClient(
+        independent_rpc_url,
+        expected_chain_id=context["expected_chain"],
+        timeout_seconds=rpc_timeout_seconds,
+        max_retries=max_rpc_retries,
     )
-    primary_events = primary_capture.events
-    independent_events = independent_capture.events
+    primary_capture = None
+    independent_capture = None
+    provider_errors: dict[str, str] = {}
+    old_handler = None
+    old_timer = None
+    try:
+        if hasattr(signal, "SIGALRM"):
+            old_handler = signal.getsignal(signal.SIGALRM)
+            old_timer = signal.setitimer(signal.ITIMER_REAL, max_runtime_seconds)
+
+            def deadline(_signum: int, _frame: object) -> None:
+                raise TimeoutError(f"coverage comparison exceeded {max_runtime_seconds}s runtime budget")
+
+            signal.signal(signal.SIGALRM, deadline)
+        try:
+            primary_capture = capture_once(
+                primary,
+                addresses=list(context["addresses"]),
+                from_block=from_block,
+                to_block=to_block,
+                run_id="coverage-primary",
+            )
+        except TimeoutError as exc:
+            provider_errors["comparison"] = str(exc)
+        except Exception as exc:
+            provider_errors["primary"] = redact_error(exc)
+        if not provider_errors:
+            try:
+                independent_capture = capture_once(
+                    independent,
+                    addresses=list(context["addresses"]),
+                    from_block=from_block,
+                    to_block=to_block,
+                    run_id="coverage-independent",
+                )
+            except TimeoutError as exc:
+                provider_errors["comparison"] = str(exc)
+            except Exception as exc:
+                provider_errors["independent"] = redact_error(exc)
+    except TimeoutError as exc:
+        provider_errors.setdefault("comparison", str(exc))
+    finally:
+        if hasattr(signal, "SIGALRM") and old_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old_handler)
+            if old_timer is not None and old_timer[0] > 0:
+                signal.setitimer(signal.ITIMER_REAL, old_timer[0], old_timer[1])
+    primary_events = () if primary_capture is None else primary_capture.events
+    independent_events = () if independent_capture is None else independent_capture.events
     report = audit_coverage(primary_events, independent_events, provider_independent=True)
-    range_complete = primary_capture.to_block == to_block and independent_capture.to_block == to_block
+    range_complete = (
+        primary_capture is not None
+        and independent_capture is not None
+        and primary_capture.to_block == to_block
+        and independent_capture.to_block == to_block
+    )
     notes = list(report.notes)
     if not range_complete:
         notes.append("provider_head_did_not_cover_requested_end")
+    if provider_errors:
+        notes.append("provider_capture_error")
     return {
         "run_id": _run_id(
             "coverage-compare",
@@ -999,7 +1055,7 @@ def _coverage_compare(
                 "independent_events": [event.logical_key for event in independent_events],
             },
         ),
-        "status": "pass" if report.state == "pass" and range_complete else "degraded",
+        "status": "pass" if report.state == "pass" and range_complete and not provider_errors else "degraded",
         "operating_mode": "read_only_provider_coverage_comparison",
         "execution_scope": "research_only",
         "signing": False,
@@ -1014,6 +1070,12 @@ def _coverage_compare(
         "primary_event_set_hash": _json_hash([event.logical_key for event in primary_events]),
         "independent_event_set_hash": _json_hash([event.logical_key for event in independent_events]),
         "range_complete": range_complete,
+        "budgets": {
+            "rpc_timeout_seconds": rpc_timeout_seconds,
+            "max_rpc_retries": max_rpc_retries,
+            "max_runtime_seconds": max_runtime_seconds,
+        },
+        "provider_errors": provider_errors,
         "report": {
             **report.__dict__,
             "missing_keys": [list(key) for key in report.missing_keys],
@@ -1574,6 +1636,9 @@ def build_parser() -> argparse.ArgumentParser:
     coverage_compare.add_argument("--to-block", type=int, required=True)
     coverage_compare.add_argument("--independent-rpc-url", required=True)
     coverage_compare.add_argument("--address", action="append", default=[])
+    coverage_compare.add_argument("--rpc-timeout-seconds", type=float, default=10.0)
+    coverage_compare.add_argument("--max-rpc-retries", type=int, default=0)
+    coverage_compare.add_argument("--max-runtime-seconds", type=int, default=120)
 
     export = subparsers.add_parser("export", help="export JSON records to Parquet")
     export.add_argument("--records", type=Path, required=True)
@@ -1845,6 +1910,9 @@ def main(argv: list[str] | None = None) -> int:
                 to_block=args.to_block,
                 independent_rpc_url=args.independent_rpc_url,
                 addresses=args.address,
+                rpc_timeout_seconds=args.rpc_timeout_seconds,
+                max_rpc_retries=args.max_rpc_retries,
+                max_runtime_seconds=args.max_runtime_seconds,
             )
         elif args.command == "export":
             result = _export(args.records, args.output_dir, args.dataset_name)

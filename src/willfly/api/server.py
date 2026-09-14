@@ -241,7 +241,7 @@ class ReadOnlyStore:
         direction: str = "desc",
     ) -> dict[str, object]:
         _validate_page(cursor, limit)
-        as_of = self.signal_as_of_time or self.quality_details.get("as_of_time", "1970-01-01T00:00:00Z") if self.quality_details else "1970-01-01T00:00:00Z"
+        as_of = self._as_of_time()
         proposal_status = {
             action.proposal_id: next(
                 (link.status for link in self.action_links if link.action_id == action.action_id),
@@ -381,7 +381,11 @@ class ReadOnlyStore:
         return build_signal_inbox(self.predictions, self.proposals, as_of_time=as_of, market_readiness=self.market_readiness, manual_status_by_proposal=proposal_status)
 
     def _as_of_time(self) -> str:
-        return self.quality_details.get("as_of_time", "1970-01-01T00:00:00Z") if self.quality_details else (self.discovery_snapshot.as_of_time if self.discovery_snapshot else "1970-01-01T00:00:00Z")
+        return self.signal_as_of_time or (
+            self.quality_details.get("as_of_time", "1970-01-01T00:00:00Z")
+            if self.quality_details
+            else (self.discovery_snapshot.as_of_time if self.discovery_snapshot else "1970-01-01T00:00:00Z")
+        )
 
     def health(self) -> dict[str, object]:
         details = dict(self.quality_details or {})

@@ -181,13 +181,17 @@ retain the JSON result with the capture manifest:
 .venv/bin/willfly coverage-compare \
   --config configs/sources/robinhood-chain-v0.1.json \
   --from-block BLOCK --to-block BLOCK \
-  --independent-rpc-url https://robinhood-rpc.publicnode.com
+  --independent-rpc-url https://robinhood-rpc.publicnode.com \
+  --rpc-timeout-seconds 5 \
+  --max-rpc-retries 0 \
+  --max-runtime-seconds 90
 ```
 
 This compares event logical keys and requested-range completion across both
 providers. It is stronger than an anchor-header identity check, but remains a
 bounded coverage sample and does not establish finality or archive
-completeness.
+completeness. The RPC, retry and whole-run budgets are explicit; a timeout is
+reported as `degraded` and must not be summarized as a coverage pass.
 
 ## Safety boundary
 
