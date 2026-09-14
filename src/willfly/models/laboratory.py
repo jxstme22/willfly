@@ -14,6 +14,7 @@ from willfly.models.connectome.graph import SparseGraph, graph_hash
 from willfly.models.readout import FrozenReadout, ReadoutRow
 from willfly.models.reservoir import SparseReservoir
 from willfly.models.conventional import FeatureRow, LinearBaseline
+from willfly.features.feedback import FeedbackDataset
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,65 @@ class TrainingSample:
             raise ValueError("training inputs must be a non-empty node mapping")
         if any(not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)) for value in self.inputs.values()):
             raise ValueError("training inputs must be finite numbers")
+
+
+@dataclass(frozen=True)
+class FeedbackTrainingBuild:
+    samples: tuple[TrainingSample, ...]
+    excluded: tuple[dict[str, str], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "samples": [
+                {
+                    "sample_id": sample.sample_id,
+                    "episode_id": sample.episode_id,
+                    "observed_at": sample.observed_at,
+                    "inputs": dict(sample.inputs),
+                    "target_bps": sample.target_bps,
+                    "partition": sample.partition,
+                    "source_refs": list(sample.source_refs),
+                }
+                for sample in self.samples
+            ],
+            "excluded": [dict(item) for item in self.excluded],
+        }
+
+
+def build_training_samples_from_feedback(
+    dataset: FeedbackDataset,
+    inputs_by_prediction: Mapping[str, Mapping[str, float]],
+    *,
+    partitions_by_prediction: Mapping[str, str],
+) -> FeedbackTrainingBuild:
+    """Adapt eligible causal labels without inventing features or splits."""
+
+    samples: list[TrainingSample] = []
+    excluded: list[dict[str, str]] = []
+    for example in sorted(dataset.eligible_examples, key=lambda item: (item.created_at, item.prediction_id)):
+        inputs = inputs_by_prediction.get(example.prediction_id)
+        if inputs is None:
+            excluded.append({"prediction_id": example.prediction_id, "reason": "feature_inputs_missing"})
+            continue
+        partition = partitions_by_prediction.get(example.prediction_id)
+        if partition is None:
+            excluded.append({"prediction_id": example.prediction_id, "reason": "partition_assignment_missing"})
+            continue
+        if example.net_return_bps is None:  # Defensive guard for custom dataset implementations.
+            excluded.append({"prediction_id": example.prediction_id, "reason": "numeric_target_unavailable"})
+            continue
+        samples.append(
+            TrainingSample(
+                sample_id=f"feedback:{example.prediction_id}",
+                episode_id=f"{example.market}:{example.instrument_id}",
+                observed_at=example.created_at,
+                inputs=inputs,
+                target_bps=example.net_return_bps,
+                partition=partition,
+                source_refs=example.source_refs,
+            )
+        )
+    return FeedbackTrainingBuild(tuple(samples), tuple(excluded))
 
 
 @dataclass(frozen=True)
@@ -278,4 +338,12 @@ def _hash_samples(samples: Sequence[TrainingSample]) -> str:
     )
 
 
-__all__ = ["ExperimentConfig", "ExperimentResult", "ModelMetric", "TrainingSample", "run_connectome_experiment"]
+__all__ = [
+    "ExperimentConfig",
+    "ExperimentResult",
+    "FeedbackTrainingBuild",
+    "ModelMetric",
+    "TrainingSample",
+    "build_training_samples_from_feedback",
+    "run_connectome_experiment",
+]

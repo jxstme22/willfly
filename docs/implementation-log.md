@@ -807,6 +807,12 @@ and registry. A controlled one-window candidate/active comparison was recorded
 as `qualified` with both score sets retained while the active version remained
 unchanged; this is a mechanics check, not live forward or calibration evidence.
 
+Added the B3-to-B4 training adapter. It converts only eligible matured feedback
+examples into `TrainingSample` rows when the caller supplies feature inputs and
+an explicit train/validation/test partition, and reports missing inputs or
+partitions as exclusions. It does not derive features from outcomes or assign
+holdouts automatically.
+
 
 ## 2026-09-14 — B10 release capability audit
 

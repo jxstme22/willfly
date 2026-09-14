@@ -15,9 +15,12 @@ returns `waiting` and records the reason.
 
 The checked-in config targets the verified MaleCNS manifest and its bounded
 20,000-edge subset. The implementation can consume actual labelled samples
-from the feedback pipeline; tests use a tiny graph and deterministic fixture
-labels to verify mechanics only. Windows/WSL2 resource benchmarks, live
-zero-trade learning, forward evaluation and model promotion remain open.
+from the feedback pipeline. `build_training_samples_from_feedback` accepts
+only eligible matured examples and requires both a feature map and an explicit
+partition per prediction, reporting missing inputs as exclusions rather than
+inventing rows or assigning holdouts. Tests use a tiny graph and deterministic
+fixture labels to verify mechanics only. Windows/WSL2 resource benchmarks,
+live zero-trade learning, forward evaluation and model promotion remain open.
 
 Reproduction:
 

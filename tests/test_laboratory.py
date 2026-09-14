@@ -3,7 +3,13 @@ import json
 import pytest
 
 from willfly.models.connectome.graph import Edge, build_graph
-from willfly.models.laboratory import ExperimentConfig, TrainingSample, run_connectome_experiment
+from willfly.features.feedback import FeedbackDataset, FeedbackExample
+from willfly.models.laboratory import (
+    ExperimentConfig,
+    TrainingSample,
+    build_training_samples_from_feedback,
+    run_connectome_experiment,
+)
 
 
 def _samples() -> tuple[TrainingSample, ...]:
@@ -56,3 +62,41 @@ def test_checkpoint_identity_cannot_cross_graph_or_dataset(tmp_path) -> None:
     changed_graph = build_graph([Edge("a", "b", 0.25)])
     with pytest.raises(ValueError, match="checkpoint identity"):
         run_connectome_experiment(changed_graph, _samples(), config=config, checkpoint_path=checkpoint)
+
+
+def test_feedback_adapter_requires_features_and_explicit_partition_without_leakage() -> None:
+    dataset = FeedbackDataset(
+        "2026-09-14T02:00:00Z",
+        (
+            FeedbackExample(
+                "p1",
+                "spot_entry_net_return",
+                "token-1",
+                "token",
+                "2026-09-14T00:00:00Z",
+                "2026-09-14T01:00:00Z",
+                "market",
+                "observed",
+                25,
+                True,
+                (),
+                ("prediction:p1", "outcome:o1"),
+            ),
+        ),
+        (),
+        (),
+        ("feedback:test",),
+    )
+    built = build_training_samples_from_feedback(
+        dataset,
+        {"p1": {"node-a": 0.5}},
+        partitions_by_prediction={"p1": "test"},
+    )
+    assert len(built.samples) == 1
+    assert built.samples[0].partition == "test"
+    assert built.samples[0].target_bps == 25
+    assert built.samples[0].observed_at == "2026-09-14T00:00:00Z"
+
+    missing = build_training_samples_from_feedback(dataset, {}, partitions_by_prediction={})
+    assert missing.samples == ()
+    assert missing.excluded == ({"prediction_id": "p1", "reason": "feature_inputs_missing"},)
