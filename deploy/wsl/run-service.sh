@@ -203,6 +203,8 @@ watcher() {
         local value="${!name:-}"
         [[ -n "$value" ]] && command+=("$option" "$value")
     done
+    [[ -n "${WILLFLY_PIPELINE_CONFIG:-}" ]] && command+=(--pipeline-config "$WILLFLY_PIPELINE_CONFIG")
+    [[ -n "${WILLFLY_PIPELINE_STATE_DB:-}" ]] && command+=(--pipeline-state-db "$WILLFLY_PIPELINE_STATE_DB")
     run_cmd "${command[@]}"
 }
 

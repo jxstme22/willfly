@@ -27,15 +27,17 @@ usage() {
     cat <<'EOF'
 Usage:
   willflyctl install [--dry-run]
-  willflyctl start [dashboard|capture|watcher|train|evaluate|shadow|all] ...
-  willflyctl stop  [dashboard|capture|watcher|train|evaluate|shadow|all] ...
-  willflyctl status [dashboard|capture|watcher|train|evaluate|shadow|all] ...
+  willflyctl start [pipeline|dashboard|capture|watcher|train|evaluate|shadow|all] ...
+  willflyctl stop  [pipeline|dashboard|capture|watcher|train|evaluate|shadow|all] ...
+  willflyctl status [pipeline|dashboard|capture|watcher|train|evaluate|shadow|all] ...
   willflyctl backup --output PATH [--source NAME=PATH ...]
   willflyctl restore --archive PATH --destination PATH
   willflyctl smoke
 
-Start defaults to dashboard, watcher and capture. Training, shadow and
-evaluation are opt-in because their inputs are operator-specific.
+Start defaults to dashboard, watcher and capture. ``pipeline`` starts the
+dashboard plus the restart-safe watcher pipeline; capture, training and
+evaluation then run only when the pipeline config has explicit inputs.
+Training, shadow and evaluation remain opt-in as standalone services.
 EOF
 }
 
@@ -66,7 +68,9 @@ expand_services() {
     fi
     local item
     for item in "$@"; do
-        if [[ "$item" == all ]]; then
+        if [[ "$item" == pipeline ]]; then
+            printf '%s\n' dashboard watcher
+        elif [[ "$item" == all ]]; then
             printf '%s\n' dashboard capture watcher train evaluate shadow
         else
             unit_for "$item" >/dev/null

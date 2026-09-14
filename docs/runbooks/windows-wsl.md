@@ -93,9 +93,22 @@ read. Set `WILLFLY_CAPTURE_MODE=capture` only for a fixed range, and set
 `WILLFLY_CAPTURE_TO_BLOCK` as well.
 
 The watcher records a timezone-aware heartbeat and schedules durable slots for
-observation, labels, training and evaluation. Its default states are
-`waiting`; that is deliberate when no stage callback has supplied current
-evidence. Personal trades remain at zero and are not a trigger.
+observation, labels, training and evaluation. Set
+`WILLFLY_PIPELINE_CONFIG` to the reviewed
+`configs/learning/pipeline-v0.1.json` copy to enable the concrete chain; its
+separate `WILLFLY_PIPELINE_STATE_DB` stores stage runs and immutable artifact
+identities. Leave `observation.from_block` and `to_block` unset until the
+operator chooses a bounded range. Its default states are `waiting`; that is
+deliberate when no stage callback has supplied current evidence. Personal
+trades remain at zero and are not a trigger.
+
+The pipeline callbacks run bounded subprocesses in dependency order:
+capture/backfill → canonical market feedback and feedback store → MaleCNS
+candidate training → evaluation/model-output → research-only signal snapshot.
+Completed identities are reused after restart; interrupted runs are requeued.
+Evaluation points are optional, but publication is still restricted to
+manual-only `abstain` proposals while evaluation is waiting. No signer,
+broadcast, promotion or LP path is reachable from the watcher.
 
 Candidate training stays `waiting` until either `WILLFLY_TRAIN_CORPUS` or both
 `WILLFLY_TRAIN_FEATURES` and `WILLFLY_TRAIN_PARTITIONS` are set. It calls the
@@ -129,11 +142,13 @@ fills. No service freezes a config or fabricates observations.
 ## Start, stop and inspect
 
 `willflyctl start` starts one immediate pass and then arms the corresponding
-timer. With no names it starts only the dashboard, watcher and capture. Add
-the research stages explicitly after their inputs are reviewed:
+timer. With no names it starts only the dashboard, watcher and capture. The
+single `pipeline` target starts the dashboard plus the restart-safe watcher
+pipeline; use it after reviewing the pipeline range and paths:
 
 ```text
 ~/.local/share/willfly/bin/willflyctl start
+~/.local/share/willfly/bin/willflyctl start pipeline
 ~/.local/share/willfly/bin/willflyctl start train evaluate shadow
 ~/.local/share/willfly/bin/willflyctl status all
 ```
@@ -145,6 +160,7 @@ The unit map is:
 | `dashboard` | local HTTP GET dashboard | none | 1 GB / 1 CPU |
 | `capture` | bounded read-only backfill/capture | 60 seconds | 1 GB / 1 CPU |
 | `watcher` | restart-safe scheduler tick | 60 seconds | 512 MB / 1 CPU |
+| `pipeline` | dashboard plus concrete watcher callbacks | 60 seconds | watcher + stage budgets |
 | `train` | candidate feedback training | 15 minutes | 24 GB / 8 CPU |
 | `evaluate` | forward candidate evaluation | 15 minutes | 4 GB / 4 CPU |
 | `shadow` | hypothetical shadow replay | 60 seconds | 1 GB / 1 CPU |

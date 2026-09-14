@@ -144,6 +144,11 @@ def test_capture_empty_range_acknowledges_with_header_evidence(tmp_path: Path):
     assert manifest.header_evidence["header_coverage_state"] == "complete"
     assert manifest.header_evidence["raw_acknowledgement_state"] == "acknowledged"
     assert manifest.header_evidence["canonical_projection_state"] == "unresolved"
+    domains = manifest.header_evidence["checkpoint_domains"]
+    assert domains["raw_acknowledgement"] is None
+    assert domains["empty_range_acknowledgement"]["last_block_number"] == 16
+    assert domains["header_coverage"]["range_end"] == 16
+    assert domains["canonical_projection"]["state"] == "unresolved"
     with RawBatchStore(tmp_path / "store") as reopened:
         assert reopened.get_empty_range_ack(manifest.checkpoint_source) is not None
 

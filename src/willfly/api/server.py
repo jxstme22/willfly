@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Mapping
@@ -37,6 +37,18 @@ class ReadOnlyStore:
     model_state: Mapping[str, object] | None = None
     manual_actions: tuple[ManualAction, ...] = ()
     action_links: tuple[ManualActionLink, ...] = ()
+    signal_loader: Callable[[], Mapping[str, object]] | None = None
+    signal_file: str | None = None
+    signal_file_hash: str | None = None
+    signal_provenance: Mapping[str, object] | None = None
+
+    def refresh(self) -> "ReadOnlyStore":
+        """Reload an operator-published signal snapshot for each GET request."""
+
+        if self.signal_loader is None:
+            return self
+        values = self.signal_loader()
+        return replace(self, **dict(values))
 
     @classmethod
     def from_discovery(
@@ -380,6 +392,10 @@ class ReadOnlyStore:
             details.setdefault("chain_id", self.pools[0].identity.chain_id)
         details.setdefault("launch_count", len(self.launches)); details.setdefault("pool_count", len(self.pools)); details.setdefault("timeline_count", len(self.timelines))
         details.setdefault("exclusion_count", len(self.exclusions)); details.setdefault("signal_count", len(self._signal_entries()))
+        if self.signal_file is not None:
+            details.setdefault("published_signal_file", self.signal_file)
+        if self.signal_file_hash is not None:
+            details.setdefault("published_signal_file_hash", self.signal_file_hash)
         details.setdefault("missingness", list(self.discovery_snapshot.missingness) if self.discovery_snapshot else ["persisted_projection_unavailable"])
         details.setdefault("lineage_count", len(self.discovery_snapshot.lineage) if self.discovery_snapshot else 0)
         details.setdefault("source_state", "attached" if self.discovery_snapshot else "empty")
@@ -417,16 +433,17 @@ def create_server(*, store: ReadOnlyStore, host: str = "127.0.0.1", port: int = 
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-            if urlparse(self.path).path in {"/", "/dashboard"}:
-                body = store.dashboard().encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                self.wfile.write(body)
-                return
             try:
-                payload, status = _route(store, self.path)
+                current_store = store.refresh()
+                if urlparse(self.path).path in {"/", "/dashboard"}:
+                    body = current_store.dashboard().encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                payload, status = _route(current_store, self.path)
             except KeyError as exc:
                 payload, status = {"status": "error", "error": str(exc)}, 404
             except ValueError as exc:

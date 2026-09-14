@@ -72,11 +72,33 @@ large gap between explicit ticks is persisted as an outage interval. The
 default personal-trade count is zero, so personal activity is not required to
 advance the scheduler state.
 
-`--execute-pending` runs only local bounded callbacks: label maturation is
-performed against the feedback store, while observation, training and
-evaluation remain explicitly waiting until their configured external inputs
-exist. This makes the capture-to-label-to-training queue auditable without
-claiming that a separate service completed work.
+`--execute-pending` without a pipeline config runs only local bounded
+callbacks: label maturation is performed against the feedback store, while
+observation, training and evaluation remain waiting. To run the concrete
+restart-safe chain, provide the reviewed pipeline config and a separate
+pipeline state database:
+
+```text
+.venv/bin/willfly watcher-tick \
+  --state-db /path/to/watcher.sqlite3 \
+  --feedback-dir /path/to/feedback \
+  --pipeline-config configs/learning/pipeline-v0.1.json \
+  --pipeline-state-db /path/to/pipeline.sqlite3 \
+  --observed-at 2026-09-14T00:00:00Z \
+  --schedule --execute-pending
+```
+
+The concrete callbacks are dependency ordered: bounded capture/backfill,
+canonical market-feedback build, bounded MaleCNS candidate training, then
+model-output/evaluation and research-only signal publication. Each stage uses
+an immutable artifact identity, atomic `latest` alias, idempotency key,
+subprocess timeout/resource budget and crash-recovery record. A missing block
+range, corpus, templates/actions or evaluation points stays `waiting`; no
+stage signs, broadcasts, promotes or enables LP.
+
+The dashboard can point at the pipeline's `signals-latest.json`. The server
+reloads that file on every GET, so the read-only UI reflects the newest valid
+published snapshot without restarting the HTTP process.
 
 ## Start a controlled shadow replay
 
@@ -151,6 +173,21 @@ for review:
 An empty acknowledged range is valid evidence of that range and does not
 represent a launch or trade. A missing ancestry anchor, source gap or open
 launch-source gate must remain visible in the manifest.
+
+For an independent bounded coverage check, use a separate read-only RPC and
+retain the JSON result with the capture manifest:
+
+```text
+.venv/bin/willfly coverage-compare \
+  --config configs/sources/robinhood-chain-v0.1.json \
+  --from-block BLOCK --to-block BLOCK \
+  --independent-rpc-url https://robinhood-rpc.publicnode.com
+```
+
+This compares event logical keys and requested-range completion across both
+providers. It is stronger than an anchor-header identity check, but remains a
+bounded coverage sample and does not establish finality or archive
+completeness.
 
 ## Safety boundary
 

@@ -80,3 +80,30 @@ def test_http_surface_rejects_post_as_read_only():
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+
+
+def test_http_surface_refreshes_published_training_snapshot():
+    calls = 0
+
+    def loader():
+        nonlocal calls
+        calls += 1
+        return {"training_state": {"status": f"refresh-{calls}"}, "signal_provenance": None}
+
+    try:
+        server = create_server(store=ReadOnlyStore(signal_loader=loader), host="127.0.0.1", port=0)
+    except PermissionError:
+        pytest.skip("loopback socket binding is unavailable in this sandbox")
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with urlopen(f"http://127.0.0.1:{server.server_port}/training", timeout=2) as response:
+            first = response.read().decode()
+        with urlopen(f"http://127.0.0.1:{server.server_port}/training", timeout=2) as response:
+            second = response.read().decode()
+        assert '"status": "refresh-1"' in first
+        assert '"status": "refresh-2"' in second
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)

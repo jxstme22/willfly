@@ -1,0 +1,79 @@
+{
+  "schema_version": "willfly.pipeline.v0.1",
+  "project_dir": "../..",
+  "execution_scope": "read_only_observation",
+  "signing": false,
+  "broadcast": false,
+  "paths": {
+    "source_config": "configs/sources/robinhood-chain-v0.1.json",
+    "store_dir": "data/observatory",
+    "feedback_dir": "data/feedback",
+    "artifact_dir": "data/pipeline",
+    "observation_latest": "data/pipeline/observation-latest.json",
+    "corpus_latest": "data/pipeline/market-feedback-latest.json",
+    "training_latest": "data/pipeline/candidate-latest.json",
+    "training_checkpoint_dir": "data/pipeline/checkpoints",
+    "training_manifest": "configs/connectome/male-cns-v1.0.json",
+    "training_data_root": "data/connectome/male-cns-v1.0",
+    "model_output_latest": "data/pipeline/model-output-latest.json",
+    "signals_latest": "data/pipeline/signals-latest.json",
+    "templates": "data/pipeline/templates.json",
+    "actions": "data/pipeline/actions.json",
+    "exit_kinds": "data/pipeline/exit-kinds.json",
+    "evaluation_points": null
+  },
+  "observation": {
+    "mode": "backfill",
+    "from_block": null,
+    "to_block": null,
+    "max_blocks": 500,
+    "page_size": 2000,
+    "source": "pipeline-live-readonly"
+  },
+  "training": {
+    "max_edges": 100000,
+    "partition_index": 0,
+    "partition_count": 1,
+    "seeds": "7,17,27",
+    "max_examples": 100000
+  },
+  "model": {
+    "model_id": "willfly-malecns-readout",
+    "model_version": "malecns-feedback-v0.1",
+    "run_ref": "pipeline",
+    "run_id": ""
+  },
+  "evaluation": {
+    "candidate_version": "",
+    "active_version": "",
+    "dataset_hash": "",
+    "minimum_forward_windows": 2,
+    "minimum_points_per_window": 2
+  },
+  "budgets": {
+    "observation": {
+      "timeout_seconds": 600,
+      "memory_bytes": 1073741824,
+      "cpu_seconds": 600,
+      "max_output_bytes": 8388608
+    },
+    "labels": {
+      "timeout_seconds": 600,
+      "memory_bytes": 2147483648,
+      "cpu_seconds": 600,
+      "max_output_bytes": 8388608
+    },
+    "training": {
+      "timeout_seconds": 7200,
+      "memory_bytes": 25769803776,
+      "cpu_seconds": 7200,
+      "max_output_bytes": 16777216
+    },
+    "evaluation": {
+      "timeout_seconds": 1800,
+      "memory_bytes": 4294967296,
+      "cpu_seconds": 1800,
+      "max_output_bytes": 16777216
+    }
+  }
+}

@@ -32,6 +32,7 @@ from willfly.storage.export import ExportUnavailable, export_records
 from willfly.storage.raw import AncestryAnchor, RawBatchStore, anchor_evidence_record
 from willfly.adapters.robinhood_rpc import ReadOnlyRpcClient
 from willfly.ingest.backfill import BackfillCheckpointStore
+from willfly.ingest.capture import capture_once
 from willfly.ingest.canonicalize import assess_ancestry_anchor
 from willfly.ingest.supervisor import redact_endpoint, redact_error
 from willfly.ingest.runner import (
@@ -49,6 +50,7 @@ from willfly.features.model_outputs import build_model_output_bundle
 from willfly.features.market_feedback import build_market_feedback_corpus
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
+from willfly.learning.pipeline import PipelineRunner
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
 from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowRunner
 from willfly.storage.backup import BackupSource, create_state_backup, restore_state_backup
@@ -175,6 +177,16 @@ def _load_signal_store(path: Path) -> dict[str, Any]:
     training_state = payload.get("training_state")
     if training_state is not None and not isinstance(training_state, dict):
         raise ValueError("signal snapshot training_state must be an object")
+    signal_provenance = payload.get("pipeline_provenance")
+    if signal_provenance is not None:
+        required_provenance = ("artifact_id", "pipeline_config_hash", "input_artifact_ids", "execution_scope")
+        if not isinstance(signal_provenance, dict) or any(
+            not isinstance(signal_provenance.get(field), (str, list)) or not signal_provenance[field]
+            for field in required_provenance
+        ):
+            raise ValueError("signal snapshot pipeline provenance is incomplete")
+        if signal_provenance.get("execution_scope") != "research_only":
+            raise ValueError("signal snapshot pipeline scope must remain research_only")
     as_of_time = payload.get("as_of_time")
     if not isinstance(as_of_time, str) or not as_of_time:
         raise ValueError("signal snapshot as_of_time is required")
@@ -195,6 +207,7 @@ def _load_signal_store(path: Path) -> dict[str, Any]:
         "signal_as_of_time": as_of_time,
         "market_readiness": readiness,
         "training_state": training_state,
+        "signal_provenance": signal_provenance,
         "manual_actions": manual_actions,
         "action_links": link_manual_actions(
             manual_actions, wallet_activities, time_window_seconds=time_window_seconds
@@ -311,7 +324,13 @@ def _load_model_output_bundle(path: Path) -> dict[str, Any]:
         raise ValueError("model output training_state must be an object")
     if isinstance(training_state, dict) and training_state.get("provenance") is not None:
         provenance = training_state["provenance"]
-        required = ("source", "config_hash", "canonical_tip_hash", "canonical_event_set_hash")
+        required = (
+            "source",
+            "config_hash",
+            "canonical_tip_hash",
+            "canonical_event_set_hash",
+            "canonical_checkpoint_hash",
+        )
         if not isinstance(provenance, dict) or any(
             not isinstance(provenance.get(field), str) or not provenance[field] for field in required
         ):
@@ -930,6 +949,80 @@ def _audit(expected_path: Path, observed_path: Path, provider_independent: bool)
     return {"run_id": _run_id("audit", report.__dict__), "status": report.state, "report": report.__dict__}
 
 
+def _coverage_compare(
+    *,
+    config_path: Path,
+    from_block: int,
+    to_block: int,
+    independent_rpc_url: str,
+    addresses: list[str],
+) -> dict[str, Any]:
+    """Compare the same bounded event range across two read-only providers."""
+
+    if from_block < 0 or to_block < from_block or to_block - from_block > 1999:
+        raise ValueError("coverage comparison range must be a bounded non-negative interval of at most 2000 blocks")
+    config = _load_json(config_path)
+    context = _capture_context(config, config_path, addresses)
+    if redact_endpoint(context["endpoint"]) == redact_endpoint(independent_rpc_url):
+        raise ValueError("coverage comparison requires distinct configured RPC endpoints")
+    primary = ReadOnlyRpcClient(context["endpoint"], expected_chain_id=context["expected_chain"])
+    independent = ReadOnlyRpcClient(independent_rpc_url, expected_chain_id=context["expected_chain"])
+    primary_capture = capture_once(
+        primary,
+        addresses=list(context["addresses"]),
+        from_block=from_block,
+        to_block=to_block,
+        run_id="coverage-primary",
+    )
+    independent_capture = capture_once(
+        independent,
+        addresses=list(context["addresses"]),
+        from_block=from_block,
+        to_block=to_block,
+        run_id="coverage-independent",
+    )
+    primary_events = primary_capture.events
+    independent_events = independent_capture.events
+    report = audit_coverage(primary_events, independent_events, provider_independent=True)
+    range_complete = primary_capture.to_block == to_block and independent_capture.to_block == to_block
+    notes = list(report.notes)
+    if not range_complete:
+        notes.append("provider_head_did_not_cover_requested_end")
+    return {
+        "run_id": _run_id(
+            "coverage-compare",
+            {
+                "config_hash": context["config_hash"],
+                "from_block": from_block,
+                "to_block": to_block,
+                "primary_events": [event.logical_key for event in primary_events],
+                "independent_events": [event.logical_key for event in independent_events],
+            },
+        ),
+        "status": "pass" if report.state == "pass" and range_complete else "degraded",
+        "operating_mode": "read_only_provider_coverage_comparison",
+        "execution_scope": "research_only",
+        "signing": False,
+        "broadcast": False,
+        "config": str(config_path),
+        "config_hash": context["config_hash"],
+        "chain_id": context["expected_chain"],
+        "from_block": from_block,
+        "to_block": to_block,
+        "primary_endpoint": redact_endpoint(context["endpoint"]),
+        "independent_endpoint": redact_endpoint(independent_rpc_url),
+        "primary_event_set_hash": _json_hash([event.logical_key for event in primary_events]),
+        "independent_event_set_hash": _json_hash([event.logical_key for event in independent_events]),
+        "range_complete": range_complete,
+        "report": {
+            **report.__dict__,
+            "missing_keys": [list(key) for key in report.missing_keys],
+            "duplicate_keys": [list(key) for key in report.duplicate_keys],
+            "notes": notes,
+        },
+    }
+
+
 def _export(records_path: Path, output_dir: Path, dataset_name: str) -> dict[str, Any]:
     records = _load_json(records_path)
     if not isinstance(records, list):
@@ -1344,6 +1437,8 @@ def _watcher_tick(
     evaluation_state: str,
     schedule: bool,
     execute_pending: bool,
+    pipeline_config_path: Path | None,
+    pipeline_state_db: Path | None,
 ) -> dict[str, Any]:
     payload, config = _load_watcher_config(config_path)
     if personal_trade_count < 0:
@@ -1354,23 +1449,39 @@ def _watcher_tick(
     ) as watcher:
         schedule_decisions = watcher.schedule_due_tasks(observed_at=observed_at) if schedule else ()
         executions = ()
+        pipeline_results: list[dict[str, Any]] = []
         if execute_pending:
-            def wait_for_external_stage(_row: dict[str, Any]) -> str:
-                return "waiting"
+            if pipeline_config_path is not None:
+                effective_pipeline_db = pipeline_state_db or state_db.with_name(f"{state_db.stem}.pipeline.sqlite3")
+                with PipelineRunner(pipeline_config_path, effective_pipeline_db) as pipeline:
+                    def run_pipeline_stage(row: dict[str, Any]) -> str:
+                        result = pipeline.run(str(row["kind"]), observed_at=observed_at)
+                        pipeline_results.append(result.to_dict())
+                        if result.status == "failed":
+                            raise RuntimeError(result.reason or "pipeline stage failed")
+                        return result.status
 
-            def mature_labels(_row: dict[str, Any]) -> str:
-                queue = feedback_store.mature(as_of_time=observed_at)
-                return "completed" if queue else "waiting"
+                    executions = watcher.run_pending_tasks(
+                        observed_at=observed_at,
+                        callbacks={kind: run_pipeline_stage for kind in ("observation", "labels", "training", "evaluation")},
+                    )
+            else:
+                def wait_for_external_stage(_row: dict[str, Any]) -> str:
+                    return "waiting"
 
-            executions = watcher.run_pending_tasks(
-                observed_at=observed_at,
-                callbacks={
-                    "observation": wait_for_external_stage,
-                    "labels": mature_labels,
-                    "training": wait_for_external_stage,
-                    "evaluation": wait_for_external_stage,
-                },
-            )
+                def mature_labels(_row: dict[str, Any]) -> str:
+                    queue = feedback_store.mature(as_of_time=observed_at)
+                    return "completed" if queue else "waiting"
+
+                executions = watcher.run_pending_tasks(
+                    observed_at=observed_at,
+                    callbacks={
+                        "observation": wait_for_external_stage,
+                        "labels": mature_labels,
+                        "training": wait_for_external_stage,
+                        "evaluation": wait_for_external_stage,
+                    },
+                )
         snapshot = watcher.tick(
             observed_at=observed_at,
             feedback_store=feedback_store,
@@ -1385,6 +1496,9 @@ def _watcher_tick(
         "snapshot": snapshot.to_dict(),
         "schedule": [decision.to_dict() for decision in schedule_decisions],
         "executions": [execution.to_dict() for execution in executions],
+        "pipeline": pipeline_results,
+        "pipeline_config": None if pipeline_config_path is None else str(pipeline_config_path),
+        "pipeline_state_db": None if pipeline_state_db is None else str(pipeline_state_db),
         "config": str(config_path),
         "config_hash": config_hash,
         "state_db": str(state_db),
@@ -1451,6 +1565,15 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--expected", type=Path, required=True)
     audit.add_argument("--observed", type=Path, required=True)
     audit.add_argument("--provider-independent", action="store_true")
+
+    coverage_compare = subparsers.add_parser(
+        "coverage-compare", help="compare one bounded event range across two read-only providers"
+    )
+    coverage_compare.add_argument("--config", type=Path, default=ROOT / "configs/sources/robinhood-chain-v0.1.json")
+    coverage_compare.add_argument("--from-block", type=int, required=True)
+    coverage_compare.add_argument("--to-block", type=int, required=True)
+    coverage_compare.add_argument("--independent-rpc-url", required=True)
+    coverage_compare.add_argument("--address", action="append", default=[])
 
     export = subparsers.add_parser("export", help="export JSON records to Parquet")
     export.add_argument("--records", type=Path, required=True)
@@ -1541,6 +1664,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--execute-pending",
         action="store_true",
         help="run the bounded local callbacks for queued stages and record waiting/completed outcomes",
+    )
+    watcher_tick.add_argument(
+        "--pipeline-config",
+        type=Path,
+        default=None,
+        help="run concrete bounded capture/corpus/training/evaluation callbacks from this read-only pipeline config",
+    )
+    watcher_tick.add_argument(
+        "--pipeline-state-db",
+        type=Path,
+        default=None,
+        help="durable artifact/run database for the concrete pipeline callbacks",
     )
 
     watcher_status = subparsers.add_parser("watcher-status", help="read persisted learning watcher state")
@@ -1703,6 +1838,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
         elif args.command == "audit":
             result = _audit(args.expected, args.observed, args.provider_independent)
+        elif args.command == "coverage-compare":
+            result = _coverage_compare(
+                config_path=args.config,
+                from_block=args.from_block,
+                to_block=args.to_block,
+                independent_rpc_url=args.independent_rpc_url,
+                addresses=args.address,
+            )
         elif args.command == "export":
             result = _export(args.records, args.output_dir, args.dataset_name)
         elif args.command == "materialize":
@@ -1753,6 +1896,8 @@ def main(argv: list[str] | None = None) -> int:
                 evaluation_state=args.evaluation_state,
                 schedule=args.schedule,
                 execute_pending=args.execute_pending,
+                pipeline_config_path=args.pipeline_config,
+                pipeline_state_db=args.pipeline_state_db,
             )
         elif args.command == "watcher-status":
             result = _watcher_status(config_path=args.config, state_db=args.state_db)
@@ -1841,9 +1986,22 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 read_store = ReadOnlyStore()
             signal_file_hash = None
+            signal_loader = None
             if args.signals_file is not None:
                 signal_values = _load_signal_store(args.signals_file)
-                read_store = replace(read_store, **signal_values)
+                def load_current_signal(path: Path = args.signals_file) -> dict[str, Any]:
+                    values = _load_signal_store(path)
+                    values["signal_file_hash"] = _config_hash(path)
+                    return values
+
+                signal_loader = load_current_signal
+                read_store = replace(
+                    read_store,
+                    **signal_values,
+                    signal_loader=signal_loader,
+                    signal_file=str(args.signals_file),
+                    signal_file_hash=_config_hash(args.signals_file),
+                )
                 signal_file_hash = _config_hash(args.signals_file)
             model_state = None
             if args.model_registry is not None:

@@ -1399,3 +1399,40 @@ replacements require an explicit reorg flag, and the restart fork fixture now
 exercises that contract. Focused regression tests and the full suite pass
 (274 collected, 3 sandbox skips). Timed observation, economic, biological and
 production execution gates remain open.
+
+
+## 2026-09-14 — restart-safe concrete pipeline loop
+
+Replaced the watcher’s placeholder observation/training/evaluation callbacks
+with `configs/learning/pipeline-v0.1.json` and
+`src/willfly/learning/pipeline.py`. The concrete chain is dependency ordered:
+bounded capture/backfill, canonical market-feedback build, bounded MaleCNS
+candidate training, then model-output/evaluation and research-only signal
+publication. Each successful stage records an immutable artifact ID, content
+and file hashes, input artifact IDs, pipeline config hash, atomic latest alias
+and sidecar metadata in a durable SQLite state database. Subprocesses have
+timeout, CPU, address-space and output budgets; interrupted `running` rows
+recover to `waiting`, and completed idempotency keys are reused.
+
+The watcher now runs same-tick dependencies in observation → labels → training
+→ evaluation order. Missing block ranges, templates/actions, evaluation points
+or incomplete training provenance remain explicit waiting/fail-closed states.
+Publication is allowed only for research-only manual `abstain` proposals with
+signing and broadcast disabled. The dashboard server reloads the configured
+published signal snapshot on every GET, preserving read-only behavior while
+showing current training/provenance state.
+
+Added `coverage-compare` for bounded same-range event-set comparison across
+the configured and independent read-only RPCs, with provider-independent audit
+keys, range completeness and event-set hashes. Capture/backfill manifests now
+expose raw acknowledgement, empty-range acknowledgement, header coverage and
+canonical projection checkpoints separately. The WSL2 operator path now
+supports `willflyctl start pipeline`, pipeline state/restart wiring and the
+pipeline-enabled dashboard signal alias.
+
+Verification: WSL2 offline smoke passed; focused pipeline/API/coverage,
+capture/ancestry and CLI/watcher tests passed; full pytest passed with 278
+collected tests and 4 sandbox skips. The live cross-provider coverage check,
+72-hour capture and 14-day shadow window are prepared but not claimed as
+elapsed evidence; economic, causal-generalization and biological gates remain
+open.

@@ -231,6 +231,51 @@ def _stored_lineage_hash(store: RawBatchStore, source: str, block_number: int) -
     return None
 
 
+def _checkpoint_domains(store: RawBatchStore, source: str) -> dict[str, Any]:
+    """Expose raw, header and canonical checkpoint identities separately."""
+
+    raw = store.get_checkpoint(source)
+    empty = store.get_empty_range_ack(source)
+    canonical = store.get_canonical_checkpoint(source)
+    header_ranges = store.list_header_ranges(source)
+    latest_header = header_ranges[-1] if header_ranges else None
+
+    def checkpoint(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "last_block_number": row["last_block_number"],
+            "last_block_hash": row["last_block_hash"],
+            "updated_at": row["updated_at"],
+        }
+
+    return {
+        "raw_acknowledgement": checkpoint(raw),
+        "empty_range_acknowledgement": checkpoint(empty),
+        "header_coverage": None
+        if latest_header is None
+        else {
+            "range_start": latest_header["range_start"],
+            "range_end": latest_header["range_end"],
+            "tip_hash": latest_header["tip_hash"],
+            "header_count": latest_header["header_count"],
+            "missing_blocks": json.loads(latest_header["missing_blocks"]),
+            "range_count": len(header_ranges),
+        },
+        "canonical_projection": None
+        if canonical is None
+        else {
+            "state": canonical["state"],
+            "tip_hash": canonical["tip_hash"],
+            "last_block_number": canonical["last_block_number"],
+            "last_block_hash": canonical["last_block_hash"],
+            "anchor_state": canonical["anchor_state"],
+            "missing_parent_hashes": json.loads(canonical["missing_parent_hashes"]),
+            "updated_at": canonical["updated_at"],
+        },
+    }
+
+
 def _raw_acknowledgement_replaces_prior(
     store: RawBatchStore, source: str, block_number: int, block_hash: str | None
 ) -> bool:
@@ -528,6 +573,7 @@ def capture_to_store(
             "canonical_projection_state": None
             if canonical_checkpoint is None
             else canonical_checkpoint["state"],
+            "checkpoint_domains": _checkpoint_domains(store, source_key),
         }
     )
     finished = now()
@@ -829,6 +875,7 @@ def backfill_to_store(
         "canonical_projection_state": store.get_canonical_checkpoint(source_key)["state"]
         if store.get_canonical_checkpoint(source_key) is not None
         else None,
+        "checkpoint_domains": _checkpoint_domains(store, source_key),
     }
     empty = total_events == 0
     finished = now()

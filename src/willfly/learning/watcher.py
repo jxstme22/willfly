@@ -206,7 +206,18 @@ class LearningWatcher:
         _instant(observed_at)
         self.recover_interrupted_tasks(recovered_at=observed_at)
         rows = self._connection.execute(
-            "SELECT task_id, kind, status, reason, created_at, finished_at FROM watcher_tasks WHERE status IN ('queued', 'waiting') ORDER BY created_at, task_id"
+            """SELECT task_id, kind, status, reason, created_at, finished_at
+            FROM watcher_tasks
+            WHERE status IN ('queued', 'waiting')
+            ORDER BY created_at,
+                CASE kind
+                    WHEN 'observation' THEN 0
+                    WHEN 'labels' THEN 1
+                    WHEN 'training' THEN 2
+                    WHEN 'evaluation' THEN 3
+                    ELSE 4
+                END,
+                task_id"""
         ).fetchall()
         results: list[TaskExecution] = []
         for row in rows:
