@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
+import time
 from typing import Any, Callable, Mapping
 
 from willfly.storage.feedback import FeedbackStore
@@ -219,12 +220,17 @@ class LearningWatcher:
                 ).rowcount
             if claimed != 1:
                 continue
+            started = time.monotonic()
             try:
                 callback_status = callback(dict(row))
                 status = "completed" if callback_status is None else callback_status
                 if status not in {"completed", "waiting"}:
                     raise ValueError("callback must return completed, waiting or None")
-                reason = None if status == "completed" else "callback_waiting"
+                if row["kind"] == "training" and time.monotonic() - started > self.config.max_training_seconds:
+                    status = "failed"
+                    reason = "training_time_budget_exceeded"
+                else:
+                    reason = None if status == "completed" else "callback_waiting"
             except Exception as exc:  # callback failures are task evidence, not process loss
                 status = "failed"
                 reason = f"callback_failed:{type(exc).__name__}"

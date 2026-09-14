@@ -117,6 +117,38 @@ def test_feedback_training_runner_can_consume_market_corpus_maps(tmp_path: Path)
     assert "corpus_sha256" in report["input_hashes"]
 
 
+def test_feedback_training_rejects_nonempty_corpus_without_canonical_proof(tmp_path: Path) -> None:
+    corpus = tmp_path / "market-feedback.json"
+    corpus.write_text(
+        json.dumps(
+            {
+                "schema_version": "willfly.market-feedback-bundle.v0.1",
+                "source": "unverified",
+                "market_observations": [{"not": "validated"}],
+                "predictions": [],
+                "outcomes": [],
+                "features_by_prediction": {},
+                "partitions_by_prediction": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="canonical"):
+        train_feedback(
+            Path("configs/connectome/male-cns-v1.0.json"),
+            Path("data/connectome/male-cns-v1.0"),
+            tmp_path / "feedback",
+            None,
+            None,
+            as_of_time="2026-01-01T00:00:00Z",
+            max_edges=20_000,
+            partition_index=1,
+            partition_count=4,
+            seeds=(7,),
+            corpus_path=corpus,
+        )
+
+
 def test_feedback_training_runner_stops_before_graph_load_at_example_budget(tmp_path: Path) -> None:
     feedback_dir = tmp_path / "feedback"
     predictions = [_prediction("p1"), _prediction("p2")]

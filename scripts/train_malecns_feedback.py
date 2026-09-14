@@ -50,6 +50,14 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
         raise ValueError("corpus predictions and outcomes must be arrays")
     if not isinstance(features, dict) or not isinstance(partitions, dict):
         raise ValueError("corpus must contain feature and partition maps")
+    if raw_predictions or raw_outcomes or payload.get("market_observations"):
+        if payload.get("canonical_projection_required") is not True:
+            raise ValueError("non-empty corpus must declare canonical_projection_required")
+        checkpoint = payload.get("canonical_checkpoint")
+        if not isinstance(checkpoint, dict) or checkpoint.get("state") != "canonical":
+            raise ValueError("non-empty corpus requires a resolved canonical checkpoint")
+    if payload.get("personal_trade_count", 0) != 0:
+        raise ValueError("market corpus must not use personal trades as its training trigger")
     predictions = tuple(PredictionRecord.from_dict(item) for item in raw_predictions if isinstance(item, dict))
     outcomes = tuple(OutcomeRecord.from_dict(item) for item in raw_outcomes if isinstance(item, dict))
     if len(predictions) != len(raw_predictions) or len(outcomes) != len(raw_outcomes):

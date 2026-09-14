@@ -31,7 +31,10 @@ and records callback completion, waiting or failure. Callback exceptions are
 stored as `callback_failed:<ExceptionType>` so a worker failure cannot erase
 the queue or masquerade as a completed stage. The watcher still does not ship
 source, training or evaluation callbacks; those integrations must supply their
-own read-only implementations and evidence.
+own read-only implementations and evidence. Training callback elapsed time is
+checked against `max_training_seconds` and an overrun is recorded as
+`training_time_budget_exceeded`; the callback boundary reports the overrun but
+does not claim that an external process was forcibly terminated.
 
 This is scheduler and restart fixture evidence. A fresh Windows/WSL2 install,
 real 24/7 observation period, resource benchmark, automatic candidate cycle,

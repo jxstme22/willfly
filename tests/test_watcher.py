@@ -1,3 +1,5 @@
+import time
+
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 
 
@@ -104,3 +106,20 @@ def test_watcher_records_callback_failure_without_losing_the_service_loop(tmp_pa
         assert executions[0].status == "failed"
         assert executions[0].reason == "callback_failed:RuntimeError"
         assert watcher.pending_tasks() == ()
+
+
+def test_watcher_marks_overlong_training_callback_as_failed(tmp_path) -> None:
+    path = tmp_path / "watcher.sqlite3"
+    config = WatcherConfig(max_training_seconds=0.001)
+    with LearningWatcher(path, config=config) as watcher:
+        watcher.enqueue(task_id="training:budget", kind="training", created_at="2026-09-14T00:00:00Z")
+
+        def overrun(_row):
+            time.sleep(0.01)
+
+        execution = watcher.run_pending_tasks(
+            observed_at="2026-09-14T00:00:10Z",
+            callbacks={"training": overrun},
+        )[0]
+        assert execution.status == "failed"
+        assert execution.reason == "training_time_budget_exceeded"

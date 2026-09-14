@@ -25,6 +25,9 @@
 - Extended `scripts/train_malecns_feedback.py --corpus` to hash and consume the
   bundle's maps and append its typed labels to the durable feedback store before
   the existing multi-seed graph/control runner.
+- The runner now rejects a non-empty corpus that lacks the explicit canonical
+  projection proof, preventing hand-authored or unresolved market rows from
+  entering the MaleCNS path under the corpus schema.
 
 ### Verification commands/results
 
@@ -55,6 +58,8 @@ elapsed market windows are still required before B3/B4 can be accepted.
   `interrupted_process_recovery` reason.
 - Added callback execution with one-at-a-time claims, missing-callback queue
   preservation, explicit waiting/completed states and typed failure reasons.
+- Training callbacks are measured against `max_training_seconds`; an overrun is
+  recorded as `training_time_budget_exceeded` after the callback returns.
 
 ### Verification commands/results
 
