@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import gzip
 import hashlib
@@ -726,6 +726,31 @@ class RawBatchStore:
 
     def events_for_source(self, source: str) -> tuple[RawEvent, ...]:
         return tuple(event for batch in self.list_batches(source=source) for event in self.read(batch.batch_id))
+
+    def canonical_events_for_source(self, source: str) -> tuple[RawEvent, ...]:
+        """Return only events covered by a resolved canonical projection.
+
+        Raw batches retain their original provisional status forever.  The
+        derived projection is the authority after fork reconciliation, so a
+        downstream causal dataset must not consume a raw batch directly or
+        silently treat an unresolved window as canonical history.
+        """
+
+        checkpoint = self.get_canonical_checkpoint(source)
+        if checkpoint is None or checkpoint["state"] != "canonical":
+            return ()
+        statuses = {
+            row["event_key"]: row["canonical_status"]
+            for row in self.list_canonical_projection(source)
+            if row["canonical_status"] == "canonical"
+        }
+        if not statuses:
+            return ()
+        return tuple(
+            replace(event, canonical_status="canonical")
+            for event in self.events_for_source(source)
+            if _event_key(event) in statuses
+        )
 
     def rebuild_canonical_projection(
         self,

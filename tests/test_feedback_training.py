@@ -84,6 +84,39 @@ def test_feedback_training_runner_waits_without_causal_labels(tmp_path: Path) ->
     assert report["training_budget"]["max_training_examples"] == 100_000
 
 
+def test_feedback_training_runner_can_consume_market_corpus_maps(tmp_path: Path) -> None:
+    corpus = tmp_path / "market-feedback.json"
+    corpus.write_text(
+        json.dumps(
+            {
+                "schema_version": "willfly.market-feedback-bundle.v0.1",
+                "source": "fixture-source",
+                "predictions": [],
+                "outcomes": [],
+                "features_by_prediction": {},
+                "partitions_by_prediction": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = train_feedback(
+        Path("configs/connectome/male-cns-v1.0.json"),
+        Path("data/connectome/male-cns-v1.0"),
+        tmp_path / "feedback",
+        None,
+        None,
+        as_of_time="2026-01-01T00:00:00Z",
+        max_edges=20_000,
+        partition_index=1,
+        partition_count=4,
+        seeds=(7, 17, 27),
+        corpus_path=corpus,
+    )
+    assert report["status"] == "waiting"
+    assert report["corpus"]["personal_trade_count"] == 0
+    assert "corpus_sha256" in report["input_hashes"]
+
+
 def test_feedback_training_runner_stops_before_graph_load_at_example_budget(tmp_path: Path) -> None:
     feedback_dir = tmp_path / "feedback"
     predictions = [_prediction("p1"), _prediction("p2")]

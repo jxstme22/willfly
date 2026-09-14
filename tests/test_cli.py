@@ -138,6 +138,33 @@ def test_materialize_persists_a_read_only_observatory_projection(tmp_path, capsy
     assert saved["discovery"]["launches"][0]["lifecycle_state"] == "non_graduate"
 
 
+def test_market_feedback_build_waits_when_canonical_projection_is_unresolved(tmp_path, capsys):
+    output_path = tmp_path / "market-feedback.json"
+    assert main([
+        "market-feedback-build",
+        "--store-dir", str(tmp_path / "store"),
+        "--source", "capture:missing",
+        "--as-of-time", "2026-09-14T00:00:00Z",
+        "--output", str(output_path),
+    ]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "waiting"
+    assert result["canonical_checkpoint"] is None
+    assert result["personal_trade_count"] == 0
+    bundle = json.loads(output_path.read_text(encoding="utf-8"))
+    assert bundle["schema_version"] == "willfly.market-feedback-bundle.v0.1"
+    assert bundle["canonical_projection_required"] is True
+
+    assert main([
+        "feedback-import",
+        "--bundle", str(output_path),
+        "--feedback-dir", str(tmp_path / "feedback"),
+        "--as-of-time", "2026-09-14T00:00:00Z",
+    ]) == 0
+    imported = json.loads(capsys.readouterr().out)
+    assert imported["status"] == "waiting"
+
+
 def test_shadow_run_consumes_controlled_file_and_resumes(tmp_path, capsys):
     source_config = tmp_path / "source.json"
     source_config.write_text("{}", encoding="utf-8")

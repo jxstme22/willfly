@@ -1,5 +1,46 @@
 # Implementation log
 
+## Batch 2026-09-14 — canonical market-feedback corpus bridge
+
+### Task status
+
+- B3 — IN_PROGRESS: the read-only chain pipeline now has a causal market
+  corpus path; live archive coverage, sufficient matured labels and scientific
+  training acceptance remain open.
+- B4 — IN_PROGRESS: the corpus emits explicit chronological partitions and
+  availability-aware features for the existing multi-seed laboratory, while
+  market-to-neuron input mapping remains an explicit hashed experiment input.
+
+### Changes
+
+- Added `market-feedback-build`, which consumes only a resolved canonical raw
+  projection and decodes standard-hook V4 `Initialize`/`Swap` evidence.
+- Added exact integer price-ratio points, raw/arrival lineage, bounded forward
+  endpoint selection, censored and unresolved outcomes, and no-wallet feature
+  vectors. A later outcome can revise the same durable outcome identity.
+- Added a canonical-event storage accessor that refuses unresolved or missing
+  fork projections, and made market bundles accepted by `feedback-import`.
+- Added deterministic chronological point grouping for train/validation/test
+  metadata and explicit `personal_trade_count: 0` evidence.
+- Extended `scripts/train_malecns_feedback.py --corpus` to hash and consume the
+  bundle's maps and append its typed labels to the durable feedback store before
+  the existing multi-seed graph/control runner.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest -q tests/test_market_feedback.py tests/test_cli.py
+  passed
+.venv/bin/python -m pytest -q
+  passed with two sandbox loopback skips
+.venv/bin/willfly market-feedback-build --store-dir <fresh-store> --source missing-source --as-of-time 2026-09-14T00:00:00Z --output <corpus.json>
+  waiting; canonical_checkpoint=null; point_count=0; personal_trade_count=0
+```
+
+The fresh-store result is an honest source-unavailable smoke check, not live
+market coverage or a model-quality claim. A resolved canonical checkpoint and
+elapsed market windows are still required before B3/B4 can be accepted.
+
 ## Batch 2026-09-14 — guarded model promotion and rollback CLI
 
 ### Task status

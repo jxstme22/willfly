@@ -20,8 +20,29 @@ of them with `multiple_eligible_outcomes_for_prediction`. This prevents an
 observed-market result, a manual action result and a simulated counterfactual
 from being collapsed into one ambiguous training row.
 
-This is a causal fixture-backed implementation. It does not claim a live
-zero-personal-trade interval, model quality, or automatic retraining. Those
+The chain-backed corpus builder now connects this store to the resolved raw
+pipeline. `market-feedback-build` reads only events covered by a canonical
+checkpoint, decodes V4 `Initialize`/`Swap` logs, derives exact integer price
+ratios and availability-aware market features, and creates observed-market
+forward labels without wallet activity. The bundle records its canonical
+checkpoint, raw references, chronological point split, unsupported/malformed
+event exclusions and a zero personal-trade count. It returns `waiting` when
+the source has no resolved canonical projection or no matured endpoint.
+
+```text
+.venv/bin/willfly market-feedback-build \
+  --store-dir /path/to/observatory \
+  --source capture:4663:<filter-hash-prefix> \
+  --as-of-time 2026-09-14T00:06:00Z \
+  --output /path/to/market-feedback.json \
+  --feedback-dir /path/to/feedback-store
+```
+
+The endpoint policy is deliberately bounded: the first later market point at
+or after a declared horizon is used only within the declared delay tolerance;
+an elapsed window with no endpoint becomes a non-numeric censored outcome,
+while a not-yet-elapsed window remains unresolved and revisable. The corpus
+does not claim live coverage, model quality, or automatic retraining. Those
 remain B4/B9 and operational acceptance gates.
 
 Typed bundles can be imported into the durable store without credentials:

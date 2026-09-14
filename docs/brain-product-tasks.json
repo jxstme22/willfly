@@ -82,8 +82,10 @@
       "status_evidence": [
         "docs/feedback-datasets.md",
         "src/willfly/features/feedback.py",
+        "src/willfly/features/market_feedback.py",
         "src/willfly/storage/feedback.py",
-        "tests/test_feedback_store.py"
+        "tests/test_feedback_store.py",
+        "tests/test_market_feedback.py"
       ]
     },
     {
@@ -102,8 +104,10 @@
       "status_evidence": [
         "configs/experiments/connectome-laboratory-v0.1.json",
         "docs/connectome-laboratory.md",
+        "src/willfly/features/market_feedback.py",
         "src/willfly/models/laboratory.py",
-        "tests/test_laboratory.py"
+        "tests/test_laboratory.py",
+        "tests/test_market_feedback.py"
       ]
     },
     {

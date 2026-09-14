@@ -46,6 +46,7 @@ from willfly.features.action_linking import link_manual_actions
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
 from willfly.features.signal_generation import build_research_signals
 from willfly.features.model_outputs import build_model_output_bundle
+from willfly.features.market_feedback import build_market_feedback_corpus
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
@@ -239,7 +240,10 @@ def _load_string_map(path: Path | None, field: str) -> dict[str, str]:
 
 def _load_feedback_bundle(path: Path) -> tuple[tuple[PredictionRecord, ...], tuple[OutcomeRecord, ...]]:
     payload = _load_json(path)
-    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.feedback-bundle.v0.1":
+    if not isinstance(payload, dict) or payload.get("schema_version") not in {
+        "willfly.feedback-bundle.v0.1",
+        "willfly.market-feedback-bundle.v0.1",
+    }:
         raise ValueError("feedback bundle schema version is unsupported")
     raw_predictions = payload.get("predictions")
     raw_outcomes = payload.get("outcomes")
@@ -315,6 +319,103 @@ def _load_model_output_bundle(path: Path) -> dict[str, Any]:
         "as_of_time": as_of_time,
         "market_readiness": readiness,
         "training_state": training_state,
+    }
+
+
+def _load_pool_identities(path: Path | None) -> tuple[PoolIdentity, ...]:
+    if path is None:
+        return ()
+    payload = _load_json(path)
+    if isinstance(payload, dict):
+        payload = payload.get("pools")
+    if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+        raise ValueError("pool identities must be a JSON array or an object with a pools array")
+    return tuple(PoolIdentity.from_dict(item) for item in payload)
+
+
+def _market_feedback_build(
+    *,
+    store_dir: Path,
+    source: str,
+    as_of_time: str,
+    output_path: Path,
+    pool_identities_path: Path | None,
+    feedback_dir: Path | None,
+    max_label_delay_seconds: int,
+    train_fraction: float,
+    validation_fraction: float,
+) -> dict[str, Any]:
+    """Build a feedback corpus from the resolved read-only chain projection."""
+
+    pool_identities = _load_pool_identities(pool_identities_path)
+    with RawBatchStore(store_dir) as store:
+        checkpoint = store.get_canonical_checkpoint(source)
+        events = store.canonical_events_for_source(source)
+    corpus = build_market_feedback_corpus(
+        events,
+        as_of_time=as_of_time,
+        source=source,
+        pool_identities=pool_identities,
+        max_label_delay_seconds=max_label_delay_seconds,
+        train_fraction=train_fraction,
+        validation_fraction=validation_fraction,
+    )
+    bundle = corpus.to_bundle()
+    bundle["canonical_checkpoint"] = None if checkpoint is None else {
+        key: checkpoint[key]
+        for key in (
+            "source",
+            "tip_hash",
+            "last_block_number",
+            "last_block_hash",
+            "state",
+            "missing_parent_hashes",
+            "anchor_state",
+            "repair_reason",
+            "updated_at",
+        )
+    }
+    bundle["canonical_event_count"] = len(events)
+    bundle["canonical_projection_required"] = True
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    feedback_result = None
+    if feedback_dir is not None:
+        with FeedbackStore(feedback_dir) as feedback_store:
+            prediction_write = feedback_store.record_predictions(corpus.predictions)
+            outcome_write = feedback_store.record_outcomes(corpus.outcomes)
+            queue = feedback_store.mature(as_of_time=as_of_time)
+            dataset = feedback_store.dataset(as_of_time=as_of_time)
+        feedback_result = {
+            "feedback_dir": str(feedback_dir),
+            "predictions": prediction_write.__dict__.copy(),
+            "outcomes": outcome_write.__dict__.copy(),
+            "queue": [item.__dict__.copy() for item in queue],
+            "eligible_count": len(dataset.eligible_examples),
+        }
+    status = "ready" if corpus.observed_outcome_count else "waiting"
+    if checkpoint is None or checkpoint["state"] != "canonical":
+        status = "waiting"
+    return {
+        "status": status,
+        "source": source,
+        "store_dir": str(store_dir),
+        "as_of_time": as_of_time,
+        "output": str(output_path),
+        "output_hash": _config_hash(output_path),
+        "canonical_checkpoint": bundle["canonical_checkpoint"],
+        "canonical_event_count": len(events),
+        "point_count": len(corpus.points),
+        "prediction_count": len(corpus.predictions),
+        "observed_outcome_count": corpus.observed_outcome_count,
+        "missingness": list(corpus.missingness),
+        "excluded_count": len(corpus.excluded),
+        "feedback": feedback_result,
+        "operating_mode": "read_only_observation_import",
+        "execution_scope": "manual_only",
+        "personal_trade_count": 0,
+        "signing": False,
+        "broadcast": False,
     }
 
 
@@ -1387,6 +1488,20 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_status.add_argument("--feedback-dir", type=Path, required=True)
     feedback_status.add_argument("--as-of-time", required=True, help="timezone-aware RFC-3339 dataset cutoff")
 
+    market_feedback = subparsers.add_parser(
+        "market-feedback-build",
+        help="build causal observed-market feedback from a resolved canonical V4 projection",
+    )
+    market_feedback.add_argument("--store-dir", type=Path, required=True)
+    market_feedback.add_argument("--source", required=True, help="resolved canonical projection namespace")
+    market_feedback.add_argument("--as-of-time", required=True, help="timezone-aware RFC-3339 corpus cutoff")
+    market_feedback.add_argument("--output", type=Path, required=True, help="market-feedback bundle destination")
+    market_feedback.add_argument("--pool-identities", type=Path, default=None, help="optional explicit V4 pool identity JSON")
+    market_feedback.add_argument("--feedback-dir", type=Path, default=None, help="also append predictions/outcomes to a feedback store")
+    market_feedback.add_argument("--max-label-delay-seconds", type=int, default=15)
+    market_feedback.add_argument("--train-fraction", type=float, default=0.70)
+    market_feedback.add_argument("--validation-fraction", type=float, default=0.15)
+
     wallet_import = subparsers.add_parser(
         "wallet-import", help="import typed read-only public-wallet activities"
     )
@@ -1558,6 +1673,18 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "feedback-status":
             result = _feedback_status(feedback_dir=args.feedback_dir, as_of_time=args.as_of_time)
+        elif args.command == "market-feedback-build":
+            result = _market_feedback_build(
+                store_dir=args.store_dir,
+                source=args.source,
+                as_of_time=args.as_of_time,
+                output_path=args.output,
+                pool_identities_path=args.pool_identities,
+                feedback_dir=args.feedback_dir,
+                max_label_delay_seconds=args.max_label_delay_seconds,
+                train_fraction=args.train_fraction,
+                validation_fraction=args.validation_fraction,
+            )
         elif args.command == "wallet-import":
             result = _wallet_import(bundle_path=args.bundle, wallet_dir=args.wallet_dir)
         elif args.command == "wallet-status":
@@ -1653,6 +1780,7 @@ def main(argv: list[str] | None = None) -> int:
         "model-status",
         "feedback-import",
         "feedback-status",
+        "market-feedback-build",
         "wallet-import",
         "wallet-status",
         "signal-build",

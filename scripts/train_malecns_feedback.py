@@ -1,13 +1,15 @@
 """Train the bounded MaleCNS laboratory from durable causal feedback rows.
 
 The feedback store supplies labels, while the feature and partition files are
-explicit operator inputs. This script never derives features from outcomes,
-assigns a holdout automatically, or treats a waiting run as trained.
+explicit operator inputs. A market-feedback corpus can supply those same
+maps after its own declared chronological split. This script never derives
+features from outcomes, or treats a waiting run as trained.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import resource
@@ -21,6 +23,7 @@ from willfly.models.laboratory import (
     run_connectome_experiment,
 )
 from willfly.storage.feedback import FeedbackStore
+from willfly.domain import OutcomeRecord, PredictionRecord
 
 
 def _peak_rss_bytes() -> int:
@@ -35,12 +38,36 @@ def _load_mapping(path: Path, name: str) -> dict[str, object]:
     return {str(key): value for key, value in payload.items()}
 
 
+def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord, ...], tuple[OutcomeRecord, ...]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.market-feedback-bundle.v0.1":
+        raise ValueError("corpus must use willfly.market-feedback-bundle.v0.1")
+    raw_predictions = payload.get("predictions")
+    raw_outcomes = payload.get("outcomes")
+    features = payload.get("features_by_prediction")
+    partitions = payload.get("partitions_by_prediction")
+    if not isinstance(raw_predictions, list) or not isinstance(raw_outcomes, list):
+        raise ValueError("corpus predictions and outcomes must be arrays")
+    if not isinstance(features, dict) or not isinstance(partitions, dict):
+        raise ValueError("corpus must contain feature and partition maps")
+    predictions = tuple(PredictionRecord.from_dict(item) for item in raw_predictions if isinstance(item, dict))
+    outcomes = tuple(OutcomeRecord.from_dict(item) for item in raw_outcomes if isinstance(item, dict))
+    if len(predictions) != len(raw_predictions) or len(outcomes) != len(raw_outcomes):
+        raise ValueError("corpus records must be objects")
+    return payload, predictions, outcomes
+
+
+def _mapping_hash(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def train_feedback(
     manifest_path: Path,
     data_root: Path,
     feedback_dir: Path,
-    features_path: Path,
-    partitions_path: Path,
+    features_path: Path | None,
+    partitions_path: Path | None,
     *,
     as_of_time: str,
     max_edges: int,
@@ -49,6 +76,7 @@ def train_feedback(
     seeds: tuple[int, ...],
     checkpoint_dir: Path | None = None,
     max_training_examples: int = 100_000,
+    corpus_path: Path | None = None,
 ) -> dict[str, object]:
     started = time.perf_counter()
     if not seeds or len(set(seeds)) != len(seeds):
@@ -57,10 +85,32 @@ def train_feedback(
         raise ValueError("max_training_examples must be a positive integer")
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest = ConnectomeManifest.from_dict(manifest_payload)
+    corpus_payload: dict[str, object] | None = None
+    corpus_predictions: tuple[PredictionRecord, ...] = ()
+    corpus_outcomes: tuple[OutcomeRecord, ...] = ()
+    if corpus_path is not None:
+        corpus_payload, corpus_predictions, corpus_outcomes = _load_corpus(corpus_path)
+    if features_path is None:
+        if corpus_payload is None:
+            raise ValueError("features are required unless --corpus is supplied")
+        feature_values = corpus_payload["features_by_prediction"]
+        if not isinstance(feature_values, dict):
+            raise ValueError("corpus feature map is malformed")
+    else:
+        feature_values = _load_mapping(features_path, "features")
+    if partitions_path is None:
+        if corpus_payload is None:
+            raise ValueError("partitions are required unless --corpus is supplied")
+        partition_values = corpus_payload["partitions_by_prediction"]
+        if not isinstance(partition_values, dict):
+            raise ValueError("corpus partition map is malformed")
+    else:
+        partition_values = _load_mapping(partitions_path, "partitions")
     with FeedbackStore(feedback_dir) as store:
+        if corpus_predictions or corpus_outcomes:
+            store.record_predictions(corpus_predictions)
+            store.record_outcomes(corpus_outcomes)
         dataset = store.dataset(as_of_time=as_of_time)
-    feature_values = _load_mapping(features_path, "features")
-    partition_values = _load_mapping(partitions_path, "partitions")
     if any(not isinstance(value, dict) for value in feature_values.values()):
         raise ValueError("features values must be prediction-to-node maps")
     if any(value not in {"train", "validation", "test"} for value in partition_values.values()):
@@ -87,8 +137,9 @@ def train_feedback(
         "seeds": list(seeds),
         "input_hashes": {
             "manifest_sha256": sha256_file(manifest_path),
-            "features_sha256": sha256_file(features_path),
-            "partitions_sha256": sha256_file(partitions_path),
+            "features_sha256": sha256_file(features_path) if features_path is not None else _mapping_hash(feature_values),
+            "partitions_sha256": sha256_file(partitions_path) if partitions_path is not None else _mapping_hash(partition_values),
+            **({"corpus_sha256": sha256_file(corpus_path)} if corpus_path is not None else {}),
         },
         "experiment_config": {
             "decay": 0.9,
@@ -97,6 +148,12 @@ def train_feedback(
             "minimum_train_examples": minimum_train_examples,
         },
         "training_budget": {"max_training_examples": max_training_examples},
+        "corpus": None if corpus_path is None else {
+            "path": str(corpus_path),
+            "schema_version": "willfly.market-feedback-bundle.v0.1",
+            "source": corpus_payload.get("source") if corpus_payload is not None else None,
+            "personal_trade_count": 0,
+        },
         "operating_mode": "local_research_only",
         "execution_scope": "manual_only",
         "signing": False,
@@ -185,8 +242,9 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=Path("configs/connectome/male-cns-v1.0.json"))
     parser.add_argument("--data-root", type=Path, default=Path("data/connectome/male-cns-v1.0"))
     parser.add_argument("--feedback-dir", type=Path, required=True)
-    parser.add_argument("--features", type=Path, required=True)
-    parser.add_argument("--partitions", type=Path, required=True)
+    parser.add_argument("--features", type=Path, default=None)
+    parser.add_argument("--partitions", type=Path, default=None)
+    parser.add_argument("--corpus", type=Path, default=None, help="market-feedback bundle supplying maps and causal labels")
     parser.add_argument("--as-of-time", required=True)
     parser.add_argument("--max-edges", type=int, default=100_000)
     parser.add_argument("--partition-index", type=int, default=1)
@@ -211,6 +269,7 @@ def main() -> None:
                 seeds=seeds,
                 checkpoint_dir=args.checkpoint_dir,
                 max_training_examples=args.max_training_examples,
+                corpus_path=args.corpus,
             ),
             indent=2,
             sort_keys=True,

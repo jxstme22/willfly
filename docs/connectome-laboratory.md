@@ -74,3 +74,24 @@ final-test rows are retained in the report but are not exported as signal
 outputs. It never derives an action, confidence, calibration or economic
 readiness. A waiting experiment writes an empty output list, so the following
 signal build cannot display a fabricated prediction.
+
+The upstream chain-backed source for those labels is the read-only
+`market-feedback-build` command described in
+[`docs/feedback-datasets.md`](feedback-datasets.md). Its bundle carries
+availability-aware market feature vectors and explicit chronological
+train/validation/test assignments, but the model runner still requires those
+maps as visible input files (or an equivalent adapter) and hashes them before
+training. This keeps market-to-neuron input mapping an auditable experiment
+choice rather than silently inventing a biological encoding.
+
+For the integrated path, the runner can consume the corpus directly and append
+its typed predictions/outcomes to the requested feedback store before building
+the dataset:
+
+```text
+.venv/bin/python scripts/train_malecns_feedback.py \
+  --feedback-dir /path/to/feedback-store \
+  --corpus /path/to/market-feedback.json \
+  --as-of-time 2026-09-14T00:06:00Z \
+  --seeds 7,17,27
+```

@@ -44,6 +44,7 @@ python3 -m venv .venv
 .venv/bin/willfly operator-check
 .venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
 .venv/bin/willfly feedback-status --feedback-dir /path/to/feedback --as-of-time 2026-09-14T00:00:00Z
+.venv/bin/willfly market-feedback-build --store-dir /path/to/observatory --source capture:4663:<filter-hash-prefix> --as-of-time 2026-09-14T00:00:00Z --output /path/to/market-feedback.json
 .venv/bin/willfly wallet-status --wallet-dir /path/to/wallet-store --wallet 0x... --as-of-time 2026-09-14T00:00:00Z --arrival-cutoff 2026-09-14T00:00:00Z
 .venv/bin/willfly model-output --experiment-report /path/to/training-report.json --templates /path/to/prediction-templates.json --output /path/to/model-output.json --model-id male-cns-readout --model-version candidate-v2 --run-ref run:seed-7 --as-of-time 2026-09-14T00:00:00Z
 ```
