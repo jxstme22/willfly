@@ -1508,3 +1508,23 @@ substitution, exact checkpoint-source propagation, catalog DOM refresh and
 mutated corpus rejection. The independent handoff checkpoint is recorded in
 `docs/reports/luna-repair-checkpoint-03.md`; roadmap acceptance gates remain
 open until the coordinator rechecks this loop.
+
+
+## 2026-09-14 — post-baseline semantic closure loop
+
+Closed five concrete regressions found after the prior baseline: rolling label
+identity now matches the runtime filter namespace exactly; market-feedback
+bundles bind all non-provenance metadata as one content hash; watcher direct
+completion metadata is transaction-atomic; WSL installation migrates quoted
+and unquoted legacy placeholders into a runtime-bound pipeline tree; and
+dashboard model-registry refresh is read-only with last-good fallback and
+signal-cutoff first paint.
+
+Verification: the complete suite collected 297 tests with 293 passed and four
+managed-sandbox loopback skips; focused repair tests passed; WSL2 offline
+smoke passed all 16 fixture checks; planning render/check, source-manifest,
+brain-release, shell syntax, compileall and diff checks passed. The exact
+filter identity probe matched in both runtime and helper paths:
+`pipeline-live-readonly:4663:6707856a8275fbb4`. The checkpoint is recorded in
+`docs/reports/luna-repair-checkpoint-04.md` and remains pending independent
+recheck; elapsed, economic, biological and production gates remain open.

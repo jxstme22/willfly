@@ -1,8 +1,10 @@
 import json
 
+import pytest
+
 import willfly.cli as cli
-from willfly.cli import _load_signal_store, main
-from willfly.evaluation.promotion import PredictionPoint
+from willfly.cli import _load_signal_store, _read_model_registry_status, main
+from willfly.evaluation.promotion import ModelRegistry, PredictionPoint
 from willfly.shadow.config import freeze_shadow_config
 from willfly.storage import RawBatchStore
 
@@ -32,6 +34,18 @@ def test_resilient_signal_loader_waits_then_keeps_last_good_snapshot(monkeypatch
     assert initial["training_state"]["status"] == "completed"
     monkeypatch.setattr(cli, "_load_signal_store", lambda _path: (_ for _ in ()).throw(OSError("temporary read")))
     assert loader()["signal_as_of_time"] == "2026-09-14T00:00:00Z"
+
+
+def test_model_registry_dashboard_reader_is_read_only(tmp_path):
+    path = tmp_path / "models.sqlite3"
+    with ModelRegistry(path, initial_active_version="baseline-v0.1"):
+        before = path.stat().st_size
+        assert _read_model_registry_status(path)["active_version"] == "baseline-v0.1"
+        assert path.stat().st_size == before
+    path.unlink()
+    with pytest.raises(OSError):
+        _read_model_registry_status(path)
+    assert not path.exists()
 
 
 def test_doctor_reports_open_launch_gate(capsys):

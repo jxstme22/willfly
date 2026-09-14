@@ -437,6 +437,8 @@ class ReadOnlyStore:
             quality_state=self.quality_state,
             lineage=("dashboard:empty",),
         )
+        if self.signal_as_of_time:
+            snapshot = replace(snapshot, as_of_time=self.signal_as_of_time)
         signals = self._signal_entries()
         positions = [position.to_dict() | {"wallet": observation.wallet} for observation in self.wallet_observations for position in observation.positions]
         actions = tuple(self.actions()["items"])

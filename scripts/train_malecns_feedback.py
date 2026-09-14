@@ -22,7 +22,7 @@ from willfly.models.laboratory import (
     build_training_samples_from_feedback,
     run_connectome_experiment,
 )
-from willfly.features.market_feedback import MarketPoint, corpus_content_hashes
+from willfly.features.market_feedback import MarketPoint, corpus_bundle_content_hash, corpus_content_hashes
 from willfly.storage.feedback import FeedbackStore
 from willfly.domain import OutcomeRecord, PredictionRecord
 
@@ -74,6 +74,7 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
             "outcomes_content_hash",
             "features_content_hash",
             "partitions_content_hash",
+            "bundle_content_hash",
         )
         if not isinstance(provenance, dict) or any(
             not isinstance(provenance.get(field), str) or not provenance[field]
@@ -103,6 +104,8 @@ def _load_corpus(path: Path) -> tuple[dict[str, object], tuple[PredictionRecord,
         for field, actual in actual_hashes.items():
             if provenance.get(field) != actual:
                 raise ValueError(f"corpus {field} content hash does not match")
+        if provenance.get("bundle_content_hash") != corpus_bundle_content_hash(payload):
+            raise ValueError("corpus bundle_content_hash does not match")
     return payload, predictions, outcomes
 
 

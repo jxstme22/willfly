@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -64,20 +65,69 @@ def test_capture_dry_run_is_bounded_and_does_not_create_state(tmp_path: Path) ->
 
 
 def test_wsl_installer_materializes_all_generated_paths(tmp_path: Path) -> None:
-    config_home = tmp_path / "config-home"
+    home = tmp_path / "home"
     env = {
-        "XDG_CONFIG_HOME": str(config_home),
+        "HOME": str(home),
         "WILLFLY_PROJECT_DIR": str(ROOT),
-        "WILLFLY_RUNTIME_DIR": str(tmp_path / "runtime"),
         "WILLFLY_STATE_DIR": str(tmp_path / "state"),
-        "WILLFLY_CONFIG_DIR": str(tmp_path / "config"),
-        "WILLFLY_ENV_FILE": str(tmp_path / "config" / "willfly.env"),
         "WILLFLY_PYTHON": sys.executable,
         "WILLFLY_SKIP_PACKAGE_INSTALL": "1",
     }
     result = _run(["bash", str(WSL / "install.sh")], env=env)
     assert result.returncode == 0, result.stdout + result.stderr
-    generated = (tmp_path / "config" / "willfly.env").read_text(encoding="utf-8")
+    generated = (home / ".config" / "willfly" / "willfly.env").read_text(encoding="utf-8")
     assert "/path/to" not in generated and "/home/user" not in generated
-    assert f'WILLFLY_PIPELINE_CONFIG="{ROOT}/configs/learning/pipeline-v0.1.json"' in generated
-    assert f'WILLFLY_SIGNALS_FILE="{ROOT}/data/pipeline/signals-latest.json"' in generated
+    runtime_pipeline = home / ".local" / "share" / "willfly" / "pipeline.json"
+    assert f'WILLFLY_PIPELINE_CONFIG="{runtime_pipeline}"' in generated
+    assert f'WILLFLY_SIGNALS_FILE="{tmp_path / "state" / "pipeline" / "signals-latest.json"}"' in generated
+    pipeline = json.loads(runtime_pipeline.read_text(encoding="utf-8"))
+    assert pipeline["paths"]["store_dir"] == str(tmp_path / "state" / "observatory")
+    assert pipeline["paths"]["feedback_dir"] == str(tmp_path / "state" / "feedback")
+    assert pipeline["paths"]["artifact_dir"] == str(tmp_path / "state" / "pipeline")
+
+
+def test_wsl_installer_migrates_legacy_env_and_rejects_unsupported_runtime_override(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    env_dir = home / ".config" / "willfly"
+    env_dir.mkdir(parents=True)
+    (env_dir / "willfly.env").write_text(
+        "\n".join(
+            [
+                'WILLFLY_PROJECT_DIR="/path/to/willfly"',
+                'WILLFLY_VENV="/home/user/.local/share/willfly/venv"',
+                'WILLFLY_STATE_DIR="/home/user/.local/state/willfly"',
+                'WILLFLY_SOURCE_CONFIG="/path/to/willfly/configs/sources/robinhood-chain-v0.1.json"',
+                'WILLFLY_WATCHER_CONFIG="/path/to/willfly/configs/learning/watcher-v0.1.json"',
+                'WILLFLY_PIPELINE_CONFIG="/path/to/willfly/configs/learning/pipeline-v0.1.json"',
+                'WILLFLY_SIGNALS_FILE="/home/user/.local/state/willfly/pipeline/signals-latest.json"',
+                'WILLFLY_TRAIN_DATA_ROOT="/home/user/.local/state/willfly/connectome"',
+                'WILLFLY_TRAIN_REPORT_DIR="/home/user/.local/state/willfly/training"',
+                'WILLFLY_TRAIN_LATEST_REPORT="/home/user/.local/state/willfly/training/candidate-latest.json"',
+                'WILLFLY_TRAIN_CHECKPOINT_DIR="/home/user/.local/state/willfly/training/checkpoints"',
+                'WILLFLY_EVALUATION_REPORT_DIR="/home/user/.local/state/willfly/evaluation"',
+                'WILLFLY_EVALUATION_LATEST_REPORT="/home/user/.local/state/willfly/evaluation/evaluation-latest.json"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    env = {
+        "HOME": str(home),
+        "WILLFLY_PROJECT_DIR": str(ROOT),
+        "WILLFLY_STATE_DIR": str(tmp_path / "state"),
+        "WILLFLY_PYTHON": sys.executable,
+        "WILLFLY_SKIP_PACKAGE_INSTALL": "1",
+    }
+    result = _run(["bash", str(WSL / "install.sh")], env=env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    generated = (env_dir / "willfly.env").read_text(encoding="utf-8")
+    assert "/path/to" not in generated and "/home/user" not in generated
+    assert f'WILLFLY_TRAIN_DATA_ROOT="{tmp_path / "state" / "connectome"}"' in generated
+    assert f'WILLFLY_TRAIN_REPORT_DIR="{tmp_path / "state" / "training"}"' in generated
+    assert f'WILLFLY_EVALUATION_REPORT_DIR="{tmp_path / "state" / "evaluation"}"' in generated
+    rejected = _run(
+        ["bash", str(WSL / "install.sh"), "--dry-run"],
+        env=env | {"WILLFLY_RUNTIME_DIR": str(tmp_path / "unsupported-runtime")},
+    )
+    assert rejected.returncode != 0
+    assert "unsupported" in rejected.stderr

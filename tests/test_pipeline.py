@@ -115,6 +115,7 @@ def test_pipeline_labels_use_filter_bound_checkpoint_source(tmp_path):
         },
     )
     commands = []
+    expected_source = None
 
     def command_runner(command, _budget, _cwd):
         commands.append(tuple(command))
@@ -122,16 +123,47 @@ def test_pipeline_labels_use_filter_bound_checkpoint_source(tmp_path):
             return subprocess.CompletedProcess(
                 command,
                 0,
-                '{"status":"executed","checkpoint_source":"pipeline-live-readonly:4663:hash"}',
+                json.dumps({"status": "executed", "checkpoint_source": expected_source}),
                 "",
             )
         return subprocess.CompletedProcess(command, 0, '{"status":"waiting","reason":"no_canonical_checkpoint"}', "")
 
     with PipelineRunner(config, tmp_path / "pipeline.sqlite3", command_runner=command_runner) as runner:
+        expected_source = runner._stage_parameters("observation", "2026-09-14T06:00:00Z")["checkpoint_source_identity"]
         assert runner.run("observation", observed_at="2026-09-14T06:00:00Z").status == "completed"
         assert runner.run("labels", observed_at="2026-09-14T06:00:00Z").status == "waiting"
     labels_command = next(command for command in commands if "market-feedback-build" in command)
-    assert labels_command[labels_command.index("--source") + 1] == "pipeline-live-readonly:4663:hash"
+    assert labels_command[labels_command.index("--source") + 1] == expected_source
+
+
+def test_pipeline_rejects_observation_from_a_different_filter_namespace(tmp_path):
+    config = _config(
+        tmp_path,
+        observation={
+            "mode": "rolling_backfill",
+            "bootstrap_from_block": 10,
+            "confirmation_lag_blocks": 12,
+            "max_blocks": 500,
+            "page_size": 250,
+            "source": "fixture",
+        },
+    )
+
+    def command_runner(command, _budget, _cwd):
+        if "rolling-backfill" in command:
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                '{"status":"executed","checkpoint_source":"fixture:4663:wrong-filter"}',
+                "",
+            )
+        raise AssertionError("labels must not run after a mismatched observation")
+
+    with PipelineRunner(config, tmp_path / "pipeline.sqlite3", command_runner=command_runner) as runner:
+        assert runner.run("observation", observed_at="2026-09-14T06:00:00Z").status == "completed"
+        labels = runner.run("labels", observed_at="2026-09-14T06:00:00Z")
+    assert labels.status == "failed"
+    assert labels.reason == "stage_failed:ValueError"
 
 
 def test_pipeline_runs_bounded_chain_and_reuses_completed_artifacts(tmp_path):

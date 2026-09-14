@@ -536,8 +536,8 @@ class PipelineRunner:
             filter_hash = filter_identity(
                 chain_id=int(chain.get("chain_id", 4663)),
                 addresses=addresses,
-                abi_hashes=abi_hashes,
-                event_families=families,
+                abi_hashes=sorted(set(abi_hashes)),
+                event_families=sorted(set(families)),
             )
             return checkpoint_source(base_source, int(chain.get("chain_id", 4663)), filter_hash)
         except (KeyError, TypeError, ValueError, OSError):
@@ -557,6 +557,17 @@ class PipelineRunner:
             checkpoint_source = manifest.get("checkpoint_source") if isinstance(manifest, dict) else None
             if not isinstance(checkpoint_source, str) or not checkpoint_source:
                 raise ValueError("rolling observation manifest checkpoint_source is required")
+            source_config = self.config.path_value("source_config", required=False)
+            provider_identity = _hash_file(source_config) if source_config is not None and source_config.is_file() else "unavailable"
+            expected_source = self._rolling_checkpoint_source(
+                source_config,
+                str(self.config.value("observation", "source", "pipeline-live-readonly")),
+                provider_identity,
+            )
+            if checkpoint_source != expected_source:
+                raise ValueError(
+                    f"rolling observation checkpoint_source does not match expected filter identity: {checkpoint_source} != {expected_source}"
+                )
             source = checkpoint_source
         config_path = self.config.path_value("source_config")
         store_dir = self.config.path_value("store_dir")

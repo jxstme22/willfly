@@ -50,7 +50,8 @@
       "status_evidence": [
         "docs/reports/luna-repair-checkpoint.md",
         "docs/reports/luna-repair-review-02.md",
-        "docs/reports/luna-repair-checkpoint-03.md"
+        "docs/reports/luna-repair-checkpoint-03.md",
+        "docs/reports/luna-repair-checkpoint-04.md"
       ]
     },
     {
@@ -121,7 +122,7 @@
   ],
   "repair_stage": {
     "status": "REPAIRED_PENDING_INDEPENDENT_RECHECK",
-    "checkpoint": "docs/reports/luna-repair-checkpoint-03.md",
+    "checkpoint": "docs/reports/luna-repair-checkpoint-04.md",
     "findings": {
       "DS-01": "implemented_fail_closed_anchor_policy_and_reached_anchor_invariant",
       "DS-02": "implemented_proven_height_range_and_out_of_scope_unresolved_classification",
@@ -134,7 +135,12 @@
       "RECOVERY": "implemented_versioned_source_namespace_with_immutable_anchor_supersession_link",
       "R3": "implemented_cursor_lineage_probe_bounded_replay_and_needs_repair_state",
       "R4": "implemented_positive_resolution_invariant_and_strict_nested_evidence_types",
-      "R5": "implemented_origin_only_endpoint_provenance_and_error_redaction"
+      "R5": "implemented_origin_only_endpoint_provenance_and_error_redaction",
+      "POST63_PIPELINE": "implemented_exact_runtime_filter_identity_and_namespace_rejection",
+      "POST63_CORPUS": "implemented_bundle_wide_content_binding_and_training_verification",
+      "POST63_WATCHER": "implemented_atomic_direct_completion_metadata",
+      "POST63_WSL": "implemented_quoted_placeholder_migration_and_runtime_path_binding",
+      "POST63_DASHBOARD": "implemented_read_only_registry_refresh_and_signal_cutoff_first_paint"
     },
     "verification": [
       "tests/test_ancestry_repairs.py",

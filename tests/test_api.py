@@ -74,6 +74,12 @@ def test_signal_as_of_time_is_used_when_projection_is_empty():
     assert health["details"]["signal_monitor_state"] == "waiting_no_published_signal"
 
 
+def test_dashboard_first_paint_uses_attached_signal_cutoff():
+    store = ReadOnlyStore(signal_as_of_time="2026-09-14T06:10:00Z")
+    page = store.dashboard()
+    assert 'id="as-of">2026-09-14T06:10:00Z</b>' in page
+
+
 def test_http_surface_rejects_post_as_read_only():
     try:
         server = create_server(store=ReadOnlyStore(), host="127.0.0.1", port=0)

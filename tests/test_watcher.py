@@ -98,6 +98,20 @@ def test_watcher_recovers_running_tasks_and_executes_only_bound_callbacks(tmp_pa
         assert restarted.snapshot().last_completed_at == "2026-09-14T00:00:10Z"
 
 
+def test_direct_completed_task_persists_completion_metadata_atomically(tmp_path) -> None:
+    path = tmp_path / "watcher.sqlite3"
+    with LearningWatcher(path) as watcher:
+        watcher.enqueue(task_id="labels:direct", kind="labels", created_at="2026-09-14T00:00:00Z")
+        watcher.finish_task(task_id="labels:direct", status="completed", finished_at="2026-09-14T00:00:05Z")
+        assert watcher.snapshot() is None
+        watcher.tick(observed_at="2026-09-14T00:00:10Z")
+        assert watcher.snapshot().last_completed_stage == "labels"
+        assert watcher.snapshot().last_completed_task_id == "labels:direct"
+    with LearningWatcher(path) as restarted:
+        assert restarted._get("last_completed_stage") == "labels"
+        assert restarted._get("last_completed_task_id") == "labels:direct"
+
+
 def test_watcher_records_callback_failure_without_losing_the_service_loop(tmp_path) -> None:
     path = tmp_path / "watcher.sqlite3"
     with LearningWatcher(path) as watcher:

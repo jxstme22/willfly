@@ -62,6 +62,8 @@ def test_dashboard_renders_attached_model_registry_state():
     assert 'id="active-model"' in page
     assert 'fetch("/catalog"' in page
     assert 'id="canonical-count"' in page
+    assert 'trainingNode.className="state "+trainingClass' in page
+    assert 'id="last-refresh"' in page
 
 
 def test_dashboard_escapes_untrusted_evidence_and_exposes_operator_controls():

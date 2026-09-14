@@ -167,6 +167,13 @@ def corpus_content_hashes(
     }
 
 
+def corpus_bundle_content_hash(bundle: Mapping[str, Any]) -> str:
+    """Hash every bundle field except provenance, which stores this hash."""
+
+    content = {str(key): value for key, value in bundle.items() if key != "provenance"}
+    return hashlib.sha256(json.dumps(content, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True)
 class MarketFeedbackCorpus:
     """Portable causal corpus and feedback records for the learning loop."""
@@ -222,7 +229,7 @@ class MarketFeedbackCorpus:
     def to_bundle(self) -> dict[str, Any]:
         """Serialize a feedback-import-compatible bundle with corpus evidence."""
 
-        return {
+        bundle = {
             "schema_version": _CORPUS_SCHEMA,
             "as_of_time": self.as_of_time,
             "source": self.source,
@@ -246,6 +253,10 @@ class MarketFeedbackCorpus:
             "signing": False,
             "broadcast": False,
         }
+        provenance = dict(bundle["provenance"])
+        provenance["bundle_content_hash"] = corpus_bundle_content_hash(bundle)
+        bundle["provenance"] = provenance
+        return bundle
 
 
 def build_market_feedback_corpus(
@@ -760,4 +771,11 @@ def _clamp(value: float) -> float:
     return max(-1.0, min(1.0, value))
 
 
-__all__ = ["MarketFeedbackCorpus", "MarketPoint", "Q96", "build_market_feedback_corpus", "corpus_content_hashes"]
+__all__ = [
+    "MarketFeedbackCorpus",
+    "MarketPoint",
+    "Q96",
+    "build_market_feedback_corpus",
+    "corpus_bundle_content_hash",
+    "corpus_content_hashes",
+]

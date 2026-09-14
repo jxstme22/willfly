@@ -49,7 +49,7 @@ from willfly.features.action_linking import link_manual_actions
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
 from willfly.features.signal_generation import build_research_signals
 from willfly.features.model_outputs import build_model_output_bundle
-from willfly.features.market_feedback import build_market_feedback_corpus
+from willfly.features.market_feedback import build_market_feedback_corpus, corpus_bundle_content_hash
 from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluate_candidate
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.learning.pipeline import PipelineRunner
@@ -250,6 +250,31 @@ def _resilient_signal_loader(path: Path) -> tuple[dict[str, Any], Callable[[], d
             return _waiting_signal_store("signal_file_not_available")
 
     return load(), load
+
+
+def _read_model_registry_status(path: Path) -> dict[str, Any]:
+    """Read an existing registry without creating or initializing it."""
+
+    if not path.is_file():
+        raise OSError(f"model registry is unavailable: {path}")
+    uri = f"file:{path.resolve()}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as connection:
+        rows = connection.execute("SELECT key, value_json FROM model_registry").fetchall()
+    values = {str(key): json.loads(value) for key, value in rows}
+    active_version = values.get("active_version")
+    if not isinstance(active_version, str) or not active_version:
+        raise ValueError("model registry has no active version")
+    known_versions = values.get("known_versions") or []
+    history = values.get("history") or []
+    consumed = values.get("consumed_final_tests") or []
+    if not isinstance(known_versions, list) or not isinstance(history, list) or not isinstance(consumed, list):
+        raise ValueError("model registry state is malformed")
+    return {
+        "active_version": active_version,
+        "known_versions": known_versions,
+        "consumed_final_test_count": len(consumed),
+        "history": history,
+    }
 
 
 def _load_prediction_points(path: Path) -> tuple[PredictionPoint, ...]:
@@ -462,6 +487,7 @@ def _market_feedback_build(
             else _json_hash(bundle["canonical_checkpoint"]),
         }
     )
+    provenance["bundle_content_hash"] = corpus_bundle_content_hash(bundle)
     bundle["provenance"] = provenance
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -2351,15 +2377,20 @@ def main(argv: list[str] | None = None) -> int:
                     raise ValueError("--initial-active-version is required with --model-registry")
                 if not args.model_registry.is_file():
                     raise ValueError("model registry file does not exist")
-                with ModelRegistry(args.model_registry, initial_active_version=args.initial_active_version) as registry:
-                    model_state = registry.status()
+                model_state = _read_model_registry_status(args.model_registry)
                 read_store = replace(read_store, model_state=model_state)
             if signal_loader is not None or model_registry_path is not None:
+                model_state_cache = {"value": model_state}
+
                 def load_runtime_state() -> dict[str, Any]:
                     values: dict[str, Any] = signal_loader() if signal_loader is not None else {}
                     if model_registry_path is not None:
-                        with ModelRegistry(model_registry_path, initial_active_version=args.initial_active_version) as registry:
-                            values["model_state"] = registry.status()
+                        try:
+                            values["model_state"] = _read_model_registry_status(model_registry_path)
+                            model_state_cache["value"] = values["model_state"]
+                        except (OSError, ValueError, sqlite3.Error):
+                            if model_state_cache["value"] is not None:
+                                values["model_state"] = model_state_cache["value"]
                     return values
 
                 runtime_loader = load_runtime_state

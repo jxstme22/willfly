@@ -165,8 +165,16 @@ class LearningWatcher:
                 "UPDATE watcher_tasks SET status = ?, reason = ?, finished_at = ? WHERE task_id = ?",
                 (status, reason, finished_at, task_id),
             )
-        if cursor.rowcount != 1:
-            raise KeyError(task_id)
+            if cursor.rowcount != 1:
+                raise KeyError(task_id)
+            if status == "completed":
+                row = self._connection.execute(
+                    "SELECT kind FROM watcher_tasks WHERE task_id = ?", (task_id,)
+                ).fetchone()
+                assert row is not None
+                self._record_completion_locked(
+                    kind=str(row["kind"]), task_id=task_id, completed_at=finished_at
+                )
 
     def pending_tasks(self) -> tuple[dict[str, Any], ...]:
         rows = self._connection.execute(
@@ -254,8 +262,6 @@ class LearningWatcher:
                 finished_at=observed_at,
                 reason=reason,
             )
-            if status == "completed":
-                self._record_completion(kind=str(row["kind"]), task_id=str(row["task_id"]), completed_at=observed_at)
             results.append(TaskExecution(row["task_id"], row["kind"], status, reason))
         return tuple(results)
 
@@ -405,11 +411,23 @@ class LearningWatcher:
         value.setdefault("last_completed_at", self._get("last_completed_at"))
         return WatcherSnapshot(**value)
 
-    def _record_completion(self, *, kind: str, task_id: str, completed_at: str) -> None:
-        self._set("last_completed_stage", kind)
-        self._set("last_completed_task_id", task_id)
-        self._set("last_completed_at", completed_at)
-        snapshot = self._get("last_snapshot")
+    def _record_completion_locked(self, *, kind: str, task_id: str, completed_at: str) -> None:
+        """Persist completion metadata inside the task update transaction."""
+
+        values = {
+            "last_completed_stage": kind,
+            "last_completed_task_id": task_id,
+            "last_completed_at": completed_at,
+        }
+        for key, value in values.items():
+            self._connection.execute(
+                "INSERT INTO watcher_state(key, value_json) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+                (key, json.dumps(value, sort_keys=True)),
+            )
+        row = self._connection.execute(
+            "SELECT value_json FROM watcher_state WHERE key = 'last_snapshot'"
+        ).fetchone()
+        snapshot = None if row is None else json.loads(row["value_json"])
         if isinstance(snapshot, dict):
             snapshot = dict(snapshot)
             snapshot.update(
@@ -417,7 +435,10 @@ class LearningWatcher:
                 last_completed_task_id=task_id,
                 last_completed_at=completed_at,
             )
-            self._set("last_snapshot", snapshot)
+            self._connection.execute(
+                "INSERT INTO watcher_state(key, value_json) VALUES ('last_snapshot', ?) ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json",
+                (json.dumps(snapshot, sort_keys=True),),
+            )
 
     def _get(self, key: str) -> Any:
         row = self._connection.execute("SELECT value_json FROM watcher_state WHERE key = ?", (key,)).fetchone()
