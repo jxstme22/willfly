@@ -104,6 +104,31 @@ idempotent; changed config/capital identity and newly out-of-order observations
 fail closed. The result is hypothetical and `not_submitted` even when a
 modeled fill is recorded.
 
+## Back up and restore local state
+
+Stop writers before taking a backup. The state bundle snapshots SQLite files
+through SQLite's backup API, copies other explicitly named paths, records each
+file's size and SHA-256, and publishes the archive atomically. It never replaces
+an existing archive or restore destination:
+
+```text
+.venv/bin/willfly state-backup \
+  --output /path/to/willfly-state.tar.gz \
+  --source observatory=/path/to/observatory \
+  --source feedback=/path/to/feedback \
+  --source watcher=/path/to/watcher.sqlite3 \
+  --source shadow=/path/to/shadow.sqlite
+.venv/bin/willfly state-restore \
+  --archive /path/to/willfly-state.tar.gz \
+  --destination /path/to/restored-state
+```
+
+The restore destination contains `manifest.json` and the named paths under
+`state/`. Archive members are restricted to regular files/directories, and
+restored SQLite files pass `PRAGMA quick_check` before publication. Config
+files remain source-controlled inputs and should be copied separately when
+their hashes are part of a run identity.
+
 ## Bounded live capture
 
 Use a disposable store for a small RPC probe and keep the output run manifest

@@ -51,6 +51,7 @@ from willfly.evaluation.promotion import ModelRegistry, PredictionPoint, evaluat
 from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
 from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowRunner
+from willfly.storage.backup import BackupSource, create_state_backup, restore_state_backup
 from willfly.storage.feedback import FeedbackStore
 from willfly.storage.wallet import WalletObservationStore
 
@@ -602,6 +603,39 @@ def _feedback_status(*, feedback_dir: Path, as_of_time: str) -> dict[str, Any]:
         "queue_state_counts": states,
         "dataset": dataset.to_dict(),
         "operating_mode": "read_only",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _state_backup(*, output_path: Path, source_specs: list[str]) -> dict[str, Any]:
+    sources: list[BackupSource] = []
+    for spec in source_specs:
+        name, separator, path = spec.partition("=")
+        if not separator or not name or not path:
+            raise ValueError("backup sources must use NAME=PATH")
+        sources.append(BackupSource(name, Path(path)))
+    manifest = create_state_backup(output_path, sources)
+    return {
+        "status": "created",
+        "archive": str(output_path),
+        "archive_hash": _config_hash(output_path),
+        "manifest": manifest,
+        "operating_mode": "read_only_state_backup",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _state_restore(*, archive_path: Path, destination: Path) -> dict[str, Any]:
+    manifest = restore_state_backup(archive_path, destination)
+    return {
+        "status": "restored",
+        "archive": str(archive_path),
+        "archive_hash": _config_hash(archive_path),
+        "destination": str(destination),
+        "manifest": manifest,
+        "operating_mode": "read_only_state_restore",
         "signing": False,
         "broadcast": False,
     }
@@ -1446,6 +1480,20 @@ def build_parser() -> argparse.ArgumentParser:
     watcher_status.add_argument("--config", type=Path, default=ROOT / "configs/learning/watcher-v0.1.json")
     watcher_status.add_argument("--state-db", type=Path, required=True)
 
+    state_backup = subparsers.add_parser(
+        "state-backup", help="create an atomic manifest-verified backup of explicit local state paths"
+    )
+    state_backup.add_argument("--output", type=Path, required=True)
+    state_backup.add_argument(
+        "--source", action="append", default=[], metavar="NAME=PATH", help="state path to include; repeatable"
+    )
+
+    state_restore = subparsers.add_parser(
+        "state-restore", help="restore a verified local state backup into a new directory"
+    )
+    state_restore.add_argument("--archive", type=Path, required=True)
+    state_restore.add_argument("--destination", type=Path, required=True)
+
     model_evaluate = subparsers.add_parser("model-evaluate", help="evaluate a candidate model against an active model")
     model_evaluate.add_argument("--points", type=Path, required=True, help="versioned prediction-point JSON bundle")
     model_evaluate.add_argument("--candidate-version", required=True)
@@ -1637,6 +1685,10 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "watcher-status":
             result = _watcher_status(config_path=args.config, state_db=args.state_db)
+        elif args.command == "state-backup":
+            result = _state_backup(output_path=args.output, source_specs=list(args.source))
+        elif args.command == "state-restore":
+            result = _state_restore(archive_path=args.archive, destination=args.destination)
         elif args.command == "model-evaluate":
             result = _evaluate_model(
                 points_path=args.points,
@@ -1776,6 +1828,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in {
         "watcher-tick",
         "watcher-status",
+        "state-backup",
+        "state-restore",
         "model-evaluate",
         "model-status",
         "feedback-import",

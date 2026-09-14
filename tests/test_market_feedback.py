@@ -3,6 +3,7 @@ from dataclasses import replace
 from willfly.adapters.protocols.v4 import INITIALIZE_TOPIC, SWAP_TOPIC
 from willfly.domain import RawEvent
 from willfly.features.market_feedback import build_market_feedback_corpus
+from willfly.storage.feedback import FeedbackStore
 from willfly.storage.raw import AncestryAnchor, BlockHeader, RawBatchStore, anchor_evidence_record
 
 
@@ -120,6 +121,46 @@ def test_market_feedback_preserves_censored_windows_without_numeric_targets() ->
     outcomes = {outcome_id: outcome for outcome_id, outcome in ((item.outcome_id, item) for item in corpus.outcomes)}
     assert outcomes["outcome:" + corpus.predictions[0].prediction_id].status == "censored"
     assert outcomes["outcome:" + corpus.predictions[0].prediction_id].net_return_bps is None
+
+
+def test_market_feedback_revises_unresolved_label_when_later_endpoint_arrives(tmp_path) -> None:
+    early_events = [_initialize(), _swap(1, 101, 1 << 96)]
+    late_events = [*early_events, _swap(61, 161, 2 << 96)]
+    early = build_market_feedback_corpus(
+        early_events,
+        as_of_time="2026-01-01T00:00:30Z",
+        source="fixture-source",
+        max_label_delay_seconds=0,
+    )
+    late = build_market_feedback_corpus(
+        late_events,
+        as_of_time="2026-01-01T00:02:00Z",
+        source="fixture-source",
+        max_label_delay_seconds=0,
+    )
+    first_prediction_id = next(
+        prediction.prediction_id
+        for prediction in early.predictions
+        if prediction.horizon_seconds == 60
+    )
+    early_outcome = next(outcome for outcome in early.outcomes if outcome.prediction_id == first_prediction_id)
+    late_outcome = next(outcome for outcome in late.outcomes if outcome.prediction_id == first_prediction_id)
+    assert early_outcome.outcome_id == late_outcome.outcome_id
+    assert early_outcome.status == "unresolved"
+    assert late_outcome.status == "observed"
+
+    with FeedbackStore(tmp_path) as store:
+        assert store.record_predictions(early.predictions).inserted == len(early.predictions)
+        assert store.record_outcomes(early.outcomes).inserted == len(early.outcomes)
+        assert store.mature(as_of_time="2026-01-01T00:00:30Z")[0].state == "waiting"
+        prediction_write = store.record_predictions(late.predictions)
+        assert prediction_write.duplicates == 3
+        assert prediction_write.inserted == 3
+        assert store.record_outcomes(late.outcomes).revised == 1
+        assert len(store.list_outcome_revisions(early_outcome.outcome_id)) == 1
+        assert store.mature(as_of_time="2026-01-01T00:02:00Z")[0].state == "ready"
+        dataset = store.dataset(as_of_time="2026-01-01T00:02:00Z")
+        assert [example.outcome_id for example in dataset.eligible_examples] == [early_outcome.outcome_id]
 
 
 def test_raw_store_exposes_only_resolved_canonical_events(tmp_path) -> None:

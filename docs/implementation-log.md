@@ -1,5 +1,39 @@
 # Implementation log
 
+## Batch 2026-09-14 — verified local state backup/restore
+
+### Task status
+
+- B9 — IN_PROGRESS: local state backup and restore mechanics are now present;
+  fresh Windows/WSL2 setup, live watcher operation and elapsed recovery remain
+  unverified.
+
+### Changes
+
+- Added `state-backup` and `state-restore` commands for explicitly named local
+  state paths.
+- SQLite files are staged with SQLite's online backup API; regular files are
+  copied into a temporary tree before atomic archive publication.
+- Added a manifest with source names, file sizes and SHA-256 hashes, safe tar
+  member validation, symlink rejection, destination non-overwrite protection
+  and SQLite `quick_check` on restore.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest -q tests/test_backup.py tests/test_cli.py -k 'backup or restore'
+  passed; CLI and library round-trip a SQLite plus regular-file state bundle
+.venv/bin/python -m pytest
+  247 passed, 2 sandbox loopback skips in 1.41s
+
+python3 scripts/render_planning.py && python3 scripts/check_planning.py
+  planning render/check passed; 77, 26, 11 and Luna loop authorities agree
+```
+
+This closes the local backup/restore implementation boundary only. It does not
+prove that a running service was stopped cleanly, that a Windows/WSL2 install
+works on a fresh PC, or that live observation/training resumes after an outage.
+
 ## Batch 2026-09-14 — canonical market-feedback corpus bridge
 
 ### Task status
@@ -43,6 +77,14 @@
 The fresh-store result is an honest source-unavailable smoke check, not live
 market coverage or a model-quality claim. A resolved canonical checkpoint and
 elapsed market windows are still required before B3/B4 can be accepted.
+
+The checked-in `data/observatory` store was also inspected through the new
+command: its prior bounded capture has an empty-range acknowledgement but no
+raw batches or resolved canonical checkpoint. The resulting corpus had
+`canonical_checkpoint: null`, zero points, zero predictions and zero observed
+outcomes; the direct corpus-to-training path returned waiting before graph
+loading for seeds `7,17,27`. This is the current source-evidence boundary, not
+an inferred absence of market activity outside that bounded capture.
 
 ## Batch 2026-09-14 — watcher callback recovery boundary
 

@@ -40,6 +40,12 @@ This is scheduler and restart fixture evidence. A fresh Windows/WSL2 install,
 real 24/7 observation period, resource benchmark, automatic candidate cycle,
 and outage/recovery run against live sources remain open B9/B10 gates.
 
+The local state stores can be copied consistently with the read-only
+`state-backup`/`state-restore` commands in the operator runbook. Stop watcher
+writers before creating a bundle; SQLite files use the SQLite backup API, every
+file is hash-recorded, and restore refuses an existing destination. This is a
+backup/restore mechanism, not evidence that a watcher service is running.
+
 The operator surface can record one explicit, timezone-aware heartbeat and read
 it back after restart. The tick is intentionally state-only: integrations pass
 their observed stage states to it, while missing observations, labels or

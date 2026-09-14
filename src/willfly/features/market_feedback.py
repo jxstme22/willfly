@@ -130,10 +130,27 @@ class MarketFeedbackCorpus:
         _instant(self.as_of_time)
         if not self.source:
             raise ValueError("market corpus source is required")
-        if any(prediction.prediction_id not in self.features_by_prediction for prediction in self.predictions):
-            raise ValueError("market corpus is missing prediction features")
-        if any(prediction.prediction_id not in self.partitions_by_prediction for prediction in self.predictions):
-            raise ValueError("market corpus is missing prediction partitions")
+        prediction_ids = {prediction.prediction_id for prediction in self.predictions}
+        feature_ids = set(self.features_by_prediction)
+        partition_ids = set(self.partitions_by_prediction)
+        if feature_ids != prediction_ids:
+            missing = sorted(prediction_ids - feature_ids)
+            extra = sorted(feature_ids - prediction_ids)
+            raise ValueError(f"market corpus feature map identity mismatch: missing={missing}, extra={extra}")
+        if partition_ids != prediction_ids:
+            missing = sorted(prediction_ids - partition_ids)
+            extra = sorted(partition_ids - prediction_ids)
+            raise ValueError(f"market corpus partition map identity mismatch: missing={missing}, extra={extra}")
+        for prediction_id, feature_map in self.features_by_prediction.items():
+            if not isinstance(feature_map, Mapping):
+                raise ValueError(f"market corpus feature map is not an object: {prediction_id}")
+            for feature_name, value in feature_map.items():
+                if not isinstance(feature_name, str) or not feature_name:
+                    raise ValueError("market corpus feature names must be non-empty strings")
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                    raise ValueError(f"market corpus feature value is not finite: {prediction_id}:{feature_name}")
+        if any(partition not in {"train", "validation", "test"} for partition in self.partitions_by_prediction.values()):
+            raise ValueError("market corpus partitions must be train, validation or test")
         if not self.lineage:
             raise ValueError("market corpus lineage cannot be empty")
 

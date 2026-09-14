@@ -240,6 +240,34 @@ def test_shadow_run_consumes_controlled_file_and_resumes(tmp_path, capsys):
     assert second["duplicate_count"] == 1
 
 
+def test_state_backup_and_restore_cli_round_trip(tmp_path, capsys):
+    source = tmp_path / "feedback"
+    source.mkdir()
+    (source / "state.json").write_text('{"ready": false}\n', encoding="utf-8")
+    archive = tmp_path / "state.tar.gz"
+    restored = tmp_path / "restored"
+    assert main([
+        "state-backup",
+        "--output",
+        str(archive),
+        "--source",
+        f"feedback={source}",
+    ]) == 0
+    backup = json.loads(capsys.readouterr().out)
+    assert backup["status"] == "created"
+    assert backup["signing"] is False and backup["broadcast"] is False
+    assert main([
+        "state-restore",
+        "--archive",
+        str(archive),
+        "--destination",
+        str(restored),
+    ]) == 0
+    restore = json.loads(capsys.readouterr().out)
+    assert restore["status"] == "restored"
+    assert (restored / "state" / "feedback" / "state.json").read_text(encoding="utf-8") == '{"ready": false}\n'
+
+
 def test_watcher_cli_records_zero_trade_tick_and_restart_status(tmp_path, capsys):
     state_db = tmp_path / "watcher.sqlite3"
     feedback_dir = tmp_path / "feedback"

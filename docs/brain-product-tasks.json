@@ -213,7 +213,10 @@
       "status_evidence": [
         "configs/learning/watcher-v0.1.json",
         "docs/learning-watcher.md",
+        "docs/runbooks/operator.md",
+        "src/willfly/storage/backup.py",
         "src/willfly/learning/watcher.py",
+        "tests/test_backup.py",
         "tests/test_watcher.py"
       ]
     },
