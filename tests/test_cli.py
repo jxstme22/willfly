@@ -387,3 +387,35 @@ def test_feedback_cli_imports_empty_bundle_and_reports_waiting(tmp_path, capsys)
     status = json.loads(capsys.readouterr().out)
     assert status["prediction_count"] == 0
     assert status["queue_state_counts"] == {}
+
+
+def test_wallet_cli_imports_empty_public_bundle_and_reports_missing_activity(tmp_path, capsys):
+    bundle = tmp_path / "wallet.json"
+    bundle.write_text(
+        json.dumps({"schema_version": "willfly.wallet-activity-bundle.v0.1", "activities": []}),
+        encoding="utf-8",
+    )
+    wallet_dir = tmp_path / "wallet-store"
+    assert main(["wallet-import", "--bundle", str(bundle), "--wallet-dir", str(wallet_dir)]) == 0
+    imported = json.loads(capsys.readouterr().out)
+    assert imported["status"] == "recorded"
+    assert imported["activity_count"] == 0
+    assert imported["signing"] is False and imported["broadcast"] is False
+
+    assert main(
+        [
+            "wallet-status",
+            "--wallet-dir",
+            str(wallet_dir),
+            "--wallet",
+            "0x" + "1" * 40,
+            "--as-of-time",
+            "2026-01-01T00:00:00Z",
+            "--arrival-cutoff",
+            "2026-01-01T00:00:00Z",
+        ]
+    ) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["status"] == "degraded"
+    assert status["activity_count"] == 0
+    assert "no_wallet_activity_at_cutoff" in status["observation"]["missingness"]

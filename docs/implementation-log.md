@@ -835,6 +835,11 @@ maps, supports multiple seeds with the five matched controls, and returns a
 truthful waiting report without graph load when qualified labels or held-out
 assignments are insufficient. The empty-store subprocess check passed.
 
+Added `wallet-import` and `wallet-status` CLI surfaces for typed public-wallet
+activity bundles. A controlled swap import was projected at explicit event and
+arrival cutoffs as one healthy activity with no LP position; no key, signer or
+broadcast path is involved. Live wallet coverage remains open.
+
 
 ## 2026-09-14 — B10 release capability audit
 

@@ -25,5 +25,23 @@ Focused evidence:
 .venv/bin/python -m pytest -q tests/test_wallet_observer.py
 ```
 
+Typed read-only activity bundles can be imported and projected without a
+wallet key:
+
+```text
+.venv/bin/willfly wallet-import \
+  --bundle /path/to/wallet-activities.json \
+  --wallet-dir /path/to/wallet-store
+.venv/bin/willfly wallet-status \
+  --wallet-dir /path/to/wallet-store \
+  --wallet 0x... \
+  --as-of-time 2026-09-14T00:00:00Z \
+  --arrival-cutoff 2026-09-14T00:00:00Z
+```
+
+Import is idempotent and retains revised payloads. An empty or incomplete
+bundle returns explicit missingness and no positions; unsupported routes never
+become verified position or training facts.
+
 This is implementation and fixture evidence. Live wallet coverage, provider
 availability, and prospective learning acceptance remain open gates.

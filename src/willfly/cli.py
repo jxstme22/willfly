@@ -49,6 +49,7 @@ from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
 from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowRunner
 from willfly.storage.feedback import FeedbackStore
+from willfly.storage.wallet import WalletObservationStore
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -221,6 +222,51 @@ def _load_feedback_bundle(path: Path) -> tuple[tuple[PredictionRecord, ...], tup
         tuple(PredictionRecord.from_dict(item) for item in raw_predictions),
         tuple(OutcomeRecord.from_dict(item) for item in raw_outcomes),
     )
+
+
+def _load_wallet_bundle(path: Path) -> tuple[WalletActivity, ...]:
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.wallet-activity-bundle.v0.1":
+        raise ValueError("wallet activity bundle schema version is unsupported")
+    raw_activities = payload.get("activities")
+    if not isinstance(raw_activities, list) or any(not isinstance(item, dict) for item in raw_activities):
+        raise ValueError("wallet activity bundle activities must be an array of objects")
+    return tuple(WalletActivity.from_dict(item) for item in raw_activities)
+
+
+def _wallet_import(*, bundle_path: Path, wallet_dir: Path) -> dict[str, Any]:
+    activities = _load_wallet_bundle(bundle_path)
+    with WalletObservationStore(wallet_dir) as store:
+        write = store.record(activities)
+    return {
+        "status": "recorded",
+        "bundle": str(bundle_path),
+        "bundle_hash": _config_hash(bundle_path),
+        "wallet_dir": str(wallet_dir),
+        "activity_count": len(activities),
+        "inserted": write.inserted,
+        "duplicates": write.duplicates,
+        "revised": write.revised,
+        "operating_mode": "read_only_public_observation_import",
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _wallet_status(*, wallet_dir: Path, wallet: str, as_of_time: str, arrival_cutoff: str) -> dict[str, Any]:
+    with WalletObservationStore(wallet_dir) as store:
+        observation = store.observation(wallet=wallet, as_of_time=as_of_time, arrival_cutoff=arrival_cutoff)
+    return {
+        "status": observation.quality_state,
+        "wallet_dir": str(wallet_dir),
+        "wallet": wallet,
+        "activity_count": len(observation.activities),
+        "position_count": len(observation.positions),
+        "observation": observation.to_dict(),
+        "operating_mode": "read_only",
+        "signing": False,
+        "broadcast": False,
+    }
 
 
 def _feedback_import(*, bundle_path: Path, feedback_dir: Path, as_of_time: str) -> dict[str, Any]:
@@ -1098,6 +1144,18 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_status = subparsers.add_parser("feedback-status", help="inspect the causal feedback store")
     feedback_status.add_argument("--feedback-dir", type=Path, required=True)
     feedback_status.add_argument("--as-of-time", required=True, help="timezone-aware RFC-3339 dataset cutoff")
+
+    wallet_import = subparsers.add_parser(
+        "wallet-import", help="import typed read-only public-wallet activities"
+    )
+    wallet_import.add_argument("--bundle", type=Path, required=True)
+    wallet_import.add_argument("--wallet-dir", type=Path, required=True)
+
+    wallet_status = subparsers.add_parser("wallet-status", help="derive a public-wallet observation and positions")
+    wallet_status.add_argument("--wallet-dir", type=Path, required=True)
+    wallet_status.add_argument("--wallet", required=True)
+    wallet_status.add_argument("--as-of-time", required=True, help="timezone-aware event cutoff")
+    wallet_status.add_argument("--arrival-cutoff", required=True, help="timezone-aware arrival cutoff")
     return parser
 
 
@@ -1222,6 +1280,15 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "feedback-status":
             result = _feedback_status(feedback_dir=args.feedback_dir, as_of_time=args.as_of_time)
+        elif args.command == "wallet-import":
+            result = _wallet_import(bundle_path=args.bundle, wallet_dir=args.wallet_dir)
+        elif args.command == "wallet-status":
+            result = _wallet_status(
+                wallet_dir=args.wallet_dir,
+                wallet=args.wallet,
+                as_of_time=args.as_of_time,
+                arrival_cutoff=args.arrival_cutoff,
+            )
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:
@@ -1281,6 +1348,8 @@ def main(argv: list[str] | None = None) -> int:
         "model-status",
         "feedback-import",
         "feedback-status",
+        "wallet-import",
+        "wallet-status",
     }:
         return 0
     if args.command in {"capture", "backfill"}:
