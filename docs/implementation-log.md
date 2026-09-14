@@ -41,6 +41,24 @@ it into a new destination successfully. The archive contained the SQLite
 metadata database and the prior capture manifest; it contained no raw event
 batches because that source has none.
 
+## Live read-only capture probe — 2026-09-14
+
+The configured public RPC was exercised through the supported capture command
+after the sandbox's DNS restriction was surfaced. A bounded 21-block probe over
+`61692800`–`61692820` captured 50 PoolManager logs and persisted 21 headers in
+batch `46012a1081215e5e661f`; the bound source is
+`bounded-live-v4-probe:4663:de2f40240643a5e8`.
+
+The subsequent `market-feedback-build` run returned `waiting`, with checkpoint
+state `unresolved`, `canonical_event_count: 0`, `point_count: 0`, and
+`prediction_count: 0`. The checkpoint retained missing parent hash
+`0xa8f5c2c4cba7b46f04440fea95ff785aab5f187c59a892fd0f6d5395bfa5e902`.
+Therefore the raw live logs are not admitted to the causal corpus until a
+distinct read-only anchor/ancestry endpoint supplies the missing proof.
+
+This is nonempty provider evidence plus an honest canonical wait state; it is
+not a coverage, label-maturity, model-quality, or trading claim.
+
 ## Batch 2026-09-14 — canonical market-feedback corpus bridge
 
 ### Task status
