@@ -64,6 +64,8 @@ class CandidateEvaluation:
     final_test_scores: tuple[WindowScore, ...]
     decision: str
     reasons: tuple[str, ...]
+    active_forward_scores: tuple[WindowScore, ...] = ()
+    active_final_test_scores: tuple[WindowScore, ...] = ()
 
     def __post_init__(self) -> None:
         if self.decision not in {"qualified", "inconclusive", "rejected"}:
@@ -82,6 +84,8 @@ class CandidateEvaluation:
             "final_test_hash": self.final_test_hash,
             "forward_scores": [score.to_dict() for score in self.forward_scores],
             "final_test_scores": [score.to_dict() for score in self.final_test_scores],
+            "active_forward_scores": [score.to_dict() for score in self.active_forward_scores],
+            "active_final_test_scores": [score.to_dict() for score in self.active_final_test_scores],
             "decision": self.decision,
             "reasons": list(self.reasons),
         }
@@ -126,6 +130,18 @@ def evaluate_candidate(
         reasons.append("insufficient_points_per_window")
     paired_forward = _paired_improvement(candidate_scores, active_scores, split="forward")
     paired_final = _paired_improvement(final_candidate, final_active, split="final_test")
+    if not _same_evidence_grid(
+        tuple(point for point in candidate if point.split == "forward"),
+        tuple(point for point in active if point.split == "forward"),
+        split="forward",
+    ):
+        reasons.append("candidate_forward_evidence_grid_mismatch")
+    if not _same_evidence_grid(
+        tuple(point for point in final if point.model_version == candidate_version),
+        tuple(point for point in final if point.model_version == active_version),
+        split="final_test",
+    ):
+        reasons.append("candidate_final_test_evidence_grid_mismatch")
     if paired_forward is not True:
         reasons.append("candidate_forward_gate_not_met")
     if paired_final is not True:
@@ -141,6 +157,8 @@ def evaluate_candidate(
         tuple(final_candidate),
         decision,
         tuple(dict.fromkeys(reasons)),
+        tuple(active_scores),
+        tuple(final_active),
     )
 
 
@@ -283,6 +301,23 @@ def _paired_improvement(candidate: Iterable[WindowScore], active: Iterable[Windo
     if not candidate_map or set(candidate_map) != set(active_map):
         return None
     return all(candidate_map[key].mae_bps < active_map[key].mae_bps for key in candidate_map)
+
+
+def _same_evidence_grid(
+    candidate: Iterable[PredictionPoint], active: Iterable[PredictionPoint], *, split: str
+) -> bool:
+    """Require paired models to score the same observed outcomes."""
+
+    def grouped(points: Iterable[PredictionPoint]) -> dict[tuple[str, str], tuple[tuple[Any, ...], ...]]:
+        rows: dict[tuple[str, str], list[tuple[Any, ...]]] = {}
+        for point in points:
+            if point.split != split:
+                continue
+            key = (point.market, point.window_id)
+            rows.setdefault(key, []).append((point.observed_at, point.target_bps, point.source_refs))
+        return {key: tuple(sorted(values)) for key, values in rows.items()}
+
+    return grouped(candidate) == grouped(active)
 
 
 def _hash_points(points: Iterable[PredictionPoint]) -> str:

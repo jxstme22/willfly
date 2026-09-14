@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -15,7 +16,9 @@ from willfly.domain import (
     Launch,
     Observation,
     PoolIdentity,
+    PredictionRecord,
     RawEvent,
+    SignalProposal,
     TradeEvidence,
     VendorAssessment,
     WalletCohort,
@@ -37,8 +40,10 @@ from willfly.ingest.runner import (
 )
 from willfly.features.discovery import PoolProjection
 from willfly.features.projections import LifecycleRevision, materialize_observatory_projection
+from willfly.learning.watcher import LearningWatcher, WatcherConfig
 from willfly.shadow.config import freeze_shadow_config, validate_frozen_shadow_config
 from willfly.shadow.runner import ShadowCheckpointStore, ShadowInput, ShadowRunner
+from willfly.storage.feedback import FeedbackStore
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -137,6 +142,38 @@ def _operation_plan(command: str, payload: dict[str, Any]) -> dict[str, Any]:
         "status": "ready",
         "operating_mode": "read_only",
         "inputs": payload,
+    }
+
+
+def _load_signal_store(path: Path) -> dict[str, Any]:
+    """Load a typed, read-only signal snapshot for the local inspection API."""
+
+    payload = _load_json(path)
+    if not isinstance(payload, dict) or payload.get("schema_version") != "willfly.signal-snapshot.v0.1":
+        raise ValueError("signal snapshot schema version is unsupported")
+    raw_predictions = payload.get("predictions")
+    raw_proposals = payload.get("proposals")
+    if not isinstance(raw_predictions, list) or not isinstance(raw_proposals, list):
+        raise ValueError("signal snapshot predictions and proposals must be arrays")
+    if any(not isinstance(item, dict) for item in (*raw_predictions, *raw_proposals)):
+        raise ValueError("signal snapshot records must be objects")
+    predictions = tuple(PredictionRecord.from_dict(item) for item in raw_predictions)
+    proposals = tuple(SignalProposal.from_dict(item) for item in raw_proposals)
+    readiness = payload.get("market_readiness", {})
+    if not isinstance(readiness, dict) or any(not isinstance(key, str) or not isinstance(value, str) for key, value in readiness.items()):
+        raise ValueError("signal snapshot market_readiness must be a string map")
+    training_state = payload.get("training_state")
+    if training_state is not None and not isinstance(training_state, dict):
+        raise ValueError("signal snapshot training_state must be an object")
+    as_of_time = payload.get("as_of_time")
+    if not isinstance(as_of_time, str) or not as_of_time:
+        raise ValueError("signal snapshot as_of_time is required")
+    return {
+        "predictions": predictions,
+        "proposals": proposals,
+        "signal_as_of_time": as_of_time,
+        "market_readiness": readiness,
+        "training_state": training_state,
     }
 
 
@@ -668,6 +705,97 @@ def _operator_check(config_path: Path, shadow_config_path: Path, manifest_path: 
     }
 
 
+def _load_watcher_config(config_path: Path) -> tuple[dict[str, Any], WatcherConfig]:
+    """Load the scheduler contract and reject configurations that widen scope."""
+
+    payload = _load_json(config_path)
+    if not isinstance(payload, dict):
+        raise ValueError("watcher config must be an object")
+    if payload.get("personal_trade_trigger_required") is not False:
+        raise ValueError("watcher must not require a personal trade as its trigger")
+    if payload.get("execution_scope") != "read_only_observation":
+        raise ValueError("watcher execution_scope must be read_only_observation")
+    fields = {
+        name: payload[name]
+        for name in (
+            "observation_interval_seconds",
+            "label_interval_seconds",
+            "training_interval_seconds",
+            "evaluation_interval_seconds",
+            "max_training_seconds",
+            "max_training_examples",
+        )
+        if name in payload
+    }
+    try:
+        config = WatcherConfig(**fields)
+    except TypeError as exc:
+        raise ValueError(f"watcher config fields are invalid: {exc}") from exc
+    return payload, config
+
+
+def _watcher_tick(
+    *,
+    config_path: Path,
+    state_db: Path,
+    feedback_dir: Path,
+    observed_at: str,
+    personal_trade_count: int,
+    observation_state: str,
+    training_state: str,
+    evaluation_state: str,
+) -> dict[str, Any]:
+    payload, config = _load_watcher_config(config_path)
+    if personal_trade_count < 0:
+        raise ValueError("personal_trade_count cannot be negative")
+    config_hash = _config_hash(config_path)
+    with FeedbackStore(feedback_dir) as feedback_store, LearningWatcher(
+        state_db, config=config, config_identity=config_hash
+    ) as watcher:
+        snapshot = watcher.tick(
+            observed_at=observed_at,
+            feedback_store=feedback_store,
+            personal_trade_count=personal_trade_count,
+            observation_state=observation_state,
+            training_state=training_state,
+            evaluation_state=evaluation_state,
+        )
+    return {
+        "status": snapshot.status,
+        "recorded": True,
+        "snapshot": snapshot.to_dict(),
+        "config": str(config_path),
+        "config_hash": config_hash,
+        "state_db": str(state_db),
+        "feedback_dir": str(feedback_dir),
+        "personal_trade_trigger_required": payload["personal_trade_trigger_required"],
+        "execution_scope": payload["execution_scope"],
+        "signing": False,
+        "broadcast": False,
+    }
+
+
+def _watcher_status(*, config_path: Path, state_db: Path) -> dict[str, Any]:
+    payload, config = _load_watcher_config(config_path)
+    config_hash = _config_hash(config_path)
+    with LearningWatcher(state_db, config=config, config_identity=config_hash) as watcher:
+        snapshot = watcher.snapshot()
+        pending = watcher.pending_tasks()
+    return {
+        "status": snapshot.status if snapshot is not None else "not_started",
+        "started": snapshot is not None,
+        "snapshot": None if snapshot is None else snapshot.to_dict(),
+        "pending_tasks": list(pending),
+        "config": str(config_path),
+        "config_hash": config_hash,
+        "state_db": str(state_db),
+        "personal_trade_trigger_required": payload["personal_trade_trigger_required"],
+        "execution_scope": payload["execution_scope"],
+        "signing": False,
+        "broadcast": False,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="willfly", description="Read-only Willfly Observatory tools")
     parser.add_argument("--version", action="version", version=__version__)
@@ -733,6 +861,12 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=8000)
     serve.add_argument("--store-dir", type=Path, default=ROOT / "data" / "observatory")
     serve.add_argument("--snapshot-id", default=None, help="load an immutable persisted Observatory projection")
+    serve.add_argument(
+        "--signals-file",
+        type=Path,
+        default=None,
+        help="load a versioned read-only signal/training snapshot for the dashboard",
+    )
     serve.add_argument("--check", action="store_true", help="validate binding without starting the loop")
 
     shadow = subparsers.add_parser("shadow", help="check or prepare the read-only hypothetical shadow loop")
@@ -759,6 +893,26 @@ def build_parser() -> argparse.ArgumentParser:
     operator.add_argument("--config", type=Path, default=ROOT / "configs/sources/robinhood-chain-v0.1.json")
     operator.add_argument("--shadow-config", type=Path, default=ROOT / "configs/shadow/config.json")
     operator.add_argument("--manifest", type=Path, default=ROOT / "tests/fixtures/manifest.json")
+
+    watcher_tick = subparsers.add_parser("watcher-tick", help="record one read-only learning watcher heartbeat")
+    watcher_tick.add_argument("--config", type=Path, default=ROOT / "configs/learning/watcher-v0.1.json")
+    watcher_tick.add_argument("--state-db", type=Path, required=True)
+    watcher_tick.add_argument("--feedback-dir", type=Path, required=True)
+    watcher_tick.add_argument("--observed-at", required=True, help="timezone-aware RFC-3339 heartbeat time")
+    watcher_tick.add_argument("--personal-trade-count", type=int, default=0)
+    watcher_tick.add_argument(
+        "--observation-state", choices=("running", "waiting", "degraded", "failed"), default="waiting"
+    )
+    watcher_tick.add_argument(
+        "--training-state", choices=("running", "waiting", "degraded", "failed"), default="waiting"
+    )
+    watcher_tick.add_argument(
+        "--evaluation-state", choices=("running", "waiting", "degraded", "failed"), default="waiting"
+    )
+
+    watcher_status = subparsers.add_parser("watcher-status", help="read persisted learning watcher state")
+    watcher_status.add_argument("--config", type=Path, default=ROOT / "configs/learning/watcher-v0.1.json")
+    watcher_status.add_argument("--state-db", type=Path, required=True)
     return parser
 
 
@@ -848,16 +1002,41 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "operator-check":
             result = _operator_check(args.config, args.shadow_config, args.manifest)
+        elif args.command == "watcher-tick":
+            result = _watcher_tick(
+                config_path=args.config,
+                state_db=args.state_db,
+                feedback_dir=args.feedback_dir,
+                observed_at=args.observed_at,
+                personal_trade_count=args.personal_trade_count,
+                observation_state=args.observation_state,
+                training_state=args.training_state,
+                evaluation_state=args.evaluation_state,
+            )
+        elif args.command == "watcher-status":
+            result = _watcher_status(config_path=args.config, state_db=args.state_db)
         else:
             if args.snapshot_id:
                 with RawBatchStore(args.store_dir) as snapshot_store:
                     read_store = ReadOnlyStore.from_persisted_snapshot(snapshot_store, args.snapshot_id)
             else:
                 read_store = ReadOnlyStore()
+            signal_file_hash = None
+            if args.signals_file is not None:
+                signal_values = _load_signal_store(args.signals_file)
+                read_store = replace(read_store, **signal_values)
+                signal_file_hash = _config_hash(args.signals_file)
             server = create_server(store=read_store, host=args.host, port=args.port)
             result = _operation_plan(
                 "serve",
-                {"host": args.host, "port": server.server_port, "snapshot_id": args.snapshot_id},
+                {
+                    "host": args.host,
+                    "port": server.server_port,
+                    "snapshot_id": args.snapshot_id,
+                    "signals_file": None if args.signals_file is None else str(args.signals_file),
+                    "signals_file_hash": signal_file_hash,
+                    "signal_count": len(read_store.proposals),
+                },
             )
             if not args.check:
                 print(json.dumps(result, indent=2, sort_keys=True))
@@ -888,6 +1067,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["status"] == "completed" else 1
     if args.command == "operator-check":
         return 0 if result["status"] == "ready" else 1
+    if args.command in {"watcher-tick", "watcher-status"}:
+        return 0
     if args.command in {"capture", "backfill"}:
         if result.get("status") == "plan_only":
             return 3  # A non-executed plan cannot be mistaken for successful capture.

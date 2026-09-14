@@ -24,7 +24,7 @@ Read-only research software for a connectome-derived crypto decision agent.
 
 ## Status
 
-The direction remains Robinhood launch discovery, spot decisions and separately validated LP. The current checkpoint connects durable capture/backfill, header persistence, receipt attribution, immutable projections, API/dashboard loading, a read-only signal inbox and position/training views, versioned brain signal contracts, and a verified MaleCNS v1.0 subset smoke run. The latest local suite reports 199 passed and two sandbox socket skips; the skipped checks are loopback-only fixtures and do not represent product failures. These checks do not certify Observatory acceptance, whole-CNS coverage, model quality or financial advantage. Live source/archive, timed, economic and biological/model gates remain open. LP and funded execution remain disabled.
+The direction remains Robinhood launch discovery, spot decisions and separately validated LP. The current checkpoint connects durable capture/backfill, header persistence, receipt attribution, immutable projections, API/dashboard loading, a read-only signal inbox and position/training views, versioned brain signal contracts, a verified MaleCNS v1.0 subset smoke run, restart-safe learning-watcher tick/status commands, and a typed signal snapshot loader for the dashboard. The latest local suite reports 207 passed and two sandbox socket skips; the skipped checks are loopback-only fixtures and do not represent product failures. These checks do not certify Observatory acceptance, whole-CNS coverage, model quality or financial advantage. Live source/archive, timed, economic and biological/model gates remain open. LP and funded execution remain disabled.
 
 The existing 77-task tracker now distinguishes pre-audit fixture completion from full acceptance; use the new 26-task backlog for implementation order. Task status corrections preserve code and prior evidence rather than erasing progress.
 
@@ -42,6 +42,7 @@ python3 -m venv .venv
 .venv/bin/willfly doctor
 .venv/bin/willfly shadow
 .venv/bin/willfly operator-check
+.venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
 ```
 
 The source-tree equivalent is `PYTHONPATH=src python3 -m willfly ...`. `doctor`

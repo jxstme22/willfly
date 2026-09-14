@@ -7,6 +7,11 @@ points, and requires the candidate to improve every paired forward and final
 test window before producing a `qualified` decision. Missing or mismatched
 partitions remain `inconclusive`.
 
+Each report now retains candidate and active scores separately and requires the
+two models to share the same observed-at/source/target evidence grid in every
+paired window. A row mismatch is an explicit inconclusive reason, not a
+silently dropped comparison.
+
 `ModelRegistry` persists active-version history, consumes each final-test hash
 once, records evaluations, supports guarded promotion, and permits rollback to
 a recorded version. Training completion does not promote a model, and a failed

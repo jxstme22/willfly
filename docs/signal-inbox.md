@@ -12,6 +12,13 @@ for observed LP ownership states, and `GET /training` for the current
 training/waiting summary. The existing `GET /dashboard` includes signal,
 position and training sections.
 
+For a local controlled run, `willfly serve --signals-file PATH` loads a typed
+`willfly.signal-snapshot.v0.1` JSON bundle containing predictions, proposals,
+readiness gates and training state. The file is validated through the domain
+contracts and is display-only; it cannot enable signing or broadcast. Without
+the file (or a populated application store), the inbox truthfully shows no
+signals.
+
 It remains a local read-only surface: there is no signer, broadcast, funding
 control, or automatic execution. B6 fixture checks prove rendering and gates;
 live model promotion, complete economic qualification and manual-action

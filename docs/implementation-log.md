@@ -777,6 +777,31 @@ degraded or ready label state without inventing data. Scheduler fixture tests
 pass; fresh-PC setup, live continuous operation, resource benchmarks and
 automatic candidate cycles remain open.
 
+Added the explicit operator surface for the watcher: `watcher-tick` validates
+the read-only/no-personal-trade configuration, reconciles the durable feedback
+queue and persists one heartbeat; `watcher-status` reads the snapshot and
+pending tasks after restart. A controlled zero-trade run recorded an initial
+`waiting/no_mature_labels` snapshot and a later `degraded/outage_since_previous_tick`
+snapshot after a 60-second simulated gap. This is scheduler evidence only;
+the 24/7 live interval, automatic candidate cycle and live-source recovery
+gates remain open.
+
+Bound watcher state to the persisted configuration hash. A changed interval or
+resource-limit contract now fails closed on restart instead of silently
+continuing a prior state database; the focused watcher regression covers this
+case.
+
+Strengthened B8 candidate evaluation by retaining active-model window scores
+and rejecting candidate/active pairs whose observed-at, source-reference or
+target grid differs. The focused promotion suite covers the mismatch path;
+model promotion and live forward/calibration gates remain open.
+
+Added `willfly serve --signals-file` for a typed, read-only
+`willfly.signal-snapshot.v0.1` bundle. Predictions and proposals are parsed by
+the signal contracts before being attached to the local API/dashboard, with
+readiness gates and training state preserved; an absent bundle remains an
+honest empty inbox. No live model-output or economic qualification is inferred.
+
 
 ## 2026-09-14 — B10 release capability audit
 

@@ -27,6 +27,36 @@ fixture integrity, read-only mode and the disabled LP gate. Its
 `network_probe` remains `not_run`; use a separately bounded capture when live
 source evidence is explicitly required.
 
+To inspect controlled signal output, pass a validated
+`willfly.signal-snapshot.v0.1` JSON bundle to the local server:
+
+```text
+.venv/bin/willfly serve --check --signals-file /path/to/signals.json
+```
+
+The bundle is display-only. Research-only or unsupported readiness remains an
+abstain state in the inbox, and no signal file can enable signing or broadcast.
+
+## Run the durable learning watcher tick
+
+The watcher is a restart-safe scheduler state store. It does not claim that a
+daemon is running and it does not invent market observations, labels, training
+or evaluation. Record an explicit heartbeat with the feedback store attached:
+
+```text
+.venv/bin/willfly watcher-tick \
+  --state-db /path/to/watcher.sqlite3 \
+  --feedback-dir /path/to/feedback \
+  --observed-at 2026-09-14T00:00:00Z
+.venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
+```
+
+Pass `--observation-state`, `--training-state` and `--evaluation-state` only
+when those integrations have current evidence. The default is `waiting`; a
+large gap between explicit ticks is persisted as an outage interval. The
+default personal-trade count is zero, so personal activity is not required to
+advance the scheduler state.
+
 ## Start a controlled shadow replay
 
 The repository shadow config is deliberately unfrozen. To begin a real

@@ -1,6 +1,6 @@
 import json
 
-from willfly.cli import main
+from willfly.cli import _load_signal_store, main
 from willfly.shadow.config import freeze_shadow_config
 from willfly.storage import RawBatchStore
 
@@ -210,3 +210,66 @@ def test_shadow_run_consumes_controlled_file_and_resumes(tmp_path, capsys):
     second = json.loads(capsys.readouterr().out)
     assert second["processed_count"] == 0
     assert second["duplicate_count"] == 1
+
+
+def test_watcher_cli_records_zero_trade_tick_and_restart_status(tmp_path, capsys):
+    state_db = tmp_path / "watcher.sqlite3"
+    feedback_dir = tmp_path / "feedback"
+    first = [
+        "watcher-tick",
+        "--state-db",
+        str(state_db),
+        "--feedback-dir",
+        str(feedback_dir),
+        "--observed-at",
+        "2026-01-01T00:00:00Z",
+    ]
+    assert main(first) == 0
+    tick = json.loads(capsys.readouterr().out)
+    assert tick["recorded"] is True
+    assert tick["status"] == "waiting"
+    assert tick["snapshot"]["personal_trade_count"] == 0
+    assert tick["snapshot"]["waiting_reason"] == "no_mature_labels"
+    assert tick["signing"] is False and tick["broadcast"] is False
+
+    assert main(
+        [
+            "watcher-tick",
+            "--state-db",
+            str(state_db),
+            "--feedback-dir",
+            str(feedback_dir),
+            "--observed-at",
+            "2026-01-01T00:01:00Z",
+        ]
+    ) == 0
+    later = json.loads(capsys.readouterr().out)
+    assert later["status"] == "degraded"
+    assert later["snapshot"]["outage_seconds_since_previous_tick"] == 60
+
+    assert main(["watcher-status", "--state-db", str(state_db)]) == 0
+    status = json.loads(capsys.readouterr().out)
+    assert status["started"] is True
+    assert status["snapshot"]["status"] == "degraded"
+    assert status["personal_trade_trigger_required"] is False
+
+
+def test_signal_snapshot_loader_accepts_typed_empty_read_only_bundle(tmp_path):
+    path = tmp_path / "signals.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "willfly.signal-snapshot.v0.1",
+                "as_of_time": "2026-01-01T00:00:00Z",
+                "predictions": [],
+                "proposals": [],
+                "market_readiness": {"spot": "research_only", "lp": "research_only"},
+                "training_state": {"status": "waiting", "reason": "no_mature_labels"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = _load_signal_store(path)
+    assert loaded["predictions"] == ()
+    assert loaded["proposals"] == ()
+    assert loaded["training_state"]["status"] == "waiting"

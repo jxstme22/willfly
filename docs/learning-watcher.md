@@ -7,6 +7,11 @@ the B3 feedback queue, reports mature/eligible counts, and records a zero
 personal-trade count explicitly. A gap between heartbeats is reported as an
 outage interval rather than silently counted as uptime.
 
+The state database records the watcher configuration hash. Reopening it with a
+different configuration fails closed; start a new state database after an
+intentional scheduler-contract change so the interval and resource lineage is
+unambiguous.
+
 Intervals and resource limits are configuration, not evidence that a service is
 running. The watcher returns `waiting` when a source, label queue or callback
 is unavailable, and it never fabricates observations, labels, training or
@@ -17,8 +22,28 @@ This is scheduler and restart fixture evidence. A fresh Windows/WSL2 install,
 real 24/7 observation period, resource benchmark, automatic candidate cycle,
 and outage/recovery run against live sources remain open B9/B10 gates.
 
+The operator surface can record one explicit, timezone-aware heartbeat and read
+it back after restart. The tick is intentionally state-only: integrations pass
+their observed stage states to it, while missing observations, labels or
+callbacks remain waiting/degraded rather than being synthesized.
+
+```text
+.venv/bin/willfly watcher-tick \
+  --state-db /path/to/watcher.sqlite3 \
+  --feedback-dir /path/to/feedback \
+  --observed-at 2026-09-14T00:00:00Z
+.venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
+```
+
+The command records `personal_trade_count: 0` by default and rejects watcher
+configs that require a personal trade or widen the read-only execution scope.
+Its exit status reports command success even when the persisted snapshot is
+`waiting` or `degraded`; inspect the snapshot status and reason for the actual
+health state.
+
 Reproduction:
 
 ```text
 .venv/bin/python -m pytest -q tests/test_watcher.py
+.venv/bin/python -m pytest -q tests/test_cli.py -k watcher
 ```

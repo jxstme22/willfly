@@ -18,3 +18,15 @@ def test_watcher_persists_tasks_and_explicit_outage_state(tmp_path) -> None:
     with LearningWatcher(path, config=config) as restarted:
         assert restarted.snapshot().outage_seconds_since_previous_tick == 45
         assert restarted.pending_tasks() == ()
+
+
+def test_watcher_rejects_changed_persisted_config_identity(tmp_path) -> None:
+    path = tmp_path / "watcher.sqlite3"
+    with LearningWatcher(path, config_identity="config-a"):
+        pass
+    try:
+        LearningWatcher(path, config=WatcherConfig(observation_interval_seconds=30), config_identity="config-b")
+    except ValueError as exc:
+        assert "config identity changed" in str(exc)
+    else:  # pragma: no cover - assertion keeps the close path obvious
+        raise AssertionError("changed watcher config identity was accepted")

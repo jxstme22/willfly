@@ -26,6 +26,8 @@ def test_candidate_requires_paired_forward_and_untouched_final_test() -> None:
     assert report.decision == "qualified"
     assert len(report.forward_scores) == 2
     assert len(report.final_test_scores) == 1
+    assert len(report.active_forward_scores) == 2
+    assert len(report.active_final_test_scores) == 1
     worse = evaluate_candidate(
         _points(candidate_error=6.0),
         candidate_version="candidate-v2",
@@ -35,6 +37,30 @@ def test_candidate_requires_paired_forward_and_untouched_final_test() -> None:
     )
     assert worse.decision == "inconclusive"
     assert "candidate_forward_gate_not_met" in worse.reasons
+
+
+def test_candidate_rejects_mismatched_evidence_grid() -> None:
+    points = list(_points())
+    points[0] = PredictionPoint(
+        points[0].prediction_id,
+        points[0].model_version,
+        points[0].market,
+        points[0].window_id,
+        points[0].split,
+        points[0].observed_at,
+        points[0].predicted_bps,
+        points[0].target_bps,
+        ("different-source",),
+    )
+    report = evaluate_candidate(
+        points,
+        candidate_version="candidate-v2",
+        active_version="active-v1",
+        evaluated_at="2026-09-14T02:00:00Z",
+        dataset_hash="dataset-1",
+    )
+    assert report.decision == "inconclusive"
+    assert "candidate_forward_evidence_grid_mismatch" in report.reasons
 
 
 def test_registry_consumes_final_test_and_records_promotion_rollback(tmp_path) -> None:

@@ -71,7 +71,13 @@ class LearningWatcher:
     class never fabricates observations or labels.
     """
 
-    def __init__(self, path: str | Path, *, config: WatcherConfig = WatcherConfig()) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        *,
+        config: WatcherConfig = WatcherConfig(),
+        config_identity: str | None = None,
+    ) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.config = config
@@ -91,6 +97,13 @@ class LearningWatcher:
             """
         )
         self._connection.commit()
+        if config_identity is not None:
+            if not config_identity:
+                raise ValueError("watcher config identity cannot be empty")
+            previous_identity = self._get("config_hash")
+            if previous_identity is not None and previous_identity != config_identity:
+                raise ValueError("watcher config identity changed; use a new state database")
+            self._set("config_hash", config_identity)
 
     def __enter__(self) -> "LearningWatcher":
         return self
