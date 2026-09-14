@@ -154,6 +154,14 @@ class LearningWatcher:
         ).fetchall()
         return tuple(dict(row) for row in rows)
 
+    def scheduled_slots(self) -> dict[str, str | None]:
+        """Return the last persisted due-slot instant for every stage."""
+
+        return {
+            kind: self._get(f"last_scheduled:{kind}")
+            for kind in ("observation", "labels", "training", "evaluation")
+        }
+
     def schedule_due_tasks(self, *, observed_at: str) -> tuple[ScheduleDecision, ...]:
         """Enqueue at most one pending task per due stage.
 

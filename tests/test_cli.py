@@ -252,6 +252,12 @@ def test_watcher_cli_records_zero_trade_tick_and_restart_status(tmp_path, capsys
     status = json.loads(capsys.readouterr().out)
     assert status["started"] is True
     assert status["snapshot"]["status"] == "degraded"
+    assert status["scheduled_slots"] == {
+        "observation": None,
+        "labels": None,
+        "training": None,
+        "evaluation": None,
+    }
     assert status["personal_trade_trigger_required"] is False
 
 
@@ -279,6 +285,12 @@ def test_watcher_cli_can_enqueue_due_stages_without_personal_trade_trigger(tmp_p
     }
     assert result["snapshot"]["queued_task_count"] == 4
     assert result["personal_trade_trigger_required"] is False
+    assert {item["kind"] for item in result["schedule"]} == {
+        "observation",
+        "labels",
+        "training",
+        "evaluation",
+    }
 
 
 def test_signal_snapshot_loader_accepts_typed_empty_read_only_bundle(tmp_path):

@@ -42,6 +42,11 @@ callbacks remain waiting/degraded rather than being synthesized.
 .venv/bin/willfly watcher-status --state-db /path/to/watcher.sqlite3
 ```
 
+`watcher-status` includes both the pending task rows and `scheduled_slots` for
+observation, labels, training and evaluation. A `null` slot means that stage
+has not yet been scheduled in that state database; it is not evidence that the
+stage is healthy or that a callback is running.
+
 The command records `personal_trade_count: 0` by default and rejects watcher
 configs that require a personal trade or widen the read-only execution scope.
 Its exit status reports command success even when the persisted snapshot is

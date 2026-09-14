@@ -163,7 +163,7 @@
   },
   "operator_evidence": {
     "watcher_cli": "watcher-tick and watcher-status recorded two zero-personal-trade ticks in a fresh SQLite state; the first reported waiting/no_mature_labels and the 60-second gap reported degraded/outage_since_previous_tick; changed config hashes fail closed",
-    "watcher_scheduler": "watcher-tick --schedule durably enqueues one due task for observation, labels, training and evaluation, persists scheduling slots across restart, and coalesces still-pending work without a personal-trade trigger",
+    "watcher_scheduler": "watcher-tick --schedule durably enqueues one due task for observation, labels, training and evaluation, persists scheduling slots across restart, coalesces still-pending work without a personal-trade trigger, and exposes the slots through watcher-status",
     "signal_surface": "serve --check loaded a versioned empty signal snapshot with research-only readiness and a waiting training state; the dashboard/API remains display-only and shows no signals when no bundle is supplied",
     "manual_action_surface": "the same typed signal bundle loader parsed one manual action and one wallet activity and produced an exact transaction link for fresh-process /actions data",
     "manual_status_projection": "fresh-process /actions and /signals both returned matched for the linked action, and the dashboard rendered the manual-status column",

@@ -1163,11 +1163,13 @@ def _watcher_status(*, config_path: Path, state_db: Path) -> dict[str, Any]:
     with LearningWatcher(state_db, config=config, config_identity=config_hash) as watcher:
         snapshot = watcher.snapshot()
         pending = watcher.pending_tasks()
+        scheduled_slots = watcher.scheduled_slots()
     return {
         "status": snapshot.status if snapshot is not None else "not_started",
         "started": snapshot is not None,
         "snapshot": None if snapshot is None else snapshot.to_dict(),
         "pending_tasks": list(pending),
+        "scheduled_slots": scheduled_slots,
         "config": str(config_path),
         "config_hash": config_hash,
         "state_db": str(state_db),

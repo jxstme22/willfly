@@ -37,6 +37,10 @@ surface and then continue independent packaging/evidence work. Live source
 coverage, candidate callbacks, calibration, economic qualification and timed
 gates remain open.
 
+The scheduled queue state is now exposed by `watcher-status` as pending task
+rows plus per-stage `scheduled_slots`; a null slot is reported as “never
+scheduled,” not as healthy operation.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status
