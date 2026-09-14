@@ -163,6 +163,7 @@
   },
   "operator_evidence": {
     "market_feedback_corpus": "market-feedback-build consumes only the resolved canonical raw projection, decodes standard-hook V4 Initialize/Swap evidence into exact integer price points, derives availability-aware no-wallet features, emits observed/censored/unresolved forward outcomes with chronological partitions, and returns waiting with canonical_checkpoint=null on a fresh unresolved store; feedback-import accepts the resulting bundle",
+    "watcher_callback_recovery": "LearningWatcher.run_pending_tasks requeues interrupted running tasks with interrupted_process_recovery, claims supplied callbacks one at a time, preserves tasks with no callback, and records completed/waiting/callback_failed outcomes without widening execution scope",
     "watcher_cli": "watcher-tick and watcher-status recorded two zero-personal-trade ticks in a fresh SQLite state; the first reported waiting/no_mature_labels and the 60-second gap reported degraded/outage_since_previous_tick; changed config hashes fail closed",
     "watcher_scheduler": "watcher-tick --schedule durably enqueues one due task for observation, labels, training and evaluation, persists scheduling slots across restart, coalesces still-pending work without a personal-trade trigger, and exposes the slots through watcher-status",
     "signal_surface": "serve --check loaded a versioned empty signal snapshot with research-only readiness and a waiting training state; the dashboard/API remains display-only and shows no signals when no bundle is supplied",

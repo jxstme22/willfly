@@ -63,3 +63,44 @@ def test_watcher_due_scheduler_persists_slots_and_coalesces_pending_work(tmp_pat
     with LearningWatcher(path, config=config) as restarted:
         assert len(restarted.pending_tasks()) == 2
         assert restarted.schedule_due_tasks(observed_at="2026-09-14T00:01:01Z")[0].reason == "pending_task_coalesced"
+
+
+def test_watcher_recovers_running_tasks_and_executes_only_bound_callbacks(tmp_path) -> None:
+    path = tmp_path / "watcher.sqlite3"
+    with LearningWatcher(path) as watcher:
+        watcher.enqueue(task_id="observation:1", kind="observation", created_at="2026-09-14T00:00:00Z")
+        watcher.enqueue(task_id="labels:1", kind="labels", created_at="2026-09-14T00:00:00Z")
+        with watcher._connection:
+            watcher._connection.execute("UPDATE watcher_tasks SET status = 'running' WHERE task_id = 'observation:1'")
+        executions = watcher.run_pending_tasks(
+            observed_at="2026-09-14T00:00:10Z",
+            callbacks={"observation": lambda row: None},
+        )
+        assert [item.to_dict() for item in executions] == [
+            {
+                "task_id": "observation:1",
+                "kind": "observation",
+                "status": "completed",
+                "reason": None,
+            }
+        ]
+        pending = watcher.pending_tasks()
+        assert pending[0]["task_id"] == "labels:1"
+        assert pending[0]["status"] == "queued"
+
+
+def test_watcher_records_callback_failure_without_losing_the_service_loop(tmp_path) -> None:
+    path = tmp_path / "watcher.sqlite3"
+    with LearningWatcher(path) as watcher:
+        watcher.enqueue(task_id="training:1", kind="training", created_at="2026-09-14T00:00:00Z")
+
+        def fail(_row):
+            raise RuntimeError("training unavailable")
+
+        executions = watcher.run_pending_tasks(
+            observed_at="2026-09-14T00:00:10Z",
+            callbacks={"training": fail},
+        )
+        assert executions[0].status == "failed"
+        assert executions[0].reason == "callback_failed:RuntimeError"
+        assert watcher.pending_tasks() == ()

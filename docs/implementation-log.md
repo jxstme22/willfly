@@ -41,6 +41,31 @@ The fresh-store result is an honest source-unavailable smoke check, not live
 market coverage or a model-quality claim. A resolved canonical checkpoint and
 elapsed market windows are still required before B3/B4 can be accepted.
 
+## Batch 2026-09-14 — watcher callback recovery boundary
+
+### Task status
+
+- B9 — IN_PROGRESS: the watcher now has a restart-recovery and callback state
+  boundary; a continuously running WSL2 service and live stage integrations
+  remain unverified.
+
+### Changes
+
+- Added durable `running` task recovery to `waiting` with an explicit
+  `interrupted_process_recovery` reason.
+- Added callback execution with one-at-a-time claims, missing-callback queue
+  preservation, explicit waiting/completed states and typed failure reasons.
+
+### Verification commands/results
+
+```text
+.venv/bin/python -m pytest -q tests/test_watcher.py
+  passed; interrupted tasks recover and callback failures remain durable
+```
+
+This proves the local queue lifecycle only. It is not evidence of a running
+daemon, live source capture, automatic model training or a 24/7 interval.
+
 ## Batch 2026-09-14 — guarded model promotion and rollback CLI
 
 ### Task status

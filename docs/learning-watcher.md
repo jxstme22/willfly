@@ -24,6 +24,15 @@ and coalesces a still-pending task after a gap. This is queue evidence only:
 the task worker, source callbacks, automatic training/evaluation execution and
 real 24/7 acceptance remain separate gates.
 
+The library also exposes a callback boundary for a local service. On startup,
+`run_pending_tasks` requeues tasks left `running` by an interrupted process,
+claims one task at a time, leaves stages without a supplied callback queued,
+and records callback completion, waiting or failure. Callback exceptions are
+stored as `callback_failed:<ExceptionType>` so a worker failure cannot erase
+the queue or masquerade as a completed stage. The watcher still does not ship
+source, training or evaluation callbacks; those integrations must supply their
+own read-only implementations and evidence.
+
 This is scheduler and restart fixture evidence. A fresh Windows/WSL2 install,
 real 24/7 observation period, resource benchmark, automatic candidate cycle,
 and outage/recovery run against live sources remain open B9/B10 gates.

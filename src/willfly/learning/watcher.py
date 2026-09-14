@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sqlite3
-from typing import Any
+from typing import Any, Callable, Mapping
 
 from willfly.storage.feedback import FeedbackStore
 
@@ -71,6 +71,22 @@ class ScheduleDecision:
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
+
+
+@dataclass(frozen=True)
+class TaskExecution:
+    """One callback result, retained separately from the task queue row."""
+
+    task_id: str
+    kind: str
+    status: str
+    reason: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.__dict__.copy()
+
+
+TaskCallback = Callable[[Mapping[str, Any]], str | None]
 
 
 class LearningWatcher:
@@ -150,9 +166,76 @@ class LearningWatcher:
 
     def pending_tasks(self) -> tuple[dict[str, Any], ...]:
         rows = self._connection.execute(
-            "SELECT task_id, kind, status, reason, created_at, finished_at FROM watcher_tasks WHERE status IN ('queued', 'waiting') ORDER BY created_at, task_id"
+            "SELECT task_id, kind, status, reason, created_at, finished_at FROM watcher_tasks WHERE status IN ('queued', 'waiting', 'running') ORDER BY created_at, task_id"
         ).fetchall()
         return tuple(dict(row) for row in rows)
+
+    def recover_interrupted_tasks(self, *, recovered_at: str) -> tuple[TaskExecution, ...]:
+        """Move tasks left running by a crashed process back to waiting."""
+
+        _instant(recovered_at)
+        rows = self._connection.execute(
+            "SELECT task_id, kind FROM watcher_tasks WHERE status = 'running' ORDER BY created_at, task_id"
+        ).fetchall()
+        recovered: list[TaskExecution] = []
+        with self._connection:
+            for row in rows:
+                self._connection.execute(
+                    "UPDATE watcher_tasks SET status = 'waiting', reason = ?, finished_at = NULL WHERE task_id = ?",
+                    ("interrupted_process_recovery", row["task_id"]),
+                )
+                recovered.append(TaskExecution(row["task_id"], row["kind"], "waiting", "interrupted_process_recovery"))
+        return tuple(recovered)
+
+    def run_pending_tasks(
+        self,
+        *,
+        observed_at: str,
+        callbacks: Mapping[str, TaskCallback],
+    ) -> tuple[TaskExecution, ...]:
+        """Run supplied local callbacks with claim, failure and restart semantics.
+
+        The watcher owns only task state.  A callback is supplied by the
+        read-only observation/label/training/evaluation integration and may
+        return ``completed`` or ``waiting``.  Missing callbacks leave their
+        tasks queued; exceptions become an auditable ``failed`` task and are
+        not retried in the same pass.
+        """
+
+        _instant(observed_at)
+        self.recover_interrupted_tasks(recovered_at=observed_at)
+        rows = self._connection.execute(
+            "SELECT task_id, kind, status, reason, created_at, finished_at FROM watcher_tasks WHERE status IN ('queued', 'waiting') ORDER BY created_at, task_id"
+        ).fetchall()
+        results: list[TaskExecution] = []
+        for row in rows:
+            callback = callbacks.get(str(row["kind"]))
+            if callback is None:
+                continue
+            with self._connection:
+                claimed = self._connection.execute(
+                    "UPDATE watcher_tasks SET status = 'running', reason = NULL, finished_at = NULL WHERE task_id = ? AND status IN ('queued', 'waiting')",
+                    (row["task_id"],),
+                ).rowcount
+            if claimed != 1:
+                continue
+            try:
+                callback_status = callback(dict(row))
+                status = "completed" if callback_status is None else callback_status
+                if status not in {"completed", "waiting"}:
+                    raise ValueError("callback must return completed, waiting or None")
+                reason = None if status == "completed" else "callback_waiting"
+            except Exception as exc:  # callback failures are task evidence, not process loss
+                status = "failed"
+                reason = f"callback_failed:{type(exc).__name__}"
+            self.finish_task(
+                task_id=row["task_id"],
+                status=status,
+                finished_at=observed_at,
+                reason=reason,
+            )
+            results.append(TaskExecution(row["task_id"], row["kind"], status, reason))
+        return tuple(results)
 
     def scheduled_slots(self) -> dict[str, str | None]:
         """Return the last persisted due-slot instant for every stage."""
@@ -300,4 +383,4 @@ class LearningWatcher:
             )
 
 
-__all__ = ["LearningWatcher", "ScheduleDecision", "WatcherConfig", "WatcherSnapshot"]
+__all__ = ["LearningWatcher", "ScheduleDecision", "TaskExecution", "WatcherConfig", "WatcherSnapshot"]
