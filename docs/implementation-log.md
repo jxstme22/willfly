@@ -101,6 +101,25 @@ explicit initial version, so inspection cannot silently initialize model state.
 Final verification for this surface: the full suite passed 233 tests with two
 sandbox loopback skips; planning and whitespace checks remained clean.
 
+## Runtime smoke 2026-09-14 — current read-only operator state
+
+### Commands/results
+
+```text
+.venv/bin/willfly operator-check
+  status: ready; 16/16 synthetic fixture checks passed; read-only=true; LP=disabled
+.venv/bin/willfly watcher-tick --state-db /private/tmp/willfly-final-smoke.dAKtF2/watcher.sqlite3 --feedback-dir /private/tmp/willfly-final-smoke.dAKtF2/feedback --observed-at 2026-09-14T00:00:00Z --schedule
+  status: waiting; personal_trade_count=0; four due tasks enqueued; reason=no_mature_labels
+.venv/bin/willfly watcher-status --state-db /private/tmp/willfly-final-smoke.dAKtF2/watcher.sqlite3
+  status: waiting; four queued tasks and four persisted scheduled slots restored
+.venv/bin/willfly shadow
+  status: blocked; reason=shadow_config_not_frozen; signing=false; broadcast=false
+```
+
+This is a fresh local smoke run, not live source coverage or a prospective
+shadow interval. The temporary state is disposable and contains no wallet
+secrets.
+
 ## Batch 2026-09-14 — feedback lineage and connectome-output bridge
 
 ### Task status
