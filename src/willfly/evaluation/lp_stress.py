@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from willfly.evaluation.metrics import EpisodeResult, MetricReport, calculate_metrics
+from willfly.lp.evidence import LPEvidence, is_verified_live_evidence
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,10 @@ class LPStressScenario:
     fee_bps: int
     delay_seconds: int
     position_size_atomic: int
+    gas_atomic: int = 0
+    exit_depth_atomic: int | None = None
+    hooks_supported: bool = True
+    tokens_supported: bool = True
 
 
 @dataclass(frozen=True)
@@ -46,6 +51,7 @@ class LPModeComparison:
     lp_state: str
     reasons: tuple[str, ...]
     mutually_exclusive: bool = True
+    shared_capital_atomic: int | None = None
 
 
 def stress_lp_scenarios(
@@ -65,13 +71,39 @@ def stress_lp_scenarios(
         raise ValueError("base LP values cannot be negative")
     results: list[LPStressResult] = []
     for scenario in scenarios:
-        if min(scenario.price_move_bps, scenario.fee_bps, scenario.delay_seconds, scenario.position_size_atomic) < 0:
+        if min(
+            scenario.price_move_bps,
+            scenario.fee_bps,
+            scenario.delay_seconds,
+            scenario.position_size_atomic,
+            scenario.gas_atomic,
+        ) < 0:
             raise ValueError("LP stress scenario is invalid")
+        if scenario.exit_depth_atomic is not None and scenario.exit_depth_atomic < 0:
+            raise ValueError("LP exit depth cannot be negative")
+        if not scenario.hooks_supported or not scenario.tokens_supported:
+            results.append(
+                LPStressResult(
+                    scenario,
+                    None,
+                    "excluded",
+                    "unsupported_hook_or_token",
+                )
+            )
+            continue
         modeled = base_fee_atomic - (
             scenario.position_size_atomic * scenario.price_move_bps // 10_000
         ) - (scenario.position_size_atomic * scenario.fee_bps // 10_000)
+        modeled -= scenario.gas_atomic
+        if scenario.exit_depth_atomic is not None and scenario.exit_depth_atomic < scenario.position_size_atomic:
+            modeled = None
         results.append(
-            LPStressResult(scenario, modeled, "modeled", "linearized_counterfactual")
+            LPStressResult(
+                scenario,
+                modeled,
+                "modeled" if modeled is not None else "excluded",
+                "linearized_counterfactual" if modeled is not None else "insufficient_exit_depth",
+            )
         )
     return tuple(results)
 
@@ -84,6 +116,7 @@ def compare_lp_modes(
     bootstrap_replicates: int = 0,
     seed: int = 0,
     minimum_blocks: int = 4,
+    lp_evidence: LPEvidence | None = None,
 ) -> LPModeComparison:
     """Compare mutually exclusive modes without turning unavailable LP into zero PnL."""
 
@@ -103,6 +136,8 @@ def compare_lp_modes(
     lp_report: MetricReport | None = None
     if lp_evidence_state != "verified":
         reasons.append("lp_disabled_until_verified_evidence")
+    elif lp_evidence is not None and not is_verified_live_evidence(lp_evidence):
+        reasons.append("lp_disabled_until_verified_live_evidence")
     elif any(case.lp_net_return_bps is None for case in ordered):
         reasons.append("missing_lp_outcomes")
     else:
@@ -111,7 +146,16 @@ def compare_lp_modes(
             for case in ordered
         )
         lp_report = calculate_metrics(lp_records, equity_curve_atomic=_equity_curve(capital_atomic, lp_records), bootstrap_replicates=bootstrap_replicates, seed=seed, min_blocks=minimum_blocks)
-    return LPModeComparison(capital_atomic, spot, idle, lp_report, lp_evidence_state, tuple(reasons))
+    return LPModeComparison(
+        capital_atomic,
+        spot,
+        idle,
+        lp_report,
+        lp_evidence_state,
+        tuple(reasons),
+        mutually_exclusive=True,
+        shared_capital_atomic=capital_atomic,
+    )
 
 
 def _equity_curve(capital_atomic: int, records: tuple[EpisodeResult, ...]) -> tuple[int, ...]:

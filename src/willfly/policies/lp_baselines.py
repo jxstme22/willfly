@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from willfly.lp.evidence import LPEvidence, is_verified_live_evidence
+
 
 @dataclass(frozen=True)
 class LPPolicyDecision:
@@ -14,15 +16,21 @@ class LPPolicyDecision:
     reason: str
 
 
-def fixed_wide_range(current_tick: int, *, width: int = 600) -> LPPolicyDecision:
+def fixed_wide_range(
+    current_tick: int,
+    *,
+    width: int = 600,
+    evidence: LPEvidence | None = None,
+) -> LPPolicyDecision:
     if width <= 0:
         raise ValueError("range width must be positive")
+    enabled = is_verified_live_evidence(evidence)
     return LPPolicyDecision(
         "fixed_wide_range",
-        "open",
+        "open" if enabled else "watch",
         current_tick - width,
         current_tick + width,
-        "fixed_discrete_range",
+        "fixed_discrete_range" if enabled else "lp_disabled_until_verified_live_evidence",
     )
 
 
@@ -32,16 +40,18 @@ def volatility_range(
     *,
     minimum_width: int = 120,
     multiplier: int = 2,
+    evidence: LPEvidence | None = None,
 ) -> LPPolicyDecision:
     if volatility_bps < 0 or minimum_width <= 0 or multiplier <= 0:
         raise ValueError("volatility range parameters are invalid")
     width = max(minimum_width, volatility_bps * multiplier)
+    enabled = is_verified_live_evidence(evidence)
     return LPPolicyDecision(
         "volatility_range",
-        "open",
+        "open" if enabled else "watch",
         current_tick - width,
         current_tick + width,
-        "observed_volatility_range",
+        "observed_volatility_range" if enabled else "lp_disabled_until_verified_live_evidence",
     )
 
 

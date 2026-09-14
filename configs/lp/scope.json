@@ -1,10 +1,21 @@
 {
   "schema_version": "0.1.0",
   "status": "pending_pool_family_verification",
+  "recommendations_enabled": false,
+  "chain_id": 4663,
   "protocol": "uniswap_v4",
   "pool_family": null,
   "supported_actions": ["open", "collect", "resize", "remove", "convert"],
   "unsupported_hooks_block_execution": true,
+  "unsupported_tokens_block_execution": true,
+  "evidence_requirements": [
+    "live_deployment_and_bytecode",
+    "verified_token_order_and_supported_tokens",
+    "verified_tick_math_and_range_state",
+    "verified_hook_behavior",
+    "observed_position_checkpoints",
+    "complete_receipts_with_gas_denomination"
+  ],
   "small_position_counterfactual": true,
-  "note": "Enable only after observed receipts and hook behavior support the selected family."
+  "note": "Fixture replay validates mechanics only. Enable recommendations only after every live evidence requirement passes."
 }
